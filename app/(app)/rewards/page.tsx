@@ -15,10 +15,9 @@ export default async function RewardsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Rewards"
-        description="Redeem your points for badges, premium features, and admin-fulfilled rewards."
+        description="Build momentum with points, ranks, badges, feature unlocks, and limited admin-fulfilled perks."
       />
       <RewardsMarketplace summary={summary} rewards={rewards} redemptions={redemptions} />
     </div>
   );
 }
-

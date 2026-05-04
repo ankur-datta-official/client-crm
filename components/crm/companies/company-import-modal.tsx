@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileUp, Loader2, CheckCircle2, AlertCircle, FileSpreadsheet } from "lucide-react";
-import Papa from "papaparse";
-import * as XLSX from "xlsx";
+import { Download, FileUp, Loader2, CheckCircle2, AlertCircle, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,101 +11,101 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { bulkImportCompanies } from "@/lib/crm/actions";
 import { toast } from "sonner";
+
+type ImportApiResponse = {
+  success?: boolean;
+  companiesImported?: number;
+  contactsImported?: number;
+  errors?: string[];
+  error?: string;
+};
 
 export function CompanyImportModal() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isImporting, setIsPending] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    companiesImported: number;
+    contactsImported: number;
+    errors: string[];
+  } | null>(null);
 
-  const processData = async (rawData: any[]) => {
-    // Transform data to our expected format
-    const companies = rawData.map((row: any) => {
-      // Extract multiple emails/phones if they are comma separated or in separate columns
-      const emailValue = row["Email"] || row["Email_1"] || row["Company Email"] || "";
-      const emails = typeof emailValue === 'string' ? emailValue.split(",").map((s: string) => s.trim()) : [emailValue];
-      
-      const phoneValue = row["Mobile Number"] || row["Phone"] || row["Company Phone"] || "";
-      const phones = typeof phoneValue === 'string' ? phoneValue.split(",").map((s: string) => s.trim()) : [phoneValue];
-
-      const contactName = row["Contact Person"] || row["Contact Name"] || "Primary Contact";
-      const contactEmail = row["Contact Email"] || row["Email_2"] || "";
-      const contactPhone = row["Contact Number"] || row["Contact Phone"] || "";
-      
-      return {
-        name: row["Company Name"] || row["name"] || row["Company"] || "Unnamed Company",
-        email: emails[0] || "",
-        phone: phones[0] || "",
-        address: row["Address"] || row["Location"] || "",
-        rating: parseInt(row["Rating"]) || 5,
-        contacts: [
-          {
-            name: contactName,
-            email: contactEmail,
-            phone: contactPhone,
-            is_primary: true,
-          }
-        ]
-      };
-    });
-
-    const res = await bulkImportCompanies(companies);
-    
-    if (res.ok && res.results) {
-      setImportResult(res.results);
-      toast.success(`Successfully imported ${res.results.success} companies`);
-    } else {
-      toast.error(res.error || "Failed to import companies");
+  const downloadTemplate = async () => {
+    setIsDownloading(true);
+    try {
+      const res = await fetch("/api/import/companies", { method: "GET" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        toast.error(body?.error ?? "Unable to download template.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "crm-import-template.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Template downloaded.");
+    } catch {
+      toast.error("Unable to download template.");
+    } finally {
+      setIsDownloading(false);
     }
-    
-    setIsPending(false);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
 
-    setIsPending(true);
+    setIsImporting(true);
     setImportResult(null);
 
-    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!["csv", "xlsx", "xls"].includes(ext)) {
+      toast.error("Please upload a .csv, .xlsx, or .xls file.");
+      setIsImporting(false);
+      return;
+    }
 
-    if (fileExtension === 'csv') {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (results: Papa.ParseResult<any>) => {
-          processData(results.data);
-        },
-        error: (error: Error) => {
-          toast.error("Failed to parse CSV file");
-          setIsPending(false);
-        }
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/import/companies", {
+        method: "POST",
+        body: formData,
       });
-    } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        try {
-          const bstr = evt.target?.result;
-          const wb = XLSX.read(bstr, { type: 'binary' });
-          const wsname = wb.SheetNames[0];
-          const ws = wb.Sheets[wsname];
-          const data = XLSX.utils.sheet_to_json(ws);
-          processData(data);
-        } catch (error) {
-          toast.error("Failed to parse Excel file");
-          setIsPending(false);
+
+      const data = (await res.json()) as ImportApiResponse;
+
+      if (!res.ok) {
+        toast.error(data.error ?? "Import failed.");
+        if (data.errors?.length) {
+          setImportResult({ companiesImported: 0, contactsImported: 0, errors: data.errors });
         }
-      };
-      reader.onerror = () => {
-        toast.error("Failed to read file");
-        setIsPending(false);
-      };
-      reader.readAsBinaryString(file);
-    } else {
-      toast.error("Please upload a .csv or .xlsx file");
-      setIsPending(false);
+        return;
+      }
+
+      const companiesImported = data.companiesImported ?? 0;
+      const contactsImported = data.contactsImported ?? 0;
+      const errors = data.errors ?? [];
+
+      setImportResult({ companiesImported, contactsImported, errors });
+
+      if (errors.length === 0) {
+        toast.success(`${companiesImported} companies and ${contactsImported} contacts imported.`);
+      } else {
+        toast.warning(`Imported with ${errors.length} issue(s)`, {
+          description: `${companiesImported} companies, ${contactsImported} contacts.`,
+        });
+      }
+    } catch {
+      toast.error("Import failed.");
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -121,19 +119,35 @@ export function CompanyImportModal() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px] rounded-[28px] border-slate-200/60 shadow-2xl backdrop-blur-xl bg-white/95">
         <DialogHeader>
-          <DialogTitle className="text-xl font-black text-slate-900">Bulk Import Companies</DialogTitle>
+          <DialogTitle className="text-xl font-black text-slate-900">Bulk Import Companies &amp; Contacts</DialogTitle>
           <DialogDescription className="text-slate-500 font-medium">
-            Upload a .csv or .xlsx file to automatically add multiple companies and contacts.
+            Use an Excel workbook with two sheets — <span className="font-semibold text-slate-700">Companies</span> and{" "}
+            <span className="font-semibold text-slate-700">Contacts</span> — or a CSV file with the Companies columns only
+            (row 1 headers exactly as in the template).
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-6">
+        <div className="flex flex-wrap gap-2 pb-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="rounded-full font-semibold"
+            disabled={isDownloading}
+            onClick={() => void downloadTemplate()}
+          >
+            {isDownloading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}
+            Download Template
+          </Button>
+        </div>
+
+        <div className="py-4">
           {!importResult ? (
             <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-[24px] p-10 bg-slate-50/50 transition-all hover:border-primary/30 hover:bg-slate-50">
               {isImporting ? (
                 <div className="flex flex-col items-center gap-3">
                   <Loader2 className="size-10 text-primary animate-spin" />
-                  <p className="text-sm font-bold text-slate-700 tracking-tight">Processing your data...</p>
+                  <p className="text-sm font-bold text-slate-700 tracking-tight">Uploading and importing…</p>
                 </div>
               ) : (
                 <>
@@ -144,10 +158,14 @@ export function CompanyImportModal() {
                     <span className="inline-flex h-10 items-center justify-center rounded-full bg-primary px-6 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95 group-hover:bg-primary/90">
                       Choose CSV/Excel File
                     </span>
-                    <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFileUpload} />
+                    <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => void handleFileUpload(e)} />
                   </label>
-                  <p className="mt-4 text-[11px] font-bold text-slate-400 uppercase tracking-widest text-center">
-                    Columns: Company Name, Email, Mobile Number, Address, <br/> Contact Person, Contact Email, Contact Number
+                  <p className="mt-4 text-[11px] font-bold text-slate-400 uppercase tracking-widest text-center leading-relaxed">
+                    Sheet &quot;Companies&quot;: industry, sl, company_name, address, city, primary_phone, phone_2, phone_3,
+                    primary_email, email_2, website, notes
+                    <br />
+                    Sheet &quot;Contacts&quot;: company_name, contact_name, designation, primary_phone, phone_2, primary_email,
+                    email_2, is_primary_contact
                   </p>
                 </>
               )}
@@ -155,29 +173,37 @@ export function CompanyImportModal() {
           ) : (
             <div className="space-y-4">
               <div className="flex items-center gap-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-100">
-                <CheckCircle2 className="size-6 text-emerald-500" />
+                <CheckCircle2 className="size-6 text-emerald-500 shrink-0" />
                 <div>
-                  <p className="text-sm font-bold text-emerald-900">{importResult.success} Companies Imported</p>
-                  <p className="text-xs text-emerald-700/80 font-medium">Data has been successfully added to your workspace.</p>
+                  <p className="text-sm font-bold text-emerald-900">
+                    {importResult.companiesImported} companies and {importResult.contactsImported} contacts imported
+                  </p>
+                  <p className="text-xs text-emerald-700/80 font-medium">
+                    {importResult.errors.length === 0
+                      ? "All rows were processed without reported issues."
+                      : "Some rows were skipped — see details below."}
+                  </p>
                 </div>
               </div>
-              
-              {importResult.failed > 0 && (
+
+              {importResult.errors.length > 0 && (
                 <div className="flex items-start gap-4 p-4 rounded-2xl bg-rose-50 border border-rose-100">
                   <AlertCircle className="size-6 text-rose-500 shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-rose-900">{importResult.failed} Entries Failed</p>
-                    <div className="mt-2 max-h-32 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-rose-900">{importResult.errors.length} issue(s)</p>
+                    <div className="mt-2 max-h-40 overflow-y-auto space-y-1 pr-2">
                       {importResult.errors.map((err, i) => (
-                        <p key={i} className="text-[11px] text-rose-700/70 font-medium truncate">{err}</p>
+                        <p key={i} className="text-[11px] text-rose-800 font-medium break-words">
+                          {err}
+                        </p>
                       ))}
                     </div>
                   </div>
                 </div>
               )}
 
-              <Button 
-                className="w-full rounded-xl h-11 font-bold shadow-lg shadow-primary/10 mt-2" 
+              <Button
+                className="w-full rounded-xl h-11 font-bold shadow-lg shadow-primary/10 mt-2"
                 onClick={() => {
                   setIsOpen(false);
                   setImportResult(null);

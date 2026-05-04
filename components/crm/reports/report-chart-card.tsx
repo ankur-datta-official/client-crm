@@ -14,6 +14,8 @@ interface ReportChartCardProps {
   isEmpty?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
+  badge?: string;
+  headerRight?: ReactNode;
 }
 
 export function ReportChartCard({
@@ -25,15 +27,29 @@ export function ReportChartCard({
   isEmpty = false,
   emptyTitle,
   emptyDescription,
+  badge,
+  headerRight,
 }: ReportChartCardProps) {
   return (
-    <Card className={cn("overflow-hidden border-slate-200 bg-white shadow-soft", className)}>
+    <Card className={cn("overflow-hidden rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] shadow-soft", className)}>
       <CardHeader className="pb-4">
-        <CardTitle className="text-base font-semibold text-slate-900">{title}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-base font-semibold text-slate-950">{title}</CardTitle>
+              {badge ? (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {badge}
+                </span>
+              ) : null}
+            </div>
+            {description && <CardDescription className="max-w-[62ch] leading-6">{description}</CardDescription>}
+          </div>
+          {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
+        </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div style={{ height }} className="w-full">
+        <div style={{ height }} className="w-full rounded-[22px] border border-slate-100 bg-white/70 p-2">
           {isEmpty ? (
             <ReportChartEmptyState title={emptyTitle} description={emptyDescription} />
           ) : (

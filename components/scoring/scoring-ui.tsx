@@ -1,7 +1,24 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Gift, Loader2, Medal, ShieldCheck, Sparkles, Target, Trophy, Wallet } from "lucide-react";
+import {
+  Award,
+  BarChart3,
+  CheckCircle2,
+  Crown,
+  Flame,
+  Gift,
+  Loader2,
+  Lock,
+  Medal,
+  Percent,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Trophy,
+  Wallet,
+  Zap,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +79,60 @@ function rewardTypeLabel(type: Reward["reward_type"]) {
     default:
       return "Manual Reward";
   }
+}
+
+function rewardMetadataValue(reward: Reward, key: string) {
+  const value = reward.metadata?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function rewardIcon(reward: Reward) {
+  switch (rewardMetadataValue(reward, "icon")) {
+    case "chart":
+      return BarChart3;
+    case "crown":
+      return Crown;
+    case "percent":
+      return Percent;
+    case "shield":
+      return ShieldCheck;
+    case "target":
+      return Target;
+    case "trophy":
+      return Trophy;
+    case "zap":
+      return Zap;
+    default:
+      return Gift;
+  }
+}
+
+function rewardAccentClasses(reward: Reward) {
+  const tier = rewardMetadataValue(reward, "tier")?.toLowerCase();
+
+  if (tier === "bronze") return "border-l-amber-500 bg-amber-50/40";
+  if (tier === "silver") return "border-l-slate-500 bg-slate-50";
+  if (tier === "gold") return "border-l-yellow-500 bg-yellow-50/40";
+  if (tier === "pro") return "border-l-sky-500 bg-sky-50/35";
+  if (tier === "elite") return "border-l-emerald-500 bg-emerald-50/35";
+  if (tier === "legend") return "border-l-violet-500 bg-violet-50/35";
+  return "border-l-slate-300 bg-white";
+}
+
+function currentRankForPoints(points: number) {
+  const ranks = [
+    { name: "Rookie", threshold: 0 },
+    { name: "Closer", threshold: 150 },
+    { name: "Pipeline Pro", threshold: 250 },
+    { name: "Analyst", threshold: 350 },
+    { name: "Operator", threshold: 450 },
+    { name: "Rainmaker", threshold: 650 },
+    { name: "Champion", threshold: 1000 },
+  ];
+  const current = [...ranks].reverse().find((rank) => points >= rank.threshold) ?? ranks[0];
+  const next = ranks.find((rank) => rank.threshold > points) ?? null;
+
+  return { current, next };
 }
 
 export function WalletSummaryPanel({
@@ -281,10 +352,129 @@ export function RewardsMarketplace({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const balance = summary?.wallet_balance ?? 0;
+  const lifetimeEarned = summary?.wallet_lifetime_earned ?? 0;
+  const rankState = currentRankForPoints(lifetimeEarned);
+  const earnedBadgeKeys = useMemo(() => new Set(summary?.badges.map((badge) => badge.badge_key) ?? []), [summary?.badges]);
+  const redemptionByRewardId = useMemo(() => new Map(redemptions.map((redemption) => [redemption.reward_id, redemption])), [redemptions]);
+  const marketplaceRewards = useMemo(
+    () =>
+      [...rewards].sort((a, b) => {
+        const aRedeemed = redemptionByRewardId.has(a.id) || earnedBadgeKeys.has(a.feature_key ?? "");
+        const bRedeemed = redemptionByRewardId.has(b.id) || earnedBadgeKeys.has(b.feature_key ?? "");
+
+        if (aRedeemed !== bRedeemed) return aRedeemed ? 1 : -1;
+        if (a.cost_points !== b.cost_points) return a.cost_points - b.cost_points;
+        return a.name.localeCompare(b.name);
+      }),
+    [earnedBadgeKeys, redemptionByRewardId, rewards],
+  );
+  const nextReward = marketplaceRewards.find((reward) => !redemptionByRewardId.has(reward.id) && !earnedBadgeKeys.has(reward.feature_key ?? ""));
+  const nextRewardProgress = nextReward ? Math.min(100, Math.round((balance / Math.max(nextReward.cost_points, 1)) * 100)) : 100;
+  const pointsUntilNextReward = nextReward ? Math.max(nextReward.cost_points - balance, 0) : 0;
+  const nextRankProgress = rankState.next
+    ? Math.min(100, Math.round((lifetimeEarned / Math.max(rankState.next.threshold, 1)) * 100))
+    : 100;
 
   return (
     <div className="space-y-6">
       <WalletSummaryPanel summary={summary} compact />
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <Card className="overflow-hidden rounded-2xl border-slate-200">
+          <CardHeader>
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-slate-900">
+                  <Crown className="size-5 text-amber-600" />
+                  Reward Journey
+                </CardTitle>
+                <CardDescription>
+                  Spend points on status, unlocks, and admin-approved perks as your CRM activity grows.
+                </CardDescription>
+              </div>
+              <Badge variant="warning">{rankState.current.name}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-3 md:grid-cols-3">
+              <MiniInfo icon={Wallet} label="Available" value={`${balance} pts`} />
+              <MiniInfo icon={Flame} label="Lifetime" value={`${lifetimeEarned} pts`} />
+              <MiniInfo icon={Medal} label="Rank" value={rankState.current.name} />
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {nextReward ? `Next package: ${nextReward.name}` : "All visible packages completed"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {nextReward
+                      ? pointsUntilNextReward > 0
+                        ? `${pointsUntilNextReward} more points needed to qualify.`
+                        : "You qualify now. Redeem before limited inventory changes."
+                      : "Keep earning to stay ahead on the leaderboard."}
+                  </p>
+                </div>
+                <Badge variant={pointsUntilNextReward === 0 ? "success" : "secondary"}>{nextRewardProgress}%</Badge>
+              </div>
+              <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${nextRewardProgress}%` }} />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {rankState.next ? `Next rank: ${rankState.next.name}` : "Top rank reached"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {rankState.next
+                      ? `${Math.max(rankState.next.threshold - lifetimeEarned, 0)} lifetime points left for the next status.`
+                      : "Champion status unlocked."}
+                  </p>
+                </div>
+                <Badge variant="info">{nextRankProgress}%</Badge>
+              </div>
+              <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white">
+                <div className="h-full rounded-full bg-sky-500" style={{ width: `${nextRankProgress}%` }} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-slate-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-900">
+              <Sparkles className="size-5 text-emerald-600" />
+              Fastest Ways To Earn
+            </CardTitle>
+            <CardDescription>High-signal actions that make the CRM healthier and move users toward rewards.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[
+              { title: "Create qualified leads", points: "+10 to +30 pts", icon: Target },
+              { title: "Complete follow-ups on time", points: "+5 pts + streak", icon: CheckCircle2 },
+              { title: "Win converted deals", points: "+50 pts", icon: Trophy },
+              { title: "Bring referred leads", points: "+15 pts", icon: Award },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.title} className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+                    <Icon className="size-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">{item.title}</p>
+                    <p className="text-sm text-slate-500">{item.points}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      </div>
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>Reward redemption failed</AlertTitle>
@@ -297,29 +487,87 @@ export function RewardsMarketplace({
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ) : null}
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Reward Packages</h2>
+          <p className="text-sm text-slate-500">Tiered badges, feature unlocks, and limited admin rewards.</p>
+        </div>
+        <Badge variant="outline">{marketplaceRewards.length} active packages</Badge>
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        {rewards.map((reward) => {
-          const canRedeem = (summary?.wallet_balance ?? 0) >= reward.cost_points && reward.is_active;
+        {marketplaceRewards.map((reward) => {
+          const Icon = rewardIcon(reward);
+          const redeemed = redemptionByRewardId.get(reward.id);
+          const badgeOwned = reward.reward_type === "badge" && earnedBadgeKeys.has(reward.feature_key ?? "");
+          const isOwned = Boolean(redeemed?.status === "fulfilled" || badgeOwned);
+          const isPendingRedemption = redeemed?.status === "pending";
+          const canRedeem = balance >= reward.cost_points && reward.is_active && !isOwned && !isPendingRedemption;
           const disabled = !canRedeem || isPending;
+          const progress = Math.min(100, Math.round((balance / Math.max(reward.cost_points, 1)) * 100));
+          const benefit = rewardMetadataValue(reward, "benefit");
+          const requirement = rewardMetadataValue(reward, "requirement");
+          const tier = rewardMetadataValue(reward, "tier");
+          const rank = rewardMetadataValue(reward, "rank");
 
           return (
-            <Card key={reward.id} className="rounded-2xl">
+            <Card key={reward.id} className={`rounded-2xl border-l-4 ${rewardAccentClasses(reward)}`}>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <CardTitle className="text-slate-900">{reward.name}</CardTitle>
-                    <CardDescription>{reward.description ?? "Reward available for redemption."}</CardDescription>
+                  <div className="flex min-w-0 gap-3">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-800 shadow-sm ring-1 ring-slate-200">
+                      <Icon className="size-5" />
+                    </div>
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="text-slate-900">{reward.name}</CardTitle>
+                        {tier ? <Badge variant="outline">{tier}</Badge> : null}
+                      </div>
+                      <CardDescription>{reward.description ?? "Reward available for redemption."}</CardDescription>
+                    </div>
                   </div>
-                  <Badge variant="info">{rewardTypeLabel(reward.reward_type)}</Badge>
+                  <Badge variant={isOwned ? "success" : isPendingRedemption ? "warning" : "info"}>
+                    {isOwned ? "Unlocked" : isPendingRedemption ? "Pending" : rewardTypeLabel(reward.reward_type)}
+                  </Badge>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                     <p className="text-xs uppercase tracking-wide text-slate-500">Cost</p>
                     <p className="text-xl font-semibold text-slate-900">{reward.cost_points} pts</p>
                   </div>
-                  <Gift className="size-6 text-amber-600" />
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Rank offer</p>
+                    <p className="text-xl font-semibold text-slate-900">{rank ?? "Member"}</p>
+                  </div>
+                </div>
+                <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-slate-500">Qualification</span>
+                    <span className="font-medium text-slate-700">{progress}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {canRedeem
+                      ? "Qualified now"
+                      : isOwned
+                        ? "Already unlocked"
+                        : isPendingRedemption
+                          ? "Admin fulfillment in progress"
+                          : `${Math.max(reward.cost_points - balance, 0)} points left`}
+                  </p>
+                </div>
+                <div className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Prize / benefit</p>
+                    <p className="mt-1 font-medium text-slate-800">{benefit ?? rewardTypeLabel(reward.reward_type)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Requirement</p>
+                    <p className="mt-1 font-medium text-slate-800">{requirement ?? `${reward.cost_points} points`}</p>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between text-sm text-slate-500">
                   <span>Fulfillment</span>
@@ -349,8 +597,16 @@ export function RewardsMarketplace({
                     });
                   }}
                 >
-                  {isPending && pendingRewardId === reward.id ? <Loader2 className="animate-spin" /> : <Gift />}
-                  {canRedeem ? "Redeem Reward" : "Not enough points"}
+                  {isPending && pendingRewardId === reward.id ? (
+                    <Loader2 className="animate-spin" />
+                  ) : isOwned ? (
+                    <CheckCircle2 />
+                  ) : canRedeem ? (
+                    <Gift />
+                  ) : (
+                    <Lock />
+                  )}
+                  {isOwned ? "Already unlocked" : isPendingRedemption ? "Pending approval" : canRedeem ? "Redeem package" : "Keep earning"}
                 </Button>
               </CardContent>
             </Card>

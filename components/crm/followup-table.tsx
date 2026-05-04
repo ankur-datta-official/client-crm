@@ -4,7 +4,7 @@ import type React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Edit, Plus, CheckCircle2, XCircle, Archive, Calendar, MoreHorizontal } from "lucide-react";
+import { Edit, Plus, CheckCircle2, XCircle, Archive, Calendar, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -14,6 +14,9 @@ import { followupTypeOptions, followupPriorityOptions, followupStatusOptions } f
 import type { Company, Followup, TeamMemberOption } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
 export function FollowupTable({
   followups,
@@ -27,6 +30,15 @@ export function FollowupTable({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const pageSizeParam = Number(searchParams.get("pageSize"));
+  const resolvedPageSize = PAGE_SIZE_OPTIONS.includes(pageSizeParam as (typeof PAGE_SIZE_OPTIONS)[number]) ? pageSizeParam : DEFAULT_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(followups.length / resolvedPageSize));
+  const pageParam = Number(searchParams.get("page"));
+  const currentPage = Number.isInteger(pageParam) && pageParam > 0 ? Math.min(pageParam, totalPages) : 1;
+  const pageStart = (currentPage - 1) * resolvedPageSize;
+  const visibleFollowups = followups.slice(pageStart, pageStart + resolvedPageSize);
+  const rangeStart = followups.length === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + visibleFollowups.length, followups.length);
 
   const [completeId, setCompleteId] = useState<string | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
@@ -38,7 +50,27 @@ export function FollowupTable({
       const text = String(value);
       if (text) params.set(key, text);
     }
-    router.push(`/followups?${params.toString()}`);
+    const pageSize = searchParams.get("pageSize");
+    if (pageSize) {
+      params.set("pageSize", pageSize);
+    }
+    const query = params.toString();
+    router.push(query ? `/followups?${query}` : "/followups");
+  }
+
+  function updateListParams(updates: Record<string, string | null>) {
+    const params = new URLSearchParams(searchParams.toString());
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (!value) {
+        params.delete(key);
+        continue;
+      }
+      params.set(key, value);
+    }
+
+    const query = params.toString();
+    router.push(query ? `/followups?${query}` : "/followups");
   }
 
   const isOverdue = (followup: Followup) => {
@@ -96,7 +128,7 @@ export function FollowupTable({
         <EmptyState title="No follow-ups scheduled" description="Create next actions so no client is missed." icon={Calendar} actionLabel="Create Follow-up" actionHref="/followups/new" />
       ) : (
         <div className="space-y-3 md:hidden">
-          {followups.map((f) => (
+          {visibleFollowups.map((f) => (
             <div key={f.id} className={cn("rounded-2xl border border-slate-200 bg-white p-4 shadow-soft", isOverdue(f) && "border-destructive/30 bg-destructive/5")}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -136,62 +168,113 @@ export function FollowupTable({
       )}
 
       {followups.length > 0 && (
-        <div className="crm-table-shell hidden max-w-full md:block">
-          <div className="overflow-x-auto">
-            <table className="crm-table min-w-[880px] table-fixed">
-              <thead className="crm-table-head">
-                <tr>
-                  <th className="w-[15%] px-4 py-3">Scheduled</th>
-                  <th className="w-[20%] px-4 py-3">Title</th>
-                  <th className="w-[15%] px-4 py-3">Company</th>
-                  <th className="w-[12%] px-4 py-3">Type</th>
-                  <th className="w-[10%] px-4 py-3">Priority</th>
-                  <th className="w-[13%] px-4 py-3">Assigned To</th>
-                  <th className="w-[11%] px-4 py-3">Status</th>
-                  <th className="w-[9%] px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {followups.map((f) => (
-                  <tr key={f.id} className={cn("border-b last:border-0 hover:bg-muted/30 transition-colors", isOverdue(f) && "bg-destructive/5")}>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <span className={cn("font-medium", isOverdue(f) && "text-destructive")}>
-                          {new Date(f.scheduled_at).toLocaleDateString()}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(f.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 truncate font-medium">{f.title}</td>
-                    <td className="px-4 py-3 truncate">{f.companies?.name}</td>
-                    <td className="px-4 py-3"><FollowupTypeBadge type={f.followup_type} /></td>
-                    <td className="px-4 py-3"><FollowupPriorityBadge priority={f.priority} /></td>
-                    <td className="px-4 py-3 truncate text-muted-foreground">
-                      {f.assigned_profile?.full_name ?? f.assigned_profile?.email ?? "Unassigned"}
-                    </td>
-                    <td className="px-4 py-3"><FollowupStatusBadge status={f.status} /></td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button asChild size="sm" variant="outline"><Link href={`/followups/${f.id}`}>Open</Link></Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button size="icon" variant="ghost"><MoreHorizontal className="h-4 w-4" /><span className="sr-only">More actions</span></Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild><Link href={`/followups/${f.id}/edit`}><Edit className="mr-2 h-4 w-4" />Edit</Link></DropdownMenuItem>
-                            {f.status === "pending" ? <DropdownMenuItem onClick={() => setCompleteId(f.id)}><CheckCircle2 className="mr-2 h-4 w-4" />Complete</DropdownMenuItem> : null}
-                            {f.status === "pending" ? <DropdownMenuItem onClick={() => setCancelId(f.id)} className="text-rose-600"><XCircle className="mr-2 h-4 w-4" />Cancel</DropdownMenuItem> : null}
-                            {f.status !== "archived" ? <DropdownMenuItem onClick={() => setArchiveId(f.id)}><Archive className="mr-2 h-4 w-4" />Archive</DropdownMenuItem> : null}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </td>
-                  </tr>
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {rangeStart}-{rangeEnd} of {followups.length} follow-ups
+            </p>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Rows per page</span>
+              <select
+                aria-label="Rows per page"
+                className="rounded-full border border-input bg-background px-3 py-1.5 text-foreground outline-none transition focus:border-ring"
+                value={String(resolvedPageSize)}
+                onChange={(event) => updateListParams({ pageSize: event.target.value, page: null })}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            </label>
+          </div>
+
+          <div className="crm-table-shell hidden max-w-full md:block">
+            <div className="overflow-x-auto">
+              <table className="crm-table min-w-[880px] table-fixed">
+                <thead className="crm-table-head">
+                  <tr>
+                    <th className="w-[15%] px-4 py-3">Scheduled</th>
+                    <th className="w-[20%] px-4 py-3">Title</th>
+                    <th className="w-[15%] px-4 py-3">Company</th>
+                    <th className="w-[12%] px-4 py-3">Type</th>
+                    <th className="w-[10%] px-4 py-3">Priority</th>
+                    <th className="w-[13%] px-4 py-3">Assigned To</th>
+                    <th className="w-[11%] px-4 py-3">Status</th>
+                    <th className="w-[9%] px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleFollowups.map((f) => (
+                    <tr key={f.id} className={cn("border-b last:border-0 hover:bg-muted/30 transition-colors", isOverdue(f) && "bg-destructive/5")}>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col">
+                          <span className={cn("font-medium", isOverdue(f) && "text-destructive")}>
+                            {new Date(f.scheduled_at).toLocaleDateString()}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(f.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 truncate font-medium">{f.title}</td>
+                      <td className="px-4 py-3 truncate">{f.companies?.name}</td>
+                      <td className="px-4 py-3"><FollowupTypeBadge type={f.followup_type} /></td>
+                      <td className="px-4 py-3"><FollowupPriorityBadge priority={f.priority} /></td>
+                      <td className="px-4 py-3 truncate text-muted-foreground">
+                        {f.assigned_profile?.full_name ?? f.assigned_profile?.email ?? "Unassigned"}
+                      </td>
+                      <td className="px-4 py-3"><FollowupStatusBadge status={f.status} /></td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button asChild size="sm" variant="outline"><Link href={`/followups/${f.id}`}>Open</Link></Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="icon" variant="ghost"><MoreHorizontal className="h-4 w-4" /><span className="sr-only">More actions</span></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild><Link href={`/followups/${f.id}/edit`}><Edit className="mr-2 h-4 w-4" />Edit</Link></DropdownMenuItem>
+                              {f.status === "pending" ? <DropdownMenuItem onClick={() => setCompleteId(f.id)}><CheckCircle2 className="mr-2 h-4 w-4" />Complete</DropdownMenuItem> : null}
+                              {f.status === "pending" ? <DropdownMenuItem onClick={() => setCancelId(f.id)} className="text-rose-600"><XCircle className="mr-2 h-4 w-4" />Cancel</DropdownMenuItem> : null}
+                              {f.status !== "archived" ? <DropdownMenuItem onClick={() => setArchiveId(f.id)}><Archive className="mr-2 h-4 w-4" />Archive</DropdownMenuItem> : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => updateListParams({ page: currentPage > 2 ? String(currentPage - 1) : null })}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => updateListParams({ page: String(currentPage + 1) })}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       )}

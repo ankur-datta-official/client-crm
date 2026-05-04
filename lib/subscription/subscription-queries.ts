@@ -212,6 +212,56 @@ export async function checkCompanyLimit(extraCompanies = 1): Promise<Subscriptio
   };
 }
 
+/** Same as {@link checkCompanyLimit} but scoped to an organization (e.g. API routes without `requireOrganization`). */
+export async function checkCompanyLimitForOrganization(
+  organizationId: string,
+  extraCompanies = 1,
+): Promise<SubscriptionLimitCheck> {
+  const supabase = await createClient();
+  const { data: subscription, error: subError } = await supabase
+    .from("organization_subscriptions")
+    .select(
+      `
+      plan:subscription_plans(
+        name,
+        max_companies
+      )
+    `,
+    )
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (subError) {
+    throw new Error(subError.message);
+  }
+
+  const rawPlan = subscription?.plan as { name: string | null; max_companies: number | null } | { name: string | null; max_companies: number | null }[] | null | undefined;
+  const plan = Array.isArray(rawPlan) ? rawPlan[0] : rawPlan;
+  const max = plan?.max_companies ?? null;
+
+  const { count, error: countError } = await supabase
+    .from("companies")
+    .select("*", { count: "exact", head: true })
+    .eq("organization_id", organizationId)
+    .neq("status", "archived");
+
+  if (countError) {
+    throw new Error(countError.message);
+  }
+
+  const current = count ?? 0;
+  const projected = current + extraCompanies;
+  const allowed = max === null || projected <= max;
+
+  return {
+    allowed,
+    current,
+    projected,
+    max,
+    message: allowed ? null : getUpgradeMessage("companies", plan?.name ?? undefined),
+  };
+}
+
 export async function checkStorageLimit(additionalStorageMb: number, existingSizeMb = 0): Promise<SubscriptionLimitCheck> {
   const [plan, usage] = await Promise.all([getCurrentPlan(), getOrganizationUsage()]);
   const max = plan?.storage_limit_mb ?? null;
@@ -252,6 +302,32 @@ export async function hasFeature(featureCode: SubscriptionFeatureCode): Promise<
   }
 
   return Boolean(plan[featureCode]);
+}
+
+export async function hasPlanFeatureForOrganization(
+  organizationId: string,
+  featureCode: SubscriptionFeatureCode,
+): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("organization_subscriptions")
+    .select(
+      `
+      plan:subscription_plans(
+        ${featureCode}
+      )
+    `,
+    )
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return false;
+  }
+
+  const raw = data.plan as Record<string, boolean> | Record<string, boolean>[] | null | undefined;
+  const plan = Array.isArray(raw) ? raw[0] : raw;
+  return Boolean(plan?.[featureCode]);
 }
 
 export async function requireFeature(featureCode: SubscriptionFeatureCode): Promise<void> {

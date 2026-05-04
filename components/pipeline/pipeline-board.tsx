@@ -4,10 +4,11 @@ import Link from "next/link";
 import type React from "react";
 import { useMemo, useState, useTransition } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
   ArrowRightLeft,
   BriefcaseBusiness,
   CalendarClock,
-  CircleDollarSign,
   Flame,
   MoreHorizontal,
   Search,
@@ -59,6 +60,8 @@ const initialFilters: FilterState = {
   dateTo: "",
 };
 
+const INITIAL_STAGE_CARD_LIMIT = 4;
+
 export function PipelineBoard({
   stages,
   companies: initialCompanies,
@@ -71,6 +74,7 @@ export function PipelineBoard({
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [draggingCompanyId, setDraggingCompanyId] = useState<string | null>(null);
   const [hoverStageId, setHoverStageId] = useState<string | null>(null);
+  const [expandedStageIds, setExpandedStageIds] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
 
   const stageMap = useMemo(() => new Map(stages.map((stage) => [stage.id, stage])), [stages]);
@@ -134,6 +138,12 @@ export function PipelineBoard({
 
   function clearFilters() {
     setFilters(initialFilters);
+  }
+
+  function toggleStageExpansion(stageId: string) {
+    setExpandedStageIds((current) =>
+      current.includes(stageId) ? current.filter((id) => id !== stageId) : [...current, stageId],
+    );
   }
 
   function applyStageLocally(currentCompanies: PipelineBoardCompany[], companyId: string, targetStage: PipelineStage) {
@@ -275,31 +285,36 @@ export function PipelineBoard({
           title="Total Pipeline Value"
           value={formatCurrency(summary.totalPipelineValue)}
           description="Open deal value across the filtered board"
-          icon={CircleDollarSign}
+          icon={<BdtIcon />}
+          tone="emerald"
         />
         <SummaryCard
           title="Active Deals"
           value={String(summary.totalActiveDeals)}
           description="Deals not yet won or lost"
-          icon={BriefcaseBusiness}
+          icon={<BriefcaseBusiness className="size-5" />}
+          tone="sky"
         />
         <SummaryCard
           title="Hot / Very Hot"
           value={String(summary.hotLeads)}
           description="High-temperature deals needing momentum"
-          icon={Flame}
+          icon={<Flame className="size-5" />}
+          tone="amber"
         />
         <SummaryCard
           title="Won Deals"
           value={String(summary.wonDeals)}
           description="Filtered deals already moved to won"
-          icon={Trophy}
+          icon={<Trophy className="size-5" />}
+          tone="violet"
         />
         <SummaryCard
           title="Overdue Follow-ups"
           value={String(summary.overdueFollowups)}
           description="Deals with overdue next actions"
-          icon={CalendarClock}
+          icon={<CalendarClock className="size-5" />}
+          tone="rose"
         />
       </section>
 
@@ -425,53 +440,66 @@ export function PipelineBoard({
 
       <section className="overflow-hidden rounded-lg border bg-white">
         <div className="overflow-x-auto">
-          <div className="flex min-h-[32rem] min-w-max gap-4 p-4">
+          <div className="flex min-h-[32rem] min-w-max items-start gap-4 p-4">
             {stageGroups.map((group) => (
-              <PipelineColumn
-                key={group.stage.id}
-                stage={group.stage}
-                companies={group.companies}
-                isHovering={hoverStageId === group.stage.id}
-                canDrop={group.stage.id !== "unassigned"}
-                onDragOver={() => {
-                  if (group.stage.id !== "unassigned") {
-                    setHoverStageId(group.stage.id);
-                  }
-                }}
-                onDragLeave={() => {
-                  if (hoverStageId === group.stage.id) {
-                    setHoverStageId(null);
-                  }
-                }}
-                onDrop={() => {
-                  if (draggingCompanyId && group.stage.id !== "unassigned") {
-                    moveCompany(draggingCompanyId, group.stage.id, "drag");
-                  }
-                }}
-              >
-                {group.companies.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    No deals in this stage yet. Move a deal here from another column or add a new lead to start the process.
-                  </div>
-                ) : (
-                  group.companies.map((company) => (
-                    <PipelineDealCard
-                      key={company.id}
-                      company={company}
-                      isDragging={draggingCompanyId === company.id}
-                      wonStageId={wonStage?.id ?? null}
-                      lostStageId={lostStage?.id ?? null}
-                      onDragStart={() => setDraggingCompanyId(company.id)}
-                      onDragEnd={() => {
-                        setDraggingCompanyId(null);
+              (() => {
+                const isExpanded = expandedStageIds.includes(group.stage.id);
+                const visibleCompanies =
+                  group.companies.length > INITIAL_STAGE_CARD_LIMIT && !isExpanded
+                    ? group.companies.slice(0, INITIAL_STAGE_CARD_LIMIT)
+                    : group.companies;
+
+                return (
+                  <PipelineColumn
+                    key={group.stage.id}
+                    stage={group.stage}
+                    companies={group.companies}
+                    visibleCount={visibleCompanies.length}
+                    isExpanded={isExpanded}
+                    isHovering={hoverStageId === group.stage.id}
+                    canDrop={group.stage.id !== "unassigned"}
+                    onToggleExpanded={() => toggleStageExpansion(group.stage.id)}
+                    onDragOver={() => {
+                      if (group.stage.id !== "unassigned") {
+                        setHoverStageId(group.stage.id);
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (hoverStageId === group.stage.id) {
                         setHoverStageId(null);
-                      }}
-                      onMoveWon={() => moveToOutcome(company.id, "won")}
-                      onMoveLost={() => moveToOutcome(company.id, "lost")}
-                    />
-                  ))
-                )}
-              </PipelineColumn>
+                      }
+                    }}
+                    onDrop={() => {
+                      if (draggingCompanyId && group.stage.id !== "unassigned") {
+                        moveCompany(draggingCompanyId, group.stage.id, "drag");
+                      }
+                    }}
+                  >
+                    {group.companies.length === 0 ? (
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                        No deals in this stage yet. Move a deal here from another column or add a new lead to start the process.
+                      </div>
+                    ) : (
+                      visibleCompanies.map((company) => (
+                        <PipelineDealCard
+                          key={company.id}
+                          company={company}
+                          isDragging={draggingCompanyId === company.id}
+                          wonStageId={wonStage?.id ?? null}
+                          lostStageId={lostStage?.id ?? null}
+                          onDragStart={() => setDraggingCompanyId(company.id)}
+                          onDragEnd={() => {
+                            setDraggingCompanyId(null);
+                            setHoverStageId(null);
+                          }}
+                          onMoveWon={() => moveToOutcome(company.id, "won")}
+                          onMoveLost={() => moveToOutcome(company.id, "lost")}
+                        />
+                      ))
+                    )}
+                  </PipelineColumn>
+                );
+              })()
             ))}
           </div>
         </div>
@@ -490,26 +518,93 @@ function SummaryCard({
   title,
   value,
   description,
-  icon: Icon,
+  icon,
+  tone,
 }: {
   title: string;
   value: string;
   description: string;
-  icon: typeof CircleDollarSign;
+  icon: React.ReactNode;
+  tone: "emerald" | "sky" | "amber" | "violet" | "rose";
 }) {
+  const toneStyles = {
+    emerald: {
+      card: "border-teal-200/80 bg-gradient-to-br from-white via-teal-50/70 to-emerald-50/90",
+      glow: "bg-teal-400/10",
+      iconWrap: "border-teal-200/80 bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-teal-200/60",
+      value: "text-slate-950",
+      accent: "bg-gradient-to-r from-teal-500 to-emerald-500",
+      chip: "bg-teal-100 text-teal-700",
+    },
+    sky: {
+      card: "border-cyan-200/80 bg-gradient-to-br from-white via-sky-50/80 to-cyan-50/90",
+      glow: "bg-cyan-400/10",
+      iconWrap: "border-cyan-200/80 bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-cyan-200/60",
+      value: "text-slate-950",
+      accent: "bg-gradient-to-r from-sky-500 to-cyan-500",
+      chip: "bg-sky-100 text-sky-700",
+    },
+    amber: {
+      card: "border-orange-200/80 bg-gradient-to-br from-white via-amber-50/80 to-orange-50/90",
+      glow: "bg-amber-400/10",
+      iconWrap: "border-orange-200/80 bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-amber-200/60",
+      value: "text-slate-950",
+      accent: "bg-gradient-to-r from-amber-500 to-orange-500",
+      chip: "bg-amber-100 text-amber-700",
+    },
+    violet: {
+      card: "border-fuchsia-200/80 bg-gradient-to-br from-white via-violet-50/80 to-fuchsia-50/90",
+      glow: "bg-violet-400/10",
+      iconWrap: "border-fuchsia-200/80 bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-violet-200/60",
+      value: "text-slate-950",
+      accent: "bg-gradient-to-r from-violet-500 to-fuchsia-500",
+      chip: "bg-violet-100 text-violet-700",
+    },
+    rose: {
+      card: "border-pink-200/80 bg-gradient-to-br from-white via-rose-50/80 to-pink-50/90",
+      glow: "bg-rose-400/10",
+      iconWrap: "border-pink-200/80 bg-gradient-to-br from-rose-500 to-pink-500 text-white shadow-rose-200/60",
+      value: "text-slate-950",
+      accent: "bg-gradient-to-r from-rose-500 to-pink-500",
+      chip: "bg-rose-100 text-rose-700",
+    },
+  }[tone];
+
   return (
-    <Card>
-      <CardContent className="flex items-start justify-between gap-4 p-5">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="mt-3 text-3xl font-semibold tracking-normal">{value}</p>
-          <p className="mt-2 text-xs text-muted-foreground">{description}</p>
+    <Card className={cn("group relative overflow-hidden border shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl", toneStyles.card)}>
+      <div className={cn("absolute inset-x-0 top-0 h-1.5", toneStyles.accent)} />
+      <div className={cn("absolute -right-8 -top-10 size-28 rounded-full blur-3xl", toneStyles.glow)} />
+      <CardContent className="relative flex min-h-[182px] flex-col justify-between gap-5 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-600">{title}</p>
+          </div>
+          <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-2xl border shadow-lg", toneStyles.iconWrap)}>
+            {icon}
+          </div>
         </div>
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
-          <Icon className="size-5" />
+        <div className="space-y-3">
+          <div className="flex items-end gap-2">
+            <p className={cn("text-4xl font-bold tracking-tight", toneStyles.value)}>{value}</p>
+          </div>
+          <p className="max-w-[20ch] text-sm leading-6 text-slate-600">{description}</p>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", toneStyles.chip)}>
+            Live pipeline
+          </span>
+          <span className="text-[11px] font-medium text-slate-500">Updated now</span>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function BdtIcon() {
+  return (
+    <span className="text-lg font-bold leading-none">
+      {"\u09F3"}
+    </span>
   );
 }
 
@@ -578,8 +673,11 @@ function FilterSelect({
 function PipelineColumn({
   stage,
   companies,
+  visibleCount,
+  isExpanded,
   isHovering,
   canDrop,
+  onToggleExpanded,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -587,8 +685,11 @@ function PipelineColumn({
 }: {
   stage: PipelineStage;
   companies: PipelineBoardCompany[];
+  visibleCount: number;
+  isExpanded: boolean;
   isHovering: boolean;
   canDrop: boolean;
+  onToggleExpanded: () => void;
   onDragOver: () => void;
   onDragLeave: () => void;
   onDrop: () => void;
@@ -597,11 +698,12 @@ function PipelineColumn({
   const totalEstimatedValue = companies.reduce((total, company) => total + Number(company.estimated_value ?? 0), 0);
   const probabilityLabel =
     stage.id === "unassigned" ? "Needs stage assignment" : `${Math.max(0, Number(stage.probability ?? 0))}% probability`;
+  const hiddenCount = Math.max(0, companies.length - visibleCount);
 
   return (
     <div
       className={cn(
-        "flex w-[21rem] shrink-0 flex-col rounded-xl border bg-slate-50/70",
+        "flex h-[calc(100vh-17rem)] min-h-[38rem] w-[19.5rem] shrink-0 flex-col rounded-2xl border bg-slate-50/70 shadow-sm",
         isHovering && canDrop && "border-primary bg-primary/5",
       )}
       onDragOver={(event) => {
@@ -620,7 +722,7 @@ function PipelineColumn({
         onDrop();
       }}
     >
-      <div className="border-b p-4">
+      <div className="border-b bg-slate-50/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-slate-50/80">
         <div className="flex items-center gap-3">
           <span
             className="size-3 rounded-full"
@@ -631,18 +733,30 @@ function PipelineColumn({
             <p className="text-xs text-muted-foreground">{probabilityLabel}</p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-lg border bg-white px-3 py-2">
+        <div className="mt-3 grid grid-cols-2 gap-2.5 text-sm">
+          <div className="rounded-xl border bg-white px-3 py-2.5">
             <p className="text-xs text-muted-foreground">Deals</p>
             <p className="mt-1 font-semibold">{companies.length}</p>
           </div>
-          <div className="rounded-lg border bg-white px-3 py-2">
+          <div className="rounded-xl border bg-white px-3 py-2.5">
             <p className="text-xs text-muted-foreground">Value</p>
             <p className="mt-1 font-semibold">{formatCurrency(totalEstimatedValue)}</p>
           </div>
         </div>
       </div>
-      <div className="flex min-h-[20rem] flex-1 flex-col gap-3 p-4">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col p-3.5">
+        <div className="flex-1 space-y-3 overflow-y-auto pr-1">{children}</div>
+        {companies.length > INITIAL_STAGE_CARD_LIMIT ? (
+          <div className="border-t pt-3">
+            <Button type="button" variant="ghost" className="w-full justify-between rounded-xl text-sm" onClick={onToggleExpanded}>
+              <span>
+                {isExpanded ? "Show fewer deals" : `Show ${hiddenCount} more deal${hiddenCount === 1 ? "" : "s"}`}
+              </span>
+              {isExpanded ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />}
+            </Button>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -683,30 +797,33 @@ function PipelineDealCard({
         onDragStart();
       }}
       onDragEnd={onDragEnd}
-      className={cn("cursor-grab transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md active:cursor-grabbing", isDragging && "opacity-60")}
+      className={cn(
+        "cursor-grab overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md active:cursor-grabbing",
+        isDragging && "opacity-60",
+      )}
     >
-      <CardContent className="space-y-4 p-4">
+      <CardContent className="space-y-3 p-4">
         <div className="space-y-2">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <Link href={`/companies/${company.id}`} className="block truncate font-semibold hover:text-primary">
+              <Link href={`/companies/${company.id}`} className="block truncate text-[15px] font-semibold leading-5 hover:text-primary">
                 {company.name}
               </Link>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
                 {company.industries?.name ?? "No industry"}
                 {company.company_categories?.name ? ` / ${company.company_categories.name}` : ""}
               </p>
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-xs text-muted-foreground">Est. value</p>
-              <p className="font-semibold">{formatCurrency(company.estimated_value)}</p>
+              <p className="text-[11px] text-muted-foreground">Est. value</p>
+              <p className="text-sm font-semibold">{formatCurrency(company.estimated_value)}</p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <RatingBadge rating={company.success_rating} />
             <LeadTemperatureBadge temperature={company.lead_temperature} />
-            <span className="rounded-md border px-2 py-1 text-xs font-medium capitalize">
+            <span className="rounded-md border px-2 py-1 text-[11px] font-medium capitalize">
               {company.priority} priority
             </span>
           </div>
@@ -731,7 +848,7 @@ function PipelineDealCard({
           />
         </dl>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 border-t pt-3">
           <Button asChild size="sm" variant="outline">
             <Link href={`/companies/${company.id}`}>Open</Link>
           </Button>
@@ -773,11 +890,13 @@ function DetailRow({
   value: string;
 }) {
   return (
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 shrink-0">{icon}</span>
-      <div className="min-w-0">
-        <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd className="truncate">{value}</dd>
+    <div className="min-w-0 rounded-xl border bg-white/90 px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 shrink-0">{icon}</span>
+        <div className="min-w-0 flex-1">
+          <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/90">{label}</dt>
+          <dd className="mt-1 break-words text-[13px] font-medium leading-5 text-slate-800">{value}</dd>
+        </div>
       </div>
     </div>
   );

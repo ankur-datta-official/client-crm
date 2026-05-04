@@ -1,6 +1,7 @@
 "use server";
 
 import { getCurrentUser, requireOrganization, requirePermission } from "@/lib/auth/session";
+import { resolveProfileAvatarUrl } from "@/lib/profile/profile-utils";
 import { createClient } from "@/lib/supabase/server";
 import type {
   ChallengeTemplate,
@@ -15,6 +16,15 @@ import type {
   WalletSummary,
   WalletTransaction,
 } from "./types";
+
+async function resolveLeaderboardAvatarUrls(entries: LeaderboardEntry[]) {
+  return Promise.all(
+    entries.map(async (entry) => ({
+      ...entry,
+      avatar_url: await resolveProfileAvatarUrl(entry.avatar_url),
+    })),
+  );
+}
 
 export async function getCurrentUserWalletSummary() {
   const supabase = await createClient();
@@ -94,7 +104,7 @@ export async function getWalletLeaderboard(period: "all_time" | "weekly" | "dail
     throw new Error(error.message);
   }
 
-  return (data ?? []) as LeaderboardEntry[];
+  return resolveLeaderboardAvatarUrls((data ?? []) as LeaderboardEntry[]);
 }
 
 export async function getActiveRewards() {
@@ -112,7 +122,21 @@ export async function getActiveRewards() {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as Reward[];
+  const dedupedRewards = new Map<string, Reward>();
+
+  for (const reward of (data ?? []) as Reward[]) {
+    const key = reward.feature_key?.trim() || `${reward.reward_type}:${reward.name.trim().toLowerCase()}`;
+    const existing = dedupedRewards.get(key);
+
+    if (!existing || reward.updated_at > existing.updated_at) {
+      dedupedRewards.set(key, reward);
+    }
+  }
+
+  return Array.from(dedupedRewards.values()).sort((a, b) => {
+    if (a.cost_points !== b.cost_points) return a.cost_points - b.cost_points;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 export async function getRewardRedemptionHistory(limit = 50) {
@@ -280,6 +304,6 @@ export async function getScoringAdminDashboard() {
     rewards: (rewardsResult.data ?? []) as Reward[],
     challenges: (challengesResult.data ?? []) as ChallengeTemplate[],
     topEarnActions,
-    leaderboard: (leaderboardResult.data ?? []) as LeaderboardEntry[],
+    leaderboard: await resolveLeaderboardAvatarUrls((leaderboardResult.data ?? []) as LeaderboardEntry[]),
   };
 }

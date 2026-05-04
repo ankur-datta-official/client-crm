@@ -71,20 +71,20 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
   const tabDescriptions: Record<string, string> = {
     "sales-overview": "A quick snapshot of lead volume, pipeline value, activity, and support needs.",
-    leads: "Understand lead quality, source, owner, and stage.",
-    pipeline: "Review deal movement, stage value, and bottlenecks.",
-    meetings: "Track discussion activity and sales temperature.",
-    "follow-ups": "Measure discipline around next actions and overdue work.",
-    documents: "Review submitted proposals, quotations, and files.",
-    "help-requests": "Monitor internal support requests and blockers.",
-    team: "Compare activity volume and pipeline ownership.",
+    leads: "Understand lead quality, source momentum, owner balance, and missing nurturing signals.",
+    pipeline: "Review deal movement, stage value, rating confidence, and funnel bottlenecks.",
+    meetings: "Track discussion activity, meeting quality, and next-step discipline.",
+    "follow-ups": "Measure execution consistency, overdue work, and workload balance.",
+    documents: "Review submitted proposals, quotations, files, and contribution trends.",
+    "help-requests": "Monitor internal support pressure, urgency, assignee load, and blocker patterns.",
+    team: "Compare ownership, productivity, and pipeline contribution across the whole team.",
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Reports & Analytics"
-        description="Track sales health, team activity, and pipeline momentum in one place."
+        description="Track sales health, team activity, pipeline momentum, and execution quality with richer visual analytics."
       />
       <GuidanceStrip dismissible storageKey="crm-tip-reports" className="py-2.5">
         Start with Sales Overview for a quick read, then switch tabs to inspect pipeline, meetings, follow-ups, and support trends.

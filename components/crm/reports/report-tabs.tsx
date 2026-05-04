@@ -42,14 +42,14 @@ export function ReportTabs({ currentTab, lockedTabs = [], description, children 
   return (
     <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
       <div className="overflow-x-auto pb-1 scrollbar-hide print:hidden">
-        <TabsList className="inline-flex h-auto min-w-max gap-2 rounded-2xl border border-slate-200 bg-white p-1 shadow-soft">
+        <TabsList className="inline-flex h-auto min-w-max gap-2 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-1.5 shadow-soft">
           {reportTabs.map((tab) => (
             <TabsTrigger
               key={tab.value}
               value={tab.value}
               disabled={lockedTabs.includes(tab.value)}
               className={cn(
-                "rounded-xl px-4 py-2 text-sm text-slate-600 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none",
+                "rounded-2xl px-4 py-2.5 text-sm font-medium text-slate-600 transition data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none",
                 lockedTabs.includes(tab.value) && "opacity-50",
               )}
             >

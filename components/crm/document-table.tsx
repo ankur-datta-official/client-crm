@@ -3,17 +3,19 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
-import { 
-  Edit, 
-  FileDown, 
-  Search, 
-  Archive, 
+import {
+  Edit,
+  FileDown,
+  Search,
+  Archive,
   MoreHorizontal,
   Calendar,
   User,
   Building2,
   FileText,
-  Filter
+  Filter,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/shared/confirm-modal";
@@ -24,11 +26,11 @@ import { useDocumentDownload } from "./document-download";
 import type { Document, Company, TeamMemberOption } from "@/lib/crm/types";
 import { documentTypeOptions, documentStatusOptions } from "@/lib/crm/schemas";
 import { cn } from "@/lib/utils";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 type DocumentTableProps = {
@@ -37,12 +39,24 @@ type DocumentTableProps = {
   teamMembers: TeamMemberOption[];
 };
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
+
 export function DocumentTable({ documents, companies, teamMembers }: DocumentTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [archiveId, setArchiveId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { downloadDocument, downloadingDocumentId, downloadError, clearDownloadError } = useDocumentDownload();
+  const pageSizeParam = Number(searchParams.get("pageSize"));
+  const resolvedPageSize = PAGE_SIZE_OPTIONS.includes(pageSizeParam as (typeof PAGE_SIZE_OPTIONS)[number]) ? pageSizeParam : DEFAULT_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(documents.length / resolvedPageSize));
+  const pageParam = Number(searchParams.get("page"));
+  const currentPage = Number.isInteger(pageParam) && pageParam > 0 ? Math.min(pageParam, totalPages) : 1;
+  const pageStart = (currentPage - 1) * resolvedPageSize;
+  const visibleDocuments = documents.slice(pageStart, pageStart + resolvedPageSize);
+  const rangeStart = documents.length === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + visibleDocuments.length, documents.length);
 
   function applyFilters(formData: FormData) {
     const params = new URLSearchParams();
@@ -50,7 +64,27 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
       const text = String(value);
       if (text) params.set(key, text);
     }
-    router.push(`/documents?${params.toString()}`);
+    const pageSize = searchParams.get("pageSize");
+    if (pageSize) {
+      params.set("pageSize", pageSize);
+    }
+    const query = params.toString();
+    router.push(query ? `/documents?${query}` : "/documents");
+  }
+
+  function updateListParams(updates: Record<string, string | null>) {
+    const params = new URLSearchParams(searchParams.toString());
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (!value) {
+        params.delete(key);
+        continue;
+      }
+      params.set(key, value);
+    }
+
+    const query = params.toString();
+    router.push(query ? `/documents?${query}` : "/documents");
   }
 
   return (
@@ -66,36 +100,37 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
               className="crm-filter-input pl-9"
             />
           </div>
-          
-          <SelectLike 
-            name="company" 
-            defaultValue={searchParams.get("company") ?? ""} 
-            options={companies.map((c) => [c.id, c.name])} 
-            label="Filter by Company" 
+
+          <SelectLike
+            name="company"
+            defaultValue={searchParams.get("company") ?? ""}
+            options={companies.map((company) => [company.id, company.name])}
+            label="Filter by Company"
           />
-          
-          <SelectLike 
-            name="type" 
-            defaultValue={searchParams.get("type") ?? ""} 
-            options={documentTypeOptions.map((t) => [t, t])} 
-            label="Document Type" 
+
+          <SelectLike
+            name="type"
+            defaultValue={searchParams.get("type") ?? ""}
+            options={documentTypeOptions.map((type) => [type, type])}
+            label="Document Type"
           />
+
           <details className="md:col-span-2 lg:col-span-2 xl:col-span-2">
             <summary className="crm-filter-summary">
               More filters
             </summary>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <SelectLike 
-                name="status" 
-                defaultValue={searchParams.get("status") ?? ""} 
-                options={documentStatusOptions.map((s) => [s, s.charAt(0).toUpperCase() + s.slice(1)])} 
-                label="Status" 
+              <SelectLike
+                name="status"
+                defaultValue={searchParams.get("status") ?? ""}
+                options={documentStatusOptions.map((status) => [status, status.charAt(0).toUpperCase() + status.slice(1)])}
+                label="Status"
               />
-              <SelectLike 
-                name="uploadedBy" 
-                defaultValue={searchParams.get("uploadedBy") ?? ""} 
-                options={teamMembers.map((m) => [m.id, m.full_name ?? m.email])} 
-                label="Uploaded By" 
+              <SelectLike
+                name="uploadedBy"
+                defaultValue={searchParams.get("uploadedBy") ?? ""}
+                options={teamMembers.map((member) => [member.id, member.full_name ?? member.email])}
+                label="Uploaded By"
               />
             </div>
           </details>
@@ -127,115 +162,166 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
             actionHref="/documents/new"
           />
         ) : (
-          documents.map((doc) => (
+          visibleDocuments.map((document) => (
             <DocumentCard
-              key={doc.id}
-              document={doc}
+              key={document.id}
+              document={document}
               onDownload={(target) => void downloadDocument(target.id)}
               onArchive={setArchiveId}
-              isDownloading={downloadingDocumentId === doc.id}
+              isDownloading={downloadingDocumentId === document.id}
             />
           ))
         )}
       </div>
 
       {documents.length > 0 ? (
-        <div className="crm-table-shell hidden md:block">
-          <div className="overflow-x-auto">
-            <table className="crm-table min-w-[860px] table-fixed">
-              <thead className="crm-table-head">
-                <tr>
-                  <th className="w-[24%] px-4 py-3 font-medium">Document Title</th>
-                  <th className="w-[16%] px-4 py-3 font-medium">Company</th>
-                  <th className="w-[13%] px-4 py-3 font-medium">Type</th>
-                  <th className="w-[15%] px-4 py-3 font-medium">File Info</th>
-                  <th className="w-[12%] px-4 py-3 font-medium text-center">Status</th>
-                  <th className="w-[12%] px-4 py-3 font-medium">Uploaded</th>
-                  <th className="w-[8%] px-4 py-3 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((doc) => (
-                  <tr key={doc.id} className="border-b border-border/80 last:border-0 transition-colors hover:bg-slate-50/80">
-                    <td className="crm-table-cell">
-                      <div className="flex flex-col">
-                        <Link href={`/documents/${doc.id}`} className="font-medium text-primary hover:underline">
-                          {doc.title}
-                        </Link>
-                        {doc.submitted_to && (
-                          <span className="text-[10px] text-muted-foreground mt-0.5">
-                            To: {doc.submitted_to}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="crm-table-cell">
-                      <Link href={`/companies/${doc.company_id}`} className="text-muted-foreground hover:text-primary transition-colors">
-                        {doc.companies?.name ?? "N/A"}
-                      </Link>
-                    </td>
-                    <td className="crm-table-cell">
-                      <DocumentTypeBadge type={doc.document_type} />
-                    </td>
-                    <td className="crm-table-cell">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs truncate max-w-[150px]" title={doc.file_name}>
-                          {doc.file_name}
-                        </span>
-                        <FileSizeBadge sizeMb={doc.file_size_mb} />
-                      </div>
-                    </td>
-                    <td className="crm-table-cell text-center">
-                      <DocumentStatusBadge status={doc.status} />
-                    </td>
-                    <td className="crm-table-cell">
-                      <div className="flex flex-col text-xs">
-                        <span className="font-medium">{doc.uploaded_profile?.full_name || "Unknown"}</span>
-                        <span className="text-muted-foreground">
-                          {new Date(doc.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="crm-table-cell text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button asChild variant="outline" size="sm">
-                          <Link href={`/documents/${doc.id}`}>Open</Link>
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => void downloadDocument(doc.id)}
-                              disabled={downloadingDocumentId === doc.id}
-                            >
-                              <FileDown className="w-4 h-4 mr-2" />
-                              {downloadingDocumentId === doc.id ? "Downloading..." : "Download"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild><Link href={`/documents/${doc.id}/edit`}><Edit className="w-4 h-4 mr-2" />Edit</Link></DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="text-destructive"
-                              onClick={() => setArchiveId(doc.id)}
-                            >
-                              <Archive className="w-4 h-4 mr-2" />
-                              Archive
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </td>
-                  </tr>
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {rangeStart}-{rangeEnd} of {documents.length} documents
+            </p>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Rows per page</span>
+              <select
+                aria-label="Rows per page"
+                className="rounded-full border border-input bg-background px-3 py-1.5 text-foreground outline-none transition focus:border-ring"
+                value={String(resolvedPageSize)}
+                onChange={(event) => updateListParams({ pageSize: event.target.value, page: null })}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            </label>
+          </div>
+
+          <div className="crm-table-shell hidden md:block">
+            <div className="overflow-x-auto">
+              <table className="crm-table min-w-[860px] table-fixed">
+                <thead className="crm-table-head">
+                  <tr>
+                    <th className="w-[24%] px-4 py-3 font-medium">Document Title</th>
+                    <th className="w-[16%] px-4 py-3 font-medium">Company</th>
+                    <th className="w-[13%] px-4 py-3 font-medium">Type</th>
+                    <th className="w-[15%] px-4 py-3 font-medium">File Info</th>
+                    <th className="w-[12%] px-4 py-3 font-medium text-center">Status</th>
+                    <th className="w-[12%] px-4 py-3 font-medium">Uploaded</th>
+                    <th className="w-[8%] px-4 py-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleDocuments.map((document) => (
+                    <tr key={document.id} className="border-b border-border/80 last:border-0 transition-colors hover:bg-slate-50/80">
+                      <td className="crm-table-cell">
+                        <div className="flex flex-col">
+                          <Link href={`/documents/${document.id}`} className="font-medium text-primary hover:underline">
+                            {document.title}
+                          </Link>
+                          {document.submitted_to ? (
+                            <span className="text-[10px] text-muted-foreground mt-0.5">
+                              To: {document.submitted_to}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="crm-table-cell">
+                        <Link href={`/companies/${document.company_id}`} className="text-muted-foreground hover:text-primary transition-colors">
+                          {document.companies?.name ?? "N/A"}
+                        </Link>
+                      </td>
+                      <td className="crm-table-cell">
+                        <DocumentTypeBadge type={document.document_type} />
+                      </td>
+                      <td className="crm-table-cell">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs truncate max-w-[150px]" title={document.file_name}>
+                            {document.file_name}
+                          </span>
+                          <FileSizeBadge sizeMb={document.file_size_mb} />
+                        </div>
+                      </td>
+                      <td className="crm-table-cell text-center">
+                        <DocumentStatusBadge status={document.status} />
+                      </td>
+                      <td className="crm-table-cell">
+                        <div className="flex flex-col text-xs">
+                          <span className="font-medium">{document.uploaded_profile?.full_name || "Unknown"}</span>
+                          <span className="text-muted-foreground">
+                            {new Date(document.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="crm-table-cell text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/documents/${document.id}`}>Open</Link>
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => void downloadDocument(document.id)}
+                                disabled={downloadingDocumentId === document.id}
+                              >
+                                <FileDown className="w-4 h-4 mr-2" />
+                                {downloadingDocumentId === document.id ? "Downloading..." : "Download"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem asChild><Link href={`/documents/${document.id}/edit`}><Edit className="w-4 h-4 mr-2" />Edit</Link></DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setArchiveId(document.id)}
+                              >
+                                <Archive className="w-4 h-4 mr-2" />
+                                Archive
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => updateListParams({ page: currentPage > 2 ? String(currentPage - 1) : null })}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => updateListParams({ page: String(currentPage + 1) })}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       ) : (
         <div className="hidden md:block">
-           <EmptyState
+          <EmptyState
             title="No documents found"
             description="No documents uploaded. Upload quotations, proposals, or company profiles."
             icon={FileText}
@@ -273,13 +359,13 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
   );
 }
 
-function DocumentCard({ 
-  document, 
-  onDownload, 
+function DocumentCard({
+  document,
+  onDownload,
   onArchive,
   isDownloading,
-}: { 
-  document: Document; 
+}: {
+  document: Document;
   onDownload: (doc: Document) => void;
   onArchive: (id: string) => void;
   isDownloading: boolean;

@@ -81,8 +81,18 @@ export function ReportFilterBar({ users, industries, stages, categories }: Repor
   const advancedFilterCount = [pipelineStageId, leadTemperature, companyCategoryId].filter((value) => value !== "all").length;
 
   return (
-    <Card className="border-slate-200 bg-white shadow-soft print:hidden">
+    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.08),_transparent_30%),linear-gradient(180deg,_#ffffff_0%,_#f8fbff_100%)] shadow-soft print:hidden">
       <CardContent className="space-y-4 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Analytics Filters</p>
+            <p className="text-xs text-slate-500">Refine every report chart with the same workspace-wide filters.</p>
+          </div>
+          <div className="rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+            {advancedFilterCount > 0 ? `${advancedFilterCount} advanced filter${advancedFilterCount > 1 ? "s" : ""} active` : "Base filters ready"}
+          </div>
+        </div>
+
         <div className="grid gap-3 xl:grid-cols-[minmax(150px,170px)_minmax(170px,190px)_minmax(160px,180px)_auto]">
           <FilterField label="Date Range" icon={<Calendar className="size-3.5" />}>
             <Select value={dateRange} onValueChange={setDateRange}>
@@ -149,7 +159,7 @@ export function ReportFilterBar({ users, industries, stages, categories }: Repor
             type="button"
             variant="outline"
             size="sm"
-            className="h-9 rounded-xl"
+            className="h-9 rounded-xl bg-white/80"
             onClick={() => setShowMoreFilters((current) => !current)}
           >
             <Layers className="mr-2 size-3.5" />
@@ -161,7 +171,7 @@ export function ReportFilterBar({ users, industries, stages, categories }: Repor
         </div>
 
         {showMoreFilters ? (
-          <div className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3 md:grid-cols-3">
+          <div className="grid gap-3 rounded-[24px] border border-slate-100 bg-white/70 p-3 md:grid-cols-3">
             <FilterField label="Pipeline Stage" icon={<Layers className="size-3.5" />}>
               <Select value={pipelineStageId} onValueChange={setPipelineStageId}>
                 <SelectTrigger className="h-10 text-xs">

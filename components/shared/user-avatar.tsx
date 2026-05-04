@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import { cn, getInitials } from "@/lib/utils";
 
@@ -16,8 +19,10 @@ export function UserAvatar({
   className,
   initialsClassName,
 }: UserAvatarProps) {
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const initials = getInitials(fullName, email);
   const altText = fullName?.trim() || email || "User avatar";
+  const shouldShowImage = Boolean(imageUrl) && failedImageUrl !== imageUrl;
 
   return (
     <div
@@ -26,7 +31,7 @@ export function UserAvatar({
         className,
       )}
     >
-      {imageUrl ? (
+      {shouldShowImage ? (
         <Image
           src={imageUrl}
           alt={altText}
@@ -34,6 +39,7 @@ export function UserAvatar({
           unoptimized
           className="object-cover"
           sizes="128px"
+          onError={() => setFailedImageUrl(imageUrl)}
         />
       ) : (
         <span className={cn("text-sm font-semibold", initialsClassName)}>{initials}</span>

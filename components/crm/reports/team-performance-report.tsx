@@ -1,11 +1,18 @@
 "use client";
 
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Activity, BadgeDollarSign, CheckCheck, Users } from "lucide-react";
+import { ReportChartCard } from "./report-chart-card";
 import { ReportDataTable } from "./report-data-table";
-import { ReportMetricCard } from "./report-visuals";
+import { ReportChartTooltip, ReportMetricCard } from "./report-visuals";
 import type { TeamPerformanceReportData } from "@/lib/crm/report-queries";
 import { formatCurrency } from "@/lib/crm/utils";
 
 export function TeamPerformanceReport({ data }: { data: TeamPerformanceReportData }) {
+  const topValueUser = [...data.teamStats].sort((a, b) => b.pipelineValueManaged - a.pipelineValueManaged)[0];
+  const topMeetingUser = [...data.teamStats].sort((a, b) => b.meetingsCreated - a.meetingsCreated)[0];
+  const topFollowupRateUser = [...data.teamStats].sort((a, b) => (b.followupsCompleted / (b.followupsCreated || 1)) - (a.followupsCompleted / (a.followupsCreated || 1)))[0];
+
   const columns = [
     { 
       header: "User", 
@@ -43,25 +50,59 @@ export function TeamPerformanceReport({ data }: { data: TeamPerformanceReportDat
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <ReportMetricCard title="Total Team Members" value={String(data.teamStats.length)} detail="Active users included in this report" tone="slate" />
+        <ReportMetricCard title="Total Team Members" value={String(data.teamStats.length)} detail="Active users included in this report" tone="slate" icon={Users} badge="team" />
         <ReportMetricCard
           title="Top Performer (Value)"
-          value={[...data.teamStats].sort((a, b) => b.pipelineValueManaged - a.pipelineValueManaged)[0]?.userName || "N/A"}
+          value={topValueUser?.userName || "N/A"}
           detail="Highest owned pipeline value"
           tone="teal"
+          icon={BadgeDollarSign}
+          badge="bdt"
         />
         <ReportMetricCard
           title="Top Performer (Meetings)"
-          value={[...data.teamStats].sort((a, b) => b.meetingsCreated - a.meetingsCreated)[0]?.userName || "N/A"}
+          value={topMeetingUser?.userName || "N/A"}
           detail="Most meetings logged"
           tone="sky"
+          icon={Activity}
+          badge="activity"
         />
         <ReportMetricCard
           title="Highest Follow-up Rate"
-          value={[...data.teamStats].sort((a, b) => (b.followupsCompleted / (b.followupsCreated || 1)) - (a.followupsCompleted / (a.followupsCreated || 1)))[0]?.userName || "N/A"}
+          value={topFollowupRateUser?.userName || "N/A"}
           detail="Best completion ratio"
           tone="amber"
+          icon={CheckCheck}
+          badge="discipline"
         />
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <ReportChartCard title="Pipeline Value by Team Member" description="Compare who currently owns the largest share of active pipeline value." badge="Value ownership" isEmpty={data.teamStats.length === 0}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data.teamStats}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="userName" fontSize={10} interval={0} tick={{ width: 60, fill: "#64748b" }} />
+              <YAxis fontSize={12} tick={{ fill: "#64748b" }} tickFormatter={(val) => `৳${val >= 1000 ? `${Math.round(val / 1000)}k` : val}`} />
+              <Tooltip content={<ReportChartTooltip />} formatter={(value: number) => formatCurrency(value)} />
+              <Bar dataKey="pipelineValueManaged" fill="#0f766e" radius={[10, 10, 0, 0]} barSize={34} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ReportChartCard>
+
+        <ReportChartCard title="Team Activity Mix" description="See how meetings, completed follow-ups, and uploads are distributed by user." badge="Productivity" isEmpty={data.teamStats.length === 0}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data.teamStats}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="userName" fontSize={10} interval={0} tick={{ width: 60, fill: "#64748b" }} />
+              <YAxis fontSize={12} tick={{ fill: "#64748b" }} />
+              <Tooltip content={<ReportChartTooltip />} />
+              <Bar dataKey="meetingsCreated" stackId="activity" fill="#0284c7" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="followupsCompleted" stackId="activity" fill="#0f766e" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="documentsUploaded" stackId="activity" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ReportChartCard>
       </div>
 
       <ReportDataTable 

@@ -23,7 +23,7 @@ export default async function LeaderboardPage() {
           <LeaderboardPanel entries={allTime} title="All-Time Leaders" description="The highest balances across the workspace." />
           <div className="grid gap-6 lg:grid-cols-2">
             <LeaderboardPanel entries={weekly} title="This Week" description="Weekly point race." />
-            <LeaderboardPanel entries={daily} title="Today" description="Today’s live scoring sprint." />
+            <LeaderboardPanel entries={daily} title="Today" description="Today's live scoring sprint." />
           </div>
         </div>
         <ChallengeProgressPanel challenges={summary?.challenge_progress ?? []} />
@@ -31,4 +31,3 @@ export default async function LeaderboardPage() {
     </div>
   );
 }
-
