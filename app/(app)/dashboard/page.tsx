@@ -20,6 +20,7 @@ import {
 import { DashboardDealsStageChart, DashboardLeadTargetChart } from "@/components/dashboard/dashboard-visuals";
 import { DashboardDateRangePicker } from "@/components/dashboard/dashboard-date-range-picker";
 import { DashboardKPIs } from "@/components/dashboard/dashboard-kpis";
+import { DashboardTargetManager } from "@/components/dashboard/dashboard-target-manager";
 import { 
   ActivityRow, 
   AlertCard, 
@@ -41,6 +42,7 @@ import { getInteractions, getPipelineCompanies, getPipelineStagesForBoard, getPi
 import type { Followup, HelpRequest, Interaction, PipelineBoardCompany, PipelineStage } from "@/lib/crm/types";
 import { formatCurrency } from "@/lib/crm/utils";
 import { getCurrentUserWalletSummary } from "@/lib/scoring/queries";
+import { getCurrentUserPerformanceSnapshot } from "@/lib/team/performance-queries";
 import { getDisplayName } from "@/lib/utils";
 
 type DashboardTaskItem = {
@@ -72,12 +74,6 @@ type DashboardAlertItem = {
   icon: typeof TimerOff;
 };
 
-const ACTIVITY_TARGETS = {
-  leads: 20,
-  meetings: 10,
-  followups: 30,
-} as const;
-
 const DEFAULT_STAGE_COLORS = ["#16a34a", "#86efac", "#facc15", "#fb923c", "#f87171"];
 
 export default async function DashboardPage({
@@ -100,6 +96,7 @@ export default async function DashboardPage({
     safeOpenHelpRequestsCount,
     safeWalletSummary,
     yesterdayFollowups,
+    performanceSnapshot,
   ] = await Promise.all([
     getFollowups({ 
       status: "pending",
@@ -132,6 +129,7 @@ export default async function DashboardPage({
       dateStart: new Date(new Date().setHours(0, 0, 0, 0) - 86400000).toISOString(),
       dateEnd: new Date(new Date().setHours(23, 59, 59, 999) - 86400000).toISOString(),
     }),
+    getCurrentUserPerformanceSnapshot(),
   ]);
 
   // Filter pipeline companies by date range if provided
@@ -216,21 +214,11 @@ export default async function DashboardPage({
     upcomingMeetings,
   }).slice(0, 3);
 
-  const todaysAchievement = {
-    leads: pipelineCompanies.filter(c => isWithinDateRange(c.created_at, dateBounds.start, dateBounds.end)).length,
-    meetings: interactions.filter(i => isWithinDateRange(i.meeting_datetime, dateBounds.start, dateBounds.end)).length,
-    followups: followupReport.completedFollowups.filter(f => isWithinDateRange(f.completed_at!, dateBounds.start, dateBounds.end)).length,
-  };
-
-  const DAILY_TARGETS = {
-    leads: 2,
-    meetings: 1,
-    followups: 3,
-  };
-
-  const totalDailyTarget = DAILY_TARGETS.leads + DAILY_TARGETS.meetings + DAILY_TARGETS.followups;
-  const totalDailyAchievement = todaysAchievement.leads + todaysAchievement.meetings + todaysAchievement.followups;
-  const dailyProgress = Math.min(100, Math.round((totalDailyAchievement / totalDailyTarget) * 100));
+  const totalDailyTarget = performanceSnapshot.metrics.reduce((sum, metric) => sum + metric.dailyTarget, 0);
+  const totalDailyAchievement = performanceSnapshot.metrics.reduce((sum, metric) => sum + metric.dailyActual, 0);
+  const dailyProgress = totalDailyTarget > 0
+    ? Math.min(100, Math.round((totalDailyAchievement / totalDailyTarget) * 100))
+    : 0;
 
   const selectedFunnelStages = selectFunnelStages(pipelineStages);
   const funnelStages = selectedFunnelStages.map((stage, index) => ({
@@ -241,7 +229,6 @@ export default async function DashboardPage({
     width: Math.max(50, 100 - index * 12),
   }));
 
-  const leadTrend = buildLeadTrend(pipelineCompanies, from && to ? { from, to } : undefined);
   const dealsByStage = pipelineStages
     .map((stage, index) => ({
       name: stage.name,
@@ -310,10 +297,10 @@ export default async function DashboardPage({
     <div className="space-y-6">
       <AnimatedHeader>
         <div className="space-y-1">
-          <h1 className="text-[1.9rem] font-semibold tracking-normal text-slate-900 sm:text-[2.15rem]">
+          <h1 className="text-[1.9rem] font-semibold tracking-normal text-slate-900 dark:text-slate-100 sm:text-[2.15rem]">
             Welcome back, {displayName} <span aria-hidden="true">{"\u{1F44B}"}</span>
           </h1>
-          <p className="text-sm text-slate-600">Here&apos;s what&apos;s happening with your sales today.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Here&apos;s what&apos;s happening with your sales today.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <DashboardDateRangePicker />
@@ -381,7 +368,7 @@ export default async function DashboardPage({
           headerRight={
             <div className="flex flex-col items-end">
               <span className="text-2xl font-bold text-emerald-600">{dailyProgress}%</span>
-              <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Performance
               </span>
             </div>
@@ -392,20 +379,20 @@ export default async function DashboardPage({
           <div className="space-y-4">
             <ProgressMetric
               label="Leads added"
-              value={todaysAchievement.leads}
-              target={DAILY_TARGETS.leads}
+              value={performanceSnapshot.metrics.find((metric) => metric.metric === "leads_created")?.dailyActual ?? 0}
+              target={performanceSnapshot.metrics.find((metric) => metric.metric === "leads_created")?.dailyTarget ?? 0}
               colorClassName="bg-emerald-500"
             />
             <ProgressMetric
               label="Meetings logged"
-              value={todaysAchievement.meetings}
-              target={DAILY_TARGETS.meetings}
+              value={performanceSnapshot.metrics.find((metric) => metric.metric === "meetings_logged")?.dailyActual ?? 0}
+              target={performanceSnapshot.metrics.find((metric) => metric.metric === "meetings_logged")?.dailyTarget ?? 0}
               colorClassName="bg-sky-500"
             />
             <ProgressMetric
               label="Follow-ups completed"
-              value={todaysAchievement.followups}
-              target={DAILY_TARGETS.followups}
+              value={performanceSnapshot.metrics.find((metric) => metric.metric === "followups_completed")?.dailyActual ?? 0}
+              target={performanceSnapshot.metrics.find((metric) => metric.metric === "followups_completed")?.dailyTarget ?? 0}
               colorClassName="bg-amber-500"
             />
           </div>
@@ -431,7 +418,7 @@ export default async function DashboardPage({
       </section>
 
       <section className="grid gap-5 xl:grid-cols-3 items-start">
-        <DashboardLeadTargetChart leadTrend={leadTrend} />
+        <DashboardLeadTargetChart leadTrend={performanceSnapshot.trend} />
         <DashboardDealsStageChart stageDistribution={dealsByStage} />
 
         <DashboardCard
@@ -456,6 +443,10 @@ export default async function DashboardPage({
           )}
         </DashboardCard>
       </section>
+
+      {profile ? (
+        <DashboardTargetManager userId={profile.id} metrics={performanceSnapshot.metrics} />
+      ) : null}
 
       <section className="grid gap-5 md:grid-cols-3">
         {alertCards.map((alert, index) => (
@@ -523,40 +514,6 @@ function buildDashboardTasks({
       iconName: "CalendarClock",
     })),
   ];
-}
-
-function buildLeadTrend(companies: PipelineBoardCompany[], range?: { from: string; to: string }) {
-  const start = range ? new Date(range.from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const end = range ? new Date(range.to) : new Date();
-  
-  const counts = new Map<string, { target: number; achievement: number }>();
-  const current = new Date(start);
-  
-  // Daily target based on ACTIVITY_TARGETS.leads (20 per month)
-  const dailyTarget = Number((20 / 30).toFixed(2));
-
-  while (current <= end) {
-    counts.set(current.toISOString().slice(0, 10), { target: dailyTarget, achievement: 0 });
-    current.setDate(current.getDate() + 1);
-  }
-
-  companies.forEach((company) => {
-    const createdAt = new Date(company.created_at);
-    if (createdAt >= start && createdAt <= end) {
-      const key = createdAt.toISOString().slice(0, 10);
-      if (counts.has(key)) {
-        const existing = counts.get(key)!;
-        counts.set(key, { ...existing, achievement: existing.achievement + 1 });
-      }
-    }
-  });
-
-  return Array.from(counts.entries()).map(([date, data]) => ({
-    date,
-    label: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    target: data.target,
-    achievement: data.achievement,
-  }));
 }
 
 function buildRecentActivity({

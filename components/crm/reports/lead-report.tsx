@@ -65,6 +65,8 @@ export function LeadReport({ data }: { data: LeadReportData }) {
     },
   ];
 
+  const getBarGradientId = (prefix: string, index: number) => `${prefix}-gradient-${index}`;
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -78,11 +80,26 @@ export function LeadReport({ data }: { data: LeadReportData }) {
         <ReportChartCard title="Leads by Industry" description="Compare lead distribution across active industries." badge={`${data.leadsByIndustry.length} segments`} headerRight={<MiniStat label="Top" value={topIndustry?.industry || "N/A"} />} isEmpty={data.leadsByIndustry.length === 0}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.leadsByIndustry} layout="vertical">
+              <defs>
+                {data.leadsByIndustry.map((_, index) => {
+                  const color = REPORT_CHART_COLORS[index % REPORT_CHART_COLORS.length];
+                  return (
+                    <linearGradient key={getBarGradientId("industry", index)} id={getBarGradientId("industry", index)} x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor={color} stopOpacity={0.86} />
+                      <stop offset="100%" stopColor={color} stopOpacity={1} />
+                    </linearGradient>
+                  );
+                })}
+              </defs>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" horizontal vertical={false} />
               <XAxis type="number" hide />
               <YAxis dataKey="industry" type="category" width={120} fontSize={12} tick={{ fill: "#64748b" }} />
               <Tooltip content={<ReportChartTooltip />} />
-              <Bar dataKey="count" fill="#0f766e" radius={[0, 10, 10, 0]} barSize={24} />
+              <Bar dataKey="count" radius={[0, 10, 10, 0]} barSize={24}>
+                {data.leadsByIndustry.map((_, index) => (
+                  <Cell key={`industry-cell-${index}`} fill={`url(#${getBarGradientId("industry", index)})`} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ReportChartCard>
@@ -117,11 +134,26 @@ export function LeadReport({ data }: { data: LeadReportData }) {
         <ReportChartCard title="Leads by Source" description="Understand which sources generate the most leads." height={250} badge="Acquisition" isEmpty={data.leadsBySource.length === 0}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.leadsBySource}>
+              <defs>
+                {data.leadsBySource.map((_, index) => {
+                  const color = REPORT_CHART_COLORS[index % REPORT_CHART_COLORS.length];
+                  return (
+                    <linearGradient key={getBarGradientId("source", index)} id={getBarGradientId("source", index)} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity={1} />
+                      <stop offset="100%" stopColor={color} stopOpacity={0.84} />
+                    </linearGradient>
+                  );
+                })}
+              </defs>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="source" fontSize={12} tick={{ fill: "#64748b" }} />
               <YAxis fontSize={12} tick={{ fill: "#64748b" }} />
               <Tooltip content={<ReportChartTooltip />} />
-              <Bar dataKey="count" fill="#0284c7" radius={[10, 10, 0, 0]} barSize={30} />
+              <Bar dataKey="count" radius={[10, 10, 0, 0]} barSize={30}>
+                {data.leadsBySource.map((_, index) => (
+                  <Cell key={`source-cell-${index}`} fill={`url(#${getBarGradientId("source", index)})`} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ReportChartCard>
@@ -129,20 +161,35 @@ export function LeadReport({ data }: { data: LeadReportData }) {
         <ReportChartCard title="Leads by Assigned User" description="Spot ownership load across your active team." height={250} badge="Ownership" isEmpty={data.leadsByAssignedUser.length === 0}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.leadsByAssignedUser}>
+              <defs>
+                {data.leadsByAssignedUser.map((_, index) => {
+                  const color = REPORT_CHART_COLORS[(index + 2) % REPORT_CHART_COLORS.length];
+                  return (
+                    <linearGradient key={getBarGradientId("owner", index)} id={getBarGradientId("owner", index)} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity={1} />
+                      <stop offset="100%" stopColor={color} stopOpacity={0.84} />
+                    </linearGradient>
+                  );
+                })}
+              </defs>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="user" fontSize={10} interval={0} tick={{ width: 60, fill: "#64748b" }} />
               <YAxis fontSize={12} tick={{ fill: "#64748b" }} />
               <Tooltip content={<ReportChartTooltip />} />
-              <Bar dataKey="count" fill="#0f766e" radius={[10, 10, 0, 0]} barSize={30} />
+              <Bar dataKey="count" radius={[10, 10, 0, 0]} barSize={30}>
+                {data.leadsByAssignedUser.map((_, index) => (
+                  <Cell key={`owner-cell-${index}`} fill={`url(#${getBarGradientId("owner", index)})`} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ReportChartCard>
 
-        <ReportChartCard title="Lead Action Gaps" description="Quickly spot where nurturing is missing." height={250} badge="Priority view">
-          <div className="grid h-full gap-3 p-2">
-            <ReportMetricCard title="Hot Leads" value={String(data.hotLeads.length)} detail="High-intent leads to prioritize first" tone="rose" icon={Flame} align="center" />
-            <ReportMetricCard title="No Follow-up" value={String(data.leadsWithoutFollowup.length)} detail="Leads needing immediate next action" tone="amber" icon={PhoneOff} align="center" />
-            <ReportMetricCard title="No Meeting" value={String(data.leadsWithoutMeeting.length)} detail="Leads that have not reached a conversation yet" tone="sky" icon={UserCheck} align="center" />
+        <ReportChartCard title="Lead Action Gaps" description="Quickly spot where nurturing is missing." height={290} badge="Priority view">
+          <div className="grid h-full gap-2 p-1.5">
+            <ReportMetricCard title="Hot Leads" value={String(data.hotLeads.length)} detail="High-intent leads to prioritize first" tone="rose" icon={Flame} align="center" compact />
+            <ReportMetricCard title="No Follow-up" value={String(data.leadsWithoutFollowup.length)} detail="Leads needing immediate next action" tone="amber" icon={PhoneOff} align="center" compact />
+            <ReportMetricCard title="No Meeting" value={String(data.leadsWithoutMeeting.length)} detail="Leads that have not reached a conversation yet" tone="sky" icon={UserCheck} align="center" compact />
           </div>
         </ReportChartCard>
       </div>

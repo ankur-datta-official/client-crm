@@ -12,6 +12,7 @@ export type Profile = {
   job_title: string | null;
   department: string | null;
   phone: string | null;
+  manager_user_id?: string | null;
   is_active: boolean;
   is_super_admin: boolean;
 };
@@ -69,7 +70,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, organization_id, email, full_name, avatar_url, job_title, department, phone, is_active, is_super_admin")
+    .select("id, organization_id, email, full_name, avatar_url, job_title, department, phone, manager_user_id, is_active, is_super_admin")
     .eq("id", user.id)
     .maybeSingle();
 

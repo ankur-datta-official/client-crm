@@ -1,6 +1,6 @@
 "use client";
 
-import { LucideIcon, TrendingDown, TrendingUp } from "lucide-react";
+import { Building2, Handshake, LucideIcon, NotebookTabs, TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -10,7 +10,8 @@ type StatCardProps = {
   title: string;
   value: string;
   description?: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  iconName?: "building" | "notebook" | "handshake";
   tone?: "teal" | "amber" | "rose" | "blue" | "slate";
   href?: string;
   className?: string;
@@ -22,31 +23,39 @@ type StatCardProps = {
 };
 
 const toneClasses = {
-  teal: "bg-teal-50 text-teal-700 ring-teal-100",
-  amber: "bg-amber-50 text-amber-700 ring-amber-100",
-  rose: "bg-rose-50 text-rose-700 ring-rose-100",
-  blue: "bg-sky-50 text-sky-700 ring-sky-100",
-  slate: "bg-slate-100 text-slate-700 ring-slate-200",
+  teal: "bg-teal-50 text-teal-700 ring-teal-100 dark:bg-teal-500/10 dark:text-teal-300 dark:ring-teal-500/20",
+  amber: "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20",
+  rose: "bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/20",
+  blue: "bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/20",
+  slate: "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700",
 };
 
 const trendToneClasses = {
-  teal: "text-teal-600",
-  amber: "text-amber-600",
-  rose: "text-rose-600",
-  blue: "text-sky-600",
-  slate: "text-slate-600",
+  teal: "text-teal-600 dark:text-teal-300",
+  amber: "text-amber-600 dark:text-amber-300",
+  rose: "text-rose-600 dark:text-rose-300",
+  blue: "text-sky-600 dark:text-sky-300",
+  slate: "text-slate-600 dark:text-slate-300",
 };
 
 export function StatCard({
   title,
   value,
   description,
-  icon: Icon,
+  icon,
   tone = "teal",
+  iconName,
   href,
   className,
   trend,
 }: StatCardProps) {
+  const iconMap: Record<NonNullable<StatCardProps["iconName"]>, LucideIcon> = {
+    building: Building2,
+    notebook: NotebookTabs,
+    handshake: Handshake,
+  };
+  const ResolvedIcon = icon ?? (iconName ? iconMap[iconName] : Building2);
+
   const content = (
     <motion.div
       whileHover={{ y: -4 }}
@@ -54,19 +63,19 @@ export function StatCard({
     >
       <Card
         className={cn(
-          "rounded-[24px] border border-slate-200/80 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all duration-200",
-          href && "hover:border-slate-300 hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)] hover:bg-slate-50/30",
+          "rounded-[24px] border border-slate-200/80 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all duration-200 dark:border-slate-800/80 dark:bg-slate-950/88 dark:shadow-[0_10px_24px_rgba(2,6,23,0.45)]",
+          href && "hover:border-slate-300 hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)] hover:bg-slate-50/30 dark:hover:border-slate-700 dark:hover:bg-slate-900/80",
           className,
         )}
       >
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-500">{title}</p>
-              <p className="mt-3 text-[1.75rem] font-semibold leading-tight tracking-tight text-slate-900">{value}</p>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
+              <p className="mt-3 text-[1.75rem] font-semibold leading-tight tracking-tight text-slate-900 dark:text-slate-100">{value}</p>
               <div className="mt-2 flex flex-col gap-1">
                 {description ? (
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
                     {description}
                   </p>
                 ) : null}
@@ -95,7 +104,7 @@ export function StatCard({
                 toneClasses[tone],
               )}
             >
-              <Icon className="size-5" />
+              <ResolvedIcon className="size-5" />
             </div>
           </div>
         </CardContent>

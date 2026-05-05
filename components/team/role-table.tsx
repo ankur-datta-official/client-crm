@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, Shield } from "lucide-react";
+import { Archive, PlusCircle, Shield } from "lucide-react";
 import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -31,11 +31,17 @@ export function RoleTable({ roles, permissions, canManage }: RoleTableProps) {
   const [isPending, startTransition] = useTransition();
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(roles[0]?.id ?? null);
   const [archiveId, setArchiveId] = useState<string | null>(null);
+  const activeRoleId = selectedRoleId && roles.some((role) => role.id === selectedRoleId) ? selectedRoleId : (roles[0]?.id ?? null);
 
   const selectedRole = useMemo(
-    () => roles.find((role) => role.id === selectedRoleId) ?? null,
-    [roles, selectedRoleId],
+    () => roles.find((role) => role.id === activeRoleId) ?? null,
+    [activeRoleId, roles],
   );
+
+  function handleRoleSaved(roleId: string | null) {
+    setSelectedRoleId(roleId);
+    router.refresh();
+  }
 
   if (roles.length === 0) {
     return (
@@ -50,7 +56,42 @@ export function RoleTable({ roles, permissions, canManage }: RoleTableProps) {
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="space-y-4">
-        <RoleForm key={selectedRole?.id ?? "new-role"} selectedRole={selectedRole} canManage={canManage} onSaved={() => router.refresh()} />
+        <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/5 via-white to-emerald-50/60 p-4 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold text-foreground">Custom role setup</h3>
+              <p className="max-w-xl text-sm text-muted-foreground">
+                Create a role, choose its permissions, then assign that role to team members from the Team Members tab.
+              </p>
+            </div>
+            {canManage ? (
+              <Button
+                type="button"
+                className="shrink-0"
+                onClick={() => setSelectedRoleId(null)}
+              >
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Create New Role
+              </Button>
+            ) : null}
+          </div>
+          <div className="mt-4 grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
+            <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Step 1</div>
+              <p className="mt-2 text-sm text-foreground">Add a clear role name such as Sales Intern or Support Lead.</p>
+            </div>
+            <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Step 2</div>
+              <p className="mt-2 text-sm text-foreground">Turn permissions on only for the actions that role should perform.</p>
+            </div>
+            <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Step 3</div>
+              <p className="mt-2 text-sm text-foreground">Assign the finished role to users from the Team Members tab.</p>
+            </div>
+          </div>
+        </div>
+
+        <RoleForm key={selectedRole?.id ?? "new-role"} selectedRole={selectedRole} canManage={canManage} onSaved={handleRoleSaved} />
         <div className="overflow-hidden rounded-lg border bg-white">
           <Table>
             <TableHeader className="bg-muted/40">
@@ -61,10 +102,28 @@ export function RoleTable({ roles, permissions, canManage }: RoleTableProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {canManage ? (
+              <TableRow
+                  className={cn("cursor-pointer", activeRoleId === null && "bg-primary/5")}
+                  onClick={() => setSelectedRoleId(null)}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-2 font-medium text-primary">
+                      <PlusCircle className="h-4 w-4" />
+                      Create a new custom role
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Start with a role name, then configure its permissions.
+                    </div>
+                  </TableCell>
+                  <TableCell>Custom</TableCell>
+                  <TableCell className="text-right text-xs text-muted-foreground">New</TableCell>
+                </TableRow>
+              ) : null}
               {roles.map((role) => (
                 <TableRow
                   key={role.id}
-                  className={cn("cursor-pointer", selectedRoleId === role.id && "bg-muted/30")}
+                  className={cn("cursor-pointer", activeRoleId === role.id && "bg-muted/30")}
                   onClick={() => setSelectedRoleId(role.id)}
                 >
                   <TableCell>

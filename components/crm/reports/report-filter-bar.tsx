@@ -81,14 +81,14 @@ export function ReportFilterBar({ users, industries, stages, categories }: Repor
   const advancedFilterCount = [pipelineStageId, leadTemperature, companyCategoryId].filter((value) => value !== "all").length;
 
   return (
-    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.08),_transparent_30%),linear-gradient(180deg,_#ffffff_0%,_#f8fbff_100%)] shadow-soft print:hidden">
+    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.08),_transparent_30%),linear-gradient(180deg,_#ffffff_0%,_#f8fbff_100%)] shadow-soft print:hidden dark:border-slate-800/80 dark:bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.16),_transparent_30%),linear-gradient(180deg,_#0f172a_0%,_#020617_100%)]">
       <CardContent className="space-y-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Analytics Filters</p>
-            <p className="text-xs text-slate-500">Refine every report chart with the same workspace-wide filters.</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Analytics Filters</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Refine every report chart with the same workspace-wide filters.</p>
           </div>
-          <div className="rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+          <div className="rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200 dark:bg-slate-950/85 dark:text-slate-300 dark:ring-slate-800">
             {advancedFilterCount > 0 ? `${advancedFilterCount} advanced filter${advancedFilterCount > 1 ? "s" : ""} active` : "Base filters ready"}
           </div>
         </div>
@@ -154,12 +154,12 @@ export function ReportFilterBar({ users, industries, stages, categories }: Repor
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-9 rounded-xl bg-white/80"
+            className="h-9 rounded-xl bg-white/80 dark:bg-slate-950/80"
             onClick={() => setShowMoreFilters((current) => !current)}
           >
             <Layers className="mr-2 size-3.5" />
@@ -167,11 +167,11 @@ export function ReportFilterBar({ users, industries, stages, categories }: Repor
             {advancedFilterCount > 0 ? <span className="ml-1 text-xs text-primary">({advancedFilterCount})</span> : null}
             {showMoreFilters ? <ChevronUp className="ml-2 size-3.5" /> : <ChevronDown className="ml-2 size-3.5" />}
           </Button>
-          <p className="text-xs text-slate-500">Use more filters for stage, temperature, and category slices.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Use more filters for stage, temperature, and category slices.</p>
         </div>
 
         {showMoreFilters ? (
-          <div className="grid gap-3 rounded-[24px] border border-slate-100 bg-white/70 p-3 md:grid-cols-3">
+          <div className="grid gap-3 rounded-[24px] border border-slate-100 bg-white/70 p-3 md:grid-cols-3 dark:border-slate-800 dark:bg-slate-950/70">
             <FilterField label="Pipeline Stage" icon={<Layers className="size-3.5" />}>
               <Select value={pipelineStageId} onValueChange={setPipelineStageId}>
                 <SelectTrigger className="h-10 text-xs">
@@ -236,7 +236,7 @@ function FilterField({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+      <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
         {icon}
         {label}
       </label>

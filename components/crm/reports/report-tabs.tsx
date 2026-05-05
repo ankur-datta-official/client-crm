@@ -42,14 +42,14 @@ export function ReportTabs({ currentTab, lockedTabs = [], description, children 
   return (
     <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
       <div className="overflow-x-auto pb-1 scrollbar-hide print:hidden">
-        <TabsList className="inline-flex h-auto min-w-max gap-2 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-1.5 shadow-soft">
+        <TabsList className="inline-flex h-auto min-w-max gap-2 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-1.5 shadow-soft dark:border-slate-800/80 dark:bg-[linear-gradient(180deg,#0f172a_0%,#020617_100%)]">
           {reportTabs.map((tab) => (
             <TabsTrigger
               key={tab.value}
               value={tab.value}
               disabled={lockedTabs.includes(tab.value)}
               className={cn(
-                "rounded-2xl px-4 py-2.5 text-sm font-medium text-slate-600 transition data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none",
+                "rounded-2xl px-4 py-2.5 text-sm font-medium text-slate-600 transition dark:text-slate-300 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none",
                 lockedTabs.includes(tab.value) && "opacity-50",
               )}
             >
@@ -58,7 +58,13 @@ export function ReportTabs({ currentTab, lockedTabs = [], description, children 
           ))}
         </TabsList>
       </div>
-      {description ? <ReportSectionIntro text={description} /> : null}
+      {description ? (
+        <ReportSectionIntro
+          text={description}
+          dismissible
+          storageKey={`crm-tip-reports-${currentTab}`}
+        />
+      ) : null}
       <div className="mt-6">
         {children}
       </div>

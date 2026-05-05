@@ -165,6 +165,12 @@ export function TeamMemberTable({
         </div>
       </div>
 
+      {canUpdateRole ? (
+        <div className="rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+          Custom roles you create in the <span className="font-medium text-foreground">Roles & Permissions</span> tab will appear here automatically, so you can assign them to active team members safely.
+        </div>
+      ) : null}
+
       {filteredMembers.length === 0 ? (
         <EmptyState
           title="No matching team members"
@@ -221,6 +227,7 @@ export function TeamMemberTable({
                     <TableHead>Role</TableHead>
                     <TableHead>Designation</TableHead>
                     <TableHead>Department</TableHead>
+                    <TableHead>Reports To</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Last Login</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -242,6 +249,7 @@ export function TeamMemberTable({
                         <TableCell><RoleBadge name={member.role_name ?? "Unassigned"} /></TableCell>
                         <TableCell className="max-w-[160px] truncate">{member.job_title ?? "-"}</TableCell>
                         <TableCell className="max-w-[160px] truncate">{member.department ?? "-"}</TableCell>
+                        <TableCell className="max-w-[180px] truncate">{member.manager_name ?? member.manager_email ?? "-"}</TableCell>
                         <TableCell><UserStatusBadge active={member.is_active} /></TableCell>
                         <TableCell className="max-w-[180px] truncate">{member.last_login_at ? new Date(member.last_login_at).toLocaleString() : "Never recorded"}</TableCell>
                         <TableCell className="text-right">

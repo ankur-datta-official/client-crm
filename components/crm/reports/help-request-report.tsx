@@ -140,10 +140,10 @@ export function HelpRequestReport({ data }: { data: HelpRequestReportData }) {
           </ResponsiveContainer>
         </ReportChartCard>
 
-        <ReportChartCard title="Resolution Snapshot" description="Quick context for support pressure versus resolved work." height={260} badge="Summary">
-          <div className="grid h-full gap-3 p-2">
-            <ReportMetricCard title="Request Types" value={String(data.helpRequestsByType.length)} detail="Distinct blocker categories in this range" tone="slate" icon={AlertCircle} align="center" />
-            <ReportMetricCard title="Active Owners" value={String(data.helpRequestsByAssignedUser.length)} detail="Team members carrying support assignments" tone="sky" icon={UserCog} align="center" />
+        <ReportChartCard title="Resolution Snapshot" description="Quick context for support pressure versus resolved work." height={290} badge="Summary">
+          <div className="grid h-full gap-2 p-1.5">
+            <ReportMetricCard title="Request Types" value={String(data.helpRequestsByType.length)} detail="Distinct blocker categories in this range" tone="slate" icon={AlertCircle} align="center" compact />
+            <ReportMetricCard title="Active Owners" value={String(data.helpRequestsByAssignedUser.length)} detail="Team members carrying support assignments" tone="sky" icon={UserCog} align="center" compact />
           </div>
         </ReportChartCard>
       </div>

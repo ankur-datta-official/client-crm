@@ -29,6 +29,10 @@ type InviteUserFormProps = {
   disabled?: boolean;
 };
 
+type InviteDeliveryState =
+  | { ok: true; method: "invite" | "magic_link" }
+  | { ok: false; reason: string };
+
 const initialState = {
   email: "",
   roleId: "",
@@ -44,11 +48,13 @@ export function InviteUserForm({ roles, disabled = false }: InviteUserFormProps)
   const [form, setForm] = useState(initialState);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [delivery, setDelivery] = useState<InviteDeliveryState | null>(null);
 
   function reset() {
     setForm(initialState);
     setError(null);
     setInviteLink(null);
+    setDelivery(null);
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -63,11 +69,13 @@ export function InviteUserForm({ roles, disabled = false }: InviteUserFormProps)
     event.preventDefault();
     setError(null);
     setInviteLink(null);
+    setDelivery(null);
 
     startTransition(async () => {
       try {
         const result = await inviteTeamMember(form);
         setInviteLink(`${window.location.origin}/auth/accept-invite?token=${result.token}`);
+        setDelivery(result.emailDelivery);
       } catch (submissionError) {
         setError(submissionError instanceof Error ? submissionError.message : "Unable to create invitation.");
       }
@@ -104,11 +112,20 @@ export function InviteUserForm({ roles, disabled = false }: InviteUserFormProps)
                 Invitation created successfully.
               </div>
               <p className="mt-2 text-sm">
-                Email delivery is optional in this sprint, so you can copy and share the invite link manually.
+                {delivery?.ok
+                  ? "An authentication email has been sent to the invited team member. They can use that email to join the workspace safely."
+                  : "The invite was created, but email delivery could not be confirmed. Use the backup invite link below."}
               </p>
             </div>
+            {delivery?.ok ? (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+                {delivery.method === "invite"
+                  ? "New users will be guided through account setup from the email before entering your CRM."
+                  : "Existing users will receive a secure sign-in link and can accept the invitation directly from their email."}
+              </div>
+            ) : null}
             <div className="space-y-2">
-              <Label htmlFor="invite-link">Invite Link</Label>
+              <Label htmlFor="invite-link">Backup Invite Link</Label>
               <div className="flex gap-2">
                 <Input id="invite-link" readOnly value={inviteLink} className="font-mono text-xs" />
                 <Button type="button" variant="outline" onClick={copyInviteLink}>
@@ -196,7 +213,7 @@ export function InviteUserForm({ roles, disabled = false }: InviteUserFormProps)
                 Cancel
               </Button>
               <Button type="submit" disabled={isPending || !form.roleId}>
-                {isPending ? "Creating..." : "Create Invitation"}
+                {isPending ? "Sending..." : "Send Invitation"}
               </Button>
             </div>
           </form>

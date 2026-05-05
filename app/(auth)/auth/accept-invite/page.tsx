@@ -7,11 +7,11 @@ import { acceptTeamInvitation } from "@/lib/team/team-actions";
 import { getInvitationPreview } from "@/lib/team/team-queries";
 
 type AcceptInvitePageProps = {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; auth_error?: string; auth_error_description?: string }>;
 };
 
 export default async function AcceptInvitePage({ searchParams }: AcceptInvitePageProps) {
-  const { token } = await searchParams;
+  const { token, auth_error: authError, auth_error_description: authErrorDescription } = await searchParams;
   const inviteToken = token ?? null;
 
   if (!inviteToken) {
@@ -44,6 +44,7 @@ export default async function AcceptInvitePage({ searchParams }: AcceptInvitePag
 
   const profile = await getCurrentProfile();
   const belongsToDifferentOrg = profile?.organization_id && profile.organization_id !== invitation.organization_id;
+  const wrongInviteEmail = !belongsToDifferentOrg && Boolean(user.email) && user.email!.trim().toLowerCase() !== invitation.email.trim().toLowerCase();
   const acceptedToken: string = inviteToken;
 
   async function handleAccept() {
@@ -74,6 +75,17 @@ export default async function AcceptInvitePage({ searchParams }: AcceptInvitePag
         {belongsToDifferentOrg ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
             This account already belongs to another organization. Use a different account to accept this invitation.
+          </div>
+        ) : authError ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+            {authError === "access_denied"
+              ? "This email sign-in link is no longer valid. Ask your admin to resend the invitation, then open the newest email."
+              : "We could not complete email sign-in for this invitation."}
+            {authErrorDescription ? <p className="mt-2 text-xs opacity-80">{authErrorDescription}</p> : null}
+          </div>
+        ) : wrongInviteEmail ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+            You are signed in with a different email address. Please use {invitation.email} to accept this invitation.
           </div>
         ) : invitation.status !== "pending" ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">

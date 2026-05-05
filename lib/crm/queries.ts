@@ -1,5 +1,6 @@
 import { requireOrganization } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { getAssignableTeamMembers } from "@/lib/team/hierarchy";
 import { getFollowups } from "./followup-queries";
 import { getDocuments } from "./document-queries";
 import type {
@@ -359,7 +360,7 @@ export async function getCompanyFormOptions() {
     getIndustries(),
     getCompanyCategories(),
     getPipelineStages(),
-    getTeamMembers(),
+    getAssignableTeamMembers(),
   ]);
 
   return { industries, categories, stages, teamMembers };
@@ -374,7 +375,7 @@ export async function getInteractionFormOptions() {
   const [companies, contacts, teamMembers] = await Promise.all([
     getCompanies({}),
     getContacts({}),
-    getTeamMembers(),
+    getAssignableTeamMembers(),
   ]);
   return { companies, contacts, teamMembers };
 }
@@ -384,7 +385,7 @@ export async function getFollowupFormOptions() {
     getCompanies({}),
     getContacts({}),
     getInteractions({}),
-    getTeamMembers(),
+    getAssignableTeamMembers(),
   ]);
   return { companies, contacts, interactions, teamMembers };
 }

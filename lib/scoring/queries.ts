@@ -26,6 +26,54 @@ async function resolveLeaderboardAvatarUrls(entries: LeaderboardEntry[]) {
   );
 }
 
+function rewardDedupKey(reward: Reward) {
+  return reward.feature_key?.trim() || `${reward.reward_type}:${reward.name.trim().toLowerCase()}`;
+}
+
+function pickPreferredReward(current: Reward | undefined, next: Reward) {
+  if (!current) return next;
+  if (current.is_active !== next.is_active) return next.is_active ? next : current;
+  return next.updated_at > current.updated_at ? next : current;
+}
+
+function dedupeRewards(rewards: Reward[]) {
+  const dedupedRewards = new Map<string, Reward>();
+
+  for (const reward of rewards) {
+    const key = rewardDedupKey(reward);
+    dedupedRewards.set(key, pickPreferredReward(dedupedRewards.get(key), reward));
+  }
+
+  return Array.from(dedupedRewards.values()).sort((a, b) => {
+    if (a.cost_points !== b.cost_points) return a.cost_points - b.cost_points;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function challengeDedupKey(challenge: ChallengeTemplate) {
+  return `${challenge.cadence}:${challenge.target_metric}:${challenge.name.trim().toLowerCase()}`;
+}
+
+function pickPreferredChallenge(current: ChallengeTemplate | undefined, next: ChallengeTemplate) {
+  if (!current) return next;
+  if (current.is_active !== next.is_active) return next.is_active ? next : current;
+  return next.updated_at > current.updated_at ? next : current;
+}
+
+function dedupeChallenges(challenges: ChallengeTemplate[]) {
+  const dedupedChallenges = new Map<string, ChallengeTemplate>();
+
+  for (const challenge of challenges) {
+    const key = challengeDedupKey(challenge);
+    dedupedChallenges.set(key, pickPreferredChallenge(dedupedChallenges.get(key), challenge));
+  }
+
+  return Array.from(dedupedChallenges.values()).sort((a, b) => {
+    if (a.cadence !== b.cadence) return a.cadence.localeCompare(b.cadence);
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export async function getCurrentUserWalletSummary() {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_user_wallet_summary", {});
@@ -122,21 +170,7 @@ export async function getActiveRewards() {
     throw new Error(error.message);
   }
 
-  const dedupedRewards = new Map<string, Reward>();
-
-  for (const reward of (data ?? []) as Reward[]) {
-    const key = reward.feature_key?.trim() || `${reward.reward_type}:${reward.name.trim().toLowerCase()}`;
-    const existing = dedupedRewards.get(key);
-
-    if (!existing || reward.updated_at > existing.updated_at) {
-      dedupedRewards.set(key, reward);
-    }
-  }
-
-  return Array.from(dedupedRewards.values()).sort((a, b) => {
-    if (a.cost_points !== b.cost_points) return a.cost_points - b.cost_points;
-    return a.name.localeCompare(b.name);
-  });
+  return dedupeRewards((data ?? []) as Reward[]);
 }
 
 export async function getRewardRedemptionHistory(limit = 50) {
@@ -192,11 +226,11 @@ export async function getActiveChallenges() {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as ChallengeTemplate[]).filter((challenge) => {
+  return dedupeChallenges(((data ?? []) as ChallengeTemplate[]).filter((challenge) => {
     const startsAtOkay = !challenge.starts_at || challenge.starts_at <= now;
     const endsAtOkay = !challenge.ends_at || challenge.ends_at >= now;
     return startsAtOkay && endsAtOkay;
-  });
+  }));
 }
 
 export async function getUserChallengeProgress(userId?: string, limit = 50) {
@@ -301,8 +335,8 @@ export async function getScoringAdminDashboard() {
   return {
     rules: (rulesResult.data ?? []) as LeadScoreRule[],
     sourceRules: (sourceRulesResult.data ?? []) as LeadSourceScoreRule[],
-    rewards: (rewardsResult.data ?? []) as Reward[],
-    challenges: (challengesResult.data ?? []) as ChallengeTemplate[],
+    rewards: dedupeRewards((rewardsResult.data ?? []) as Reward[]),
+    challenges: dedupeChallenges((challengesResult.data ?? []) as ChallengeTemplate[]),
     topEarnActions,
     leaderboard: await resolveLeaderboardAvatarUrls((leaderboardResult.data ?? []) as LeaderboardEntry[]),
   };

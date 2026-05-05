@@ -22,7 +22,8 @@ export function UserAvatar({
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const initials = getInitials(fullName, email);
   const altText = fullName?.trim() || email || "User avatar";
-  const shouldShowImage = Boolean(imageUrl) && failedImageUrl !== imageUrl;
+  const shouldShowImage = !!imageUrl && failedImageUrl !== imageUrl;
+  const avatarImageUrl = shouldShowImage ? imageUrl : null;
 
   return (
     <div
@@ -33,7 +34,7 @@ export function UserAvatar({
     >
       {shouldShowImage ? (
         <Image
-          src={imageUrl}
+          src={avatarImageUrl as string}
           alt={altText}
           fill
           unoptimized

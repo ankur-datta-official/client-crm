@@ -8,6 +8,7 @@ import { followupSchema } from "@/lib/crm/schemas";
 import { createNotification } from "@/lib/notifications/notifications";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
 import { createClient } from "@/lib/supabase/server";
+import { ensureCanAssignUser, ensureCanWorkWithCompany, notifyDirectManagerOfActivity } from "@/lib/team/hierarchy";
 import type { CrmActionState } from "./actions";
 
 // Reuse activity log helper
@@ -64,6 +65,15 @@ export async function createFollowup(formData: FormData): Promise<CrmActionState
     return getValidationFailure(validated.error);
   }
 
+  await ensureCanWorkWithCompany(validated.data.company_id);
+  if (validated.data.assigned_user_id) {
+    try {
+      await ensureCanAssignUser(validated.data.assigned_user_id);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "You cannot assign this follow-up to that user." };
+    }
+  }
+
   const { data, error } = await supabase
     .from("followups")
     .insert({
@@ -81,6 +91,12 @@ export async function createFollowup(formData: FormData): Promise<CrmActionState
   }
 
   await insertActivityLog("created", "followup", data.id, { title: data.title });
+  await notifyDirectManagerOfActivity({
+    actorUserId: user.id,
+    title: "Junior created a follow-up",
+    message: `"${data.title}" was created by one of your direct team members.`,
+    link: `/followups/${data.id}`,
+  });
 
   if (data.assigned_user_id && data.assigned_user_id !== user.id) {
     await createNotification({
@@ -110,6 +126,15 @@ export async function updateFollowup(followupId: string, formData: FormData): Pr
     return getValidationFailure(validated.error);
   }
 
+  await ensureCanWorkWithCompany(validated.data.company_id);
+  if (validated.data.assigned_user_id) {
+    try {
+      await ensureCanAssignUser(validated.data.assigned_user_id);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "You cannot assign this follow-up to that user." };
+    }
+  }
+
   const { error } = await supabase
     .from("followups")
     .update({
@@ -125,6 +150,12 @@ export async function updateFollowup(followupId: string, formData: FormData): Pr
   }
 
   await insertActivityLog("updated", "followup", followupId, { title: validated.data.title });
+  await notifyDirectManagerOfActivity({
+    actorUserId: user.id,
+    title: "Junior updated a follow-up",
+    message: `"${validated.data.title}" was updated by one of your direct team members.`,
+    link: `/followups/${followupId}`,
+  });
 
   revalidatePath("/followups");
   revalidatePath(`/followups/${followupId}`);
@@ -137,6 +168,7 @@ export async function completeFollowup(followupId: string): Promise<CrmActionSta
   const user = await requireAuth();
   const { organization, followup } = await validateFollowupOwnership(followupId);
   const supabase = await createClient();
+  await ensureCanWorkWithCompany(followup.company_id);
 
   const { error } = await supabase
     .from("followups")
@@ -155,6 +187,12 @@ export async function completeFollowup(followupId: string): Promise<CrmActionSta
   }
 
   await insertActivityLog("completed", "followup", followupId);
+  await notifyDirectManagerOfActivity({
+    actorUserId: user.id,
+    title: "Junior completed a follow-up",
+    message: `"${followup.title ?? "Untitled follow-up"}" was marked complete by one of your direct team members.`,
+    link: `/followups/${followupId}`,
+  });
 
   await applyScoringEvent({
     organizationId: organization.id,
@@ -193,6 +231,7 @@ export async function rescheduleFollowup(followupId: string, newDate: string): P
   const user = await requireAuth();
   const { organization, followup } = await validateFollowupOwnership(followupId);
   const supabase = await createClient();
+  await ensureCanWorkWithCompany(followup.company_id);
 
   // Get current scheduled_at for rescheduled_from
   const { data: currentFollowup } = await supabase
@@ -218,6 +257,12 @@ export async function rescheduleFollowup(followupId: string, newDate: string): P
   }
 
   await insertActivityLog("rescheduled", "followup", followupId, { new_date: newDate });
+  await notifyDirectManagerOfActivity({
+    actorUserId: user.id,
+    title: "Junior rescheduled a follow-up",
+    message: `"${followup.title ?? "Untitled follow-up"}" was rescheduled by one of your direct team members.`,
+    link: `/followups/${followupId}`,
+  });
 
   revalidatePath("/followups");
   revalidatePath(`/companies/${followup.company_id}`);

@@ -57,6 +57,10 @@ export function TeamMemberCard({
           <span>{member.department ?? "-"}</span>
         </div>
         <div className="flex items-center justify-between gap-3">
+          <span className="text-muted-foreground">Reports To</span>
+          <span>{member.manager_name ?? member.manager_email ?? "-"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Last Login</span>
           <span>{member.last_login_at ? new Date(member.last_login_at).toLocaleString() : "Never recorded"}</span>
         </div>

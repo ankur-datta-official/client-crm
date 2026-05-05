@@ -2,75 +2,204 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, X } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { sidebarItems } from "@/config/navigation";
 import { Button } from "@/components/ui/button";
+import type { Profile } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 
 type AppSidebarProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
   organizationName?: string;
+  profile?: Profile | null;
 };
 
-export function AppSidebar({ open = false, onOpenChange, organizationName }: AppSidebarProps) {
+const navSections = ["Overview", "Workspace", "Performance", "Admin"] as const;
+
+const navIconStyles: Record<string, string> = {
+  "/dashboard": "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-sky-700 ring-1 ring-sky-200/80",
+  "/companies": "bg-[linear-gradient(135deg,#ecfeff,#cffafe)] text-cyan-700 ring-1 ring-cyan-200/80",
+  "/contacts": "bg-[linear-gradient(135deg,#f0fdfa,#ccfbf1)] text-teal-700 ring-1 ring-teal-200/80",
+  "/meetings": "bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] text-slate-700 ring-1 ring-slate-200/80",
+  "/followups": "bg-[linear-gradient(135deg,#ecfdf5,#d1fae5)] text-emerald-700 ring-1 ring-emerald-200/80",
+  "/pipeline": "bg-[linear-gradient(135deg,#eff6ff,#e0f2fe)] text-sky-700 ring-1 ring-sky-200/80",
+  "/documents": "bg-[linear-gradient(135deg,#eef2ff,#e0e7ff)] text-indigo-700 ring-1 ring-indigo-200/80",
+  "/need-help": "bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] text-slate-600 ring-1 ring-slate-200/80",
+  "/leaderboard": "bg-[linear-gradient(135deg,#f0fdf4,#dcfce7)] text-emerald-700 ring-1 ring-emerald-200/80",
+  "/rewards": "bg-[linear-gradient(135deg,#ecfeff,#cffafe)] text-cyan-700 ring-1 ring-cyan-200/80",
+  "/reports": "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-blue-700 ring-1 ring-blue-200/80",
+  "/team": "bg-[linear-gradient(135deg,#f0fdfa,#ccfbf1)] text-teal-700 ring-1 ring-teal-200/80",
+  "/subscription": "bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] text-slate-700 ring-1 ring-slate-200/80",
+  "/settings": "bg-[linear-gradient(135deg,#f1f5f9,#e2e8f0)] text-slate-700 ring-1 ring-slate-200/80",
+};
+
+export function AppSidebar({
+  open = false,
+  onOpenChange,
+  collapsed = false,
+  onCollapsedChange,
+  organizationName,
+  profile,
+}: AppSidebarProps) {
   const pathname = usePathname();
 
   return (
     <>
       <div
         className={cn(
-          "fixed inset-0 z-40 bg-slate-950/35 md:hidden",
+          "fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[1px] md:hidden",
           open ? "block" : "hidden",
         )}
         onClick={() => onOpenChange?.(false)}
       />
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-hidden border-r border-slate-200 bg-white/95 backdrop-blur transition-transform md:sticky md:top-0 md:z-auto md:h-screen md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden border-r border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.98)_18%,rgba(241,245,249,0.98)_100%)] shadow-[0_18px_50px_rgba(15,23,42,0.08)] transition-[width,transform] duration-300 dark:border-slate-800/80 dark:bg-[linear-gradient(180deg,rgba(2,6,23,0.98)_0%,rgba(15,23,42,0.985)_18%,rgba(15,23,42,0.98)_100%)] dark:shadow-[0_18px_50px_rgba(2,6,23,0.45)] md:sticky md:top-0 md:z-auto md:h-screen md:translate-x-0",
+          collapsed ? "w-[18rem] md:w-[5.75rem]" : "w-[18rem]",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex h-16 items-center justify-between border-b border-slate-200 px-4">
-          <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-              <Building2 className="size-5" />
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold text-slate-900">Client CRM</span>
-              <span className="block truncate text-xs text-slate-500">Sales Workspace</span>
-            </span>
-          </Link>
-          <Button className="md:hidden" variant="ghost" size="icon" onClick={() => onOpenChange?.(false)} aria-label="Close navigation">
-            <X />
-            <span className="sr-only">Close navigation</span>
-          </Button>
-        </div>
-        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {sidebarItems.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => onOpenChange?.(false)}
-                className={cn(
-                  "flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-slate-600 transition-all duration-200 hover:bg-slate-100 hover:text-slate-900",
-                  active && "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/10",
-                )}
+        <div className={cn("relative border-b border-slate-200/80 pb-4 pt-5 dark:border-slate-800/80", collapsed ? "px-3" : "px-4")}>
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(226,232,240,0.55),rgba(248,250,252,0))] dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.78),rgba(15,23,42,0))]" />
+          <div className={cn("relative flex items-start gap-3", collapsed ? "flex-col items-center justify-center" : "justify-between")}>
+            <Link href="/dashboard" className={cn("relative flex min-w-0 items-center", collapsed ? "justify-center" : "gap-3")}>
+              <span className="relative flex size-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-[linear-gradient(145deg,#0f172a,#243447)] text-white shadow-[0_14px_26px_rgba(15,23,42,0.18)] dark:border-slate-700/70 dark:shadow-[0_14px_26px_rgba(2,6,23,0.35)]">
+                <Building2 className="relative z-10 size-5" />
+                <span className="absolute -right-1 -top-1 size-3 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
+              </span>
+              {!collapsed ? (
+                <span className="min-w-0">
+                  <span className="block truncate text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">Client CRM</span>
+                  <span className="mt-0.5 block truncate text-xs font-medium text-slate-500 dark:text-slate-400">Sales Workspace</span>
+                </span>
+              ) : null}
+            </Link>
+            <div className={cn("items-center gap-2", collapsed ? "hidden" : "flex")}>
+              <Button
+                className="hidden rounded-xl border border-slate-300 bg-white text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/70 hover:border-emerald-200 hover:bg-emerald-50/60 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-800 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 md:inline-flex"
+                variant="ghost"
+                size="icon"
+                onClick={() => onCollapsedChange?.(!collapsed)}
+                aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
               >
-                <Icon className="size-4 shrink-0" />
-                <span className="truncate">{item.title}</span>
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="shrink-0 border-t border-slate-200 p-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 transition-all duration-200 hover:border-slate-300 hover:bg-slate-50">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Workspace</p>
-            <p className="mt-1 truncate text-sm font-medium text-slate-900">{organizationName ?? "Sales Workspace"}</p>
+                {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+              </Button>
+              <Button className="md:hidden" variant="ghost" size="icon" onClick={() => onOpenChange?.(false)} aria-label="Close navigation">
+                <X />
+                <span className="sr-only">Close navigation</span>
+              </Button>
+            </div>
+            {collapsed ? (
+              <Button
+                className="mt-3 hidden size-8 rounded-full border border-slate-300 bg-white text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.1)] ring-1 ring-slate-200/70 hover:border-emerald-200 hover:bg-emerald-50/70 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-800 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 md:inline-flex"
+                variant="ghost"
+                size="icon"
+                onClick={() => onCollapsedChange?.(!collapsed)}
+                aria-label="Expand navigation"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            ) : null}
           </div>
+        </div>
+        <nav className={cn("min-h-0 flex-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
+          <div className="space-y-6 pb-4">
+            {navSections.map((section) => {
+              const items = sidebarItems.filter((item) => item.section === section);
+              if (items.length === 0) {
+                return null;
+              }
+
+              return (
+                <div key={section} className="space-y-2">
+                  {collapsed ? (
+                    <div className="flex items-center justify-center py-1">
+                      <div className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                    </div>
+                  ) : (
+                    <div className="px-2">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900/85 dark:text-slate-400">
+                        <span className="size-1.5 rounded-full bg-emerald-400" />
+                        {section}
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    {items.map((item) => {
+                      const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                      const Icon = item.icon;
+                      const iconStyle = navIconStyles[item.href] ?? navIconStyles["/settings"];
+
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          title={item.title}
+                          onClick={() => onOpenChange?.(false)}
+                          className={cn(
+                            "group relative flex min-h-[2.9rem] items-center overflow-hidden rounded-2xl py-2.5 text-sm font-medium text-slate-600 transition-all duration-200 dark:text-slate-300",
+                            "hover:bg-white/90 hover:text-slate-900 hover:shadow-[0_8px_20px_rgba(15,23,42,0.05)] dark:hover:bg-slate-900/90 dark:hover:text-slate-100 dark:hover:shadow-[0_8px_20px_rgba(2,6,23,0.4)]",
+                            active && "bg-white text-slate-900 shadow-[0_12px_28px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/90 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-800",
+                            collapsed ? "justify-center px-2" : "gap-3 px-3",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "absolute inset-y-2 left-1 w-1 rounded-full bg-transparent transition-all duration-200",
+                              active && "bg-[linear-gradient(180deg,#10b981,#14b8a6)] shadow-[0_0_14px_rgba(16,185,129,0.45)]",
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "flex size-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
+                              iconStyle,
+                              active && "scale-105 shadow-[0_10px_22px_rgba(15,23,42,0.08)] saturate-150",
+                            )}
+                          >
+                            <Icon className="size-4" />
+                          </span>
+                          {!collapsed ? (
+                            <div className="min-w-0 flex-1">
+                              <span className="block truncate">{item.title}</span>
+                            </div>
+                          ) : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </nav>
+        <div className={cn("shrink-0 border-t border-slate-200/80 bg-white/80 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-950/75", collapsed ? "px-2 py-3" : "px-3 py-3")}>
+          {collapsed ? (
+            <div className="flex justify-center">
+              <div className="relative flex size-11 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#0f172a,#334155)] text-sm font-semibold text-white shadow-sm">
+                {(profile?.full_name?.trim()?.[0] ?? profile?.email?.[0] ?? "U").toUpperCase()}
+                <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-[0_8px_24px_rgba(2,6,23,0.35)]">
+              <div className="relative flex size-10 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#0f172a,#334155)] text-sm font-semibold text-white shadow-sm">
+                {(profile?.full_name?.trim()?.[0] ?? profile?.email?.[0] ?? "U").toUpperCase()}
+                <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{organizationName ?? "Sales Workspace"}</p>
+                <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                  {profile?.full_name ?? profile?.email ?? "Workspace user"}
+                </p>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                On
+              </span>
+            </div>
+          )}
         </div>
       </aside>
     </>

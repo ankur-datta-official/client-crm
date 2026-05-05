@@ -26,12 +26,38 @@
     --radius: 0.875rem;
   }
 
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 20% 96%;
+    --card: 222 45% 11%;
+    --card-foreground: 210 20% 96%;
+    --popover: 222 45% 10%;
+    --popover-foreground: 210 20% 96%;
+    --primary: 168 76% 45%;
+    --primary-foreground: 222 47% 8%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 20% 96%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 20% 96%;
+    --destructive: 0 63% 46%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 217 28% 22%;
+    --input: 217 28% 22%;
+    --ring: 168 76% 45%;
+  }
+
   * {
     @apply border-border;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  .dark body {
+    background-image: radial-gradient(circle at top, rgba(13, 148, 136, 0.12), transparent 28%), linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 1));
   }
 
   html,
@@ -70,15 +96,15 @@
   }
 
   .crm-table-head {
-    @apply border-b bg-slate-50/90 text-xs uppercase tracking-wide text-slate-500;
+    @apply border-b bg-slate-50/90 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/80 dark:text-slate-400;
   }
 
   .crm-table-cell {
-    @apply px-4 py-3.5 align-middle text-slate-700;
+    @apply px-4 py-3.5 align-middle text-slate-700 dark:text-slate-300;
   }
 
   .crm-filter-summary {
-    @apply inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100;
+    @apply inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800;
   }
 }
 
@@ -95,5 +121,13 @@
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: #cbd5e1;
+  }
+
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #334155;
+  }
+
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #475569;
   }
 }

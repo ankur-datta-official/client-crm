@@ -51,11 +51,11 @@ export function DashboardLeadTargetChart({ leadTrend }: { leadTrend: DashboardLe
       transition={{ duration: 0.5 }}
     >
       <ReportChartCard
-        title="Lead Trend"
-        description="Target vs Achievement across the period."
+        title="Productivity Trend"
+        description="Target vs achievement across your recent workdays."
         height={240}
         headerRight={
-          <Button asChild variant="ghost" size="sm" className="rounded-full text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
+          <Button asChild variant="ghost" size="sm" className="rounded-full text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-200">
             <Link href="/reports">
               View report
               <ArrowRight className="ml-1 size-3" />
@@ -68,19 +68,21 @@ export function DashboardLeadTargetChart({ leadTrend }: { leadTrend: DashboardLe
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={leadTrend} margin={{ top: 12, right: 12, left: -16, bottom: 0 }}>
-            <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
+            <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="label"
               axisLine={false}
               tickLine={false}
               minTickGap={24}
-              tick={{ fill: "#64748b", fontSize: 10, fontWeight: 500 }}
+              tick={{ fill: "currentColor", fontSize: 10, fontWeight: 500 }}
+              className="text-slate-500 dark:text-slate-400"
             />
             <YAxis
               axisLine={false}
               tickLine={false}
               width={35}
-              tick={{ fill: "#64748b", fontSize: 10, fontWeight: 500 }}
+              tick={{ fill: "currentColor", fontSize: 10, fontWeight: 500 }}
+              className="text-slate-500 dark:text-slate-400"
             />
             <Tooltip content={<ReportChartTooltip />} />
             <Line
@@ -141,10 +143,10 @@ function DonutLegend({ data }: { data: DashboardStageChartPoint[] }) {
                 className="size-2 shrink-0 rounded-full"
                 style={{ backgroundColor: DONUT_COLORS[index % DONUT_COLORS.length] }}
               />
-              <p className="truncate text-[12px] font-medium text-slate-700">{item.name}</p>
+              <p className="truncate text-[12px] font-medium text-slate-700 dark:text-slate-200">{item.name}</p>
             </div>
-            <p className="text-[12px] font-medium text-slate-500 whitespace-nowrap">
-              {item.value} <span className="ml-1 text-slate-400 font-normal">({percentage}%)</span>
+            <p className="whitespace-nowrap text-[12px] font-medium text-slate-500 dark:text-slate-400">
+              {item.value} <span className="ml-1 font-normal text-slate-400 dark:text-slate-500">({percentage}%)</span>
             </p>
           </motion.div>
         );
@@ -156,16 +158,16 @@ function DonutLegend({ data }: { data: DashboardStageChartPoint[] }) {
 // Center label for donut chart
 function DonutCenterLabel({ total }: { total: number }) {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+    <div className="pointer-events-none absolute inset-0 z-0 flex flex-col items-center justify-center">
       <motion.span 
         initial={{ scale: 0.5, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className="text-2xl font-bold text-slate-900 tracking-tight"
+        className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100"
       >
         {total}
       </motion.span>
-      <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">deals</span>
+      <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">deals</span>
     </div>
   );
 }
@@ -184,7 +186,7 @@ export function DashboardDealsStageChart({ stageDistribution }: { stageDistribut
         description="Current pipeline distribution."
         height={240}
         headerRight={
-          <Button asChild variant="ghost" size="sm" className="rounded-full text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
+          <Button asChild variant="ghost" size="sm" className="rounded-full text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-200">
             <Link href="/pipeline">
               View all
               <ArrowRight className="ml-1 size-3" />
@@ -220,21 +222,22 @@ export function DashboardDealsStageChart({ stageDistribution }: { stageDistribut
                   ))}
                 </Pie>
                 <Tooltip
+                  wrapperStyle={{ zIndex: 40 }}
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const data = payload[0]?.payload as DashboardStageChartPoint;
                     const index = stageDistribution.findIndex(s => s.name === data.name);
                     const percentage = totalDeals > 0 ? Math.round((data.value / totalDeals) * 100) : 0;
                     return (
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-xl ring-1 ring-black/5">
+                      <div className="relative z-50 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-xl ring-1 ring-black/5 dark:border-slate-800 dark:bg-slate-950 dark:ring-white/5">
                         <div className="flex items-center gap-2">
                           <span
                             className="size-2.5 rounded-full"
                             style={{ backgroundColor: DONUT_COLORS[index % DONUT_COLORS.length] }}
                           />
-                          <span className="text-sm font-semibold text-slate-700">{data.name}</span>
+                          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{data.name}</span>
                         </div>
-                        <p className="mt-1 text-xs font-medium text-slate-500">
+                        <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
                           {data.value} deals ({percentage}%)
                         </p>
                       </div>
@@ -254,4 +257,3 @@ export function DashboardDealsStageChart({ stageDistribution }: { stageDistribut
     </motion.div>
   );
 }
-

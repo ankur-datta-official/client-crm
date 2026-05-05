@@ -85,13 +85,13 @@ export function DashboardDateRangePicker() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="rounded-full bg-white px-4 shadow-sm border-slate-200 hover:bg-slate-50">
-          <CalendarIcon className="mr-2 size-4 text-slate-500" />
-          <span className="text-sm font-medium text-slate-700">{displayRange}</span>
-          <ChevronDown className="ml-2 size-4 text-slate-400" />
+        <Button variant="outline" className="rounded-full border-slate-200 bg-white px-4 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900">
+          <CalendarIcon className="mr-2 size-4 text-slate-500 dark:text-slate-400" />
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{displayRange}</span>
+          <ChevronDown className="ml-2 size-4 text-slate-400 dark:text-slate-500" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[280px] p-4 rounded-2xl border-slate-200 shadow-lg">
+      <DropdownMenuContent align="end" className="w-[280px] rounded-2xl border-slate-200 p-4 shadow-lg dark:border-slate-800 dark:bg-slate-950">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2">
             <Button variant="ghost" size="sm" className="justify-start text-xs rounded-lg" onClick={() => handleQuickRange("today")}>Today</Button>
@@ -100,11 +100,11 @@ export function DashboardDateRangePicker() {
             <Button variant="ghost" size="sm" className="justify-start text-xs rounded-lg" onClick={() => handleQuickRange("last_30_days")}>Last 30 Days</Button>
           </div>
           
-          <div className="h-px bg-slate-100" />
+          <div className="h-px bg-slate-100 dark:bg-slate-800" />
           
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wider text-slate-500">From Date</Label>
+              <Label className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">From Date</Label>
               <Input 
                 type="date" 
                 value={tempFrom} 
@@ -113,7 +113,7 @@ export function DashboardDateRangePicker() {
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wider text-slate-500">To Date</Label>
+              <Label className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">To Date</Label>
               <Input 
                 type="date" 
                 value={tempTo} 

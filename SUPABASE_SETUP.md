@@ -50,6 +50,10 @@ Run these files in this exact order for a fresh staging or production setup:
 9. `supabase/migrations/009_team_role_permission_management.sql`
 10. `supabase/migrations/010_subscription_plan_limits.sql`
 11. `supabase/migrations/012_notifications_search_polish.sql`
+12. `supabase/migrations/013_lead_scoring_wallet_system.sql`
+13. `supabase/migrations/014_reward_marketplace_packages.sql`
+14. `supabase/migrations/015_team_invitation_email_guard.sql`
+15. `supabase/migrations/016_team_hierarchy_targets.sql`
 
 Legacy note:
 
@@ -69,6 +73,7 @@ http://localhost:3000
 Add redirect URLs:
 
 ```bash
+http://localhost:3000/auth/callback
 http://localhost:3000/onboarding/workspace
 http://localhost:3000/auth/accept-invite
 ```
@@ -290,8 +295,9 @@ Troubleshooting notes:
 
 Invite notes:
 
-- Invite links work without an email provider.
-- The acceptance route is `/auth/accept-invite?token=...`.
+- Team invites now try to send a Supabase auth email automatically.
+- Add `/auth/callback` to Supabase redirect URLs so email links can sign the user in before landing on the invite page.
+- The manual backup acceptance route remains `/auth/accept-invite?token=...`.
 
 ## 8. Sprint 11 manual test
 

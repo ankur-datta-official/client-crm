@@ -28,10 +28,10 @@ export function StatusPill({
   children: React.ReactNode;
 }) {
   const classes = {
-    rose: "bg-rose-50 text-rose-700",
-    amber: "bg-amber-50 text-amber-700",
-    blue: "bg-sky-50 text-sky-700",
-    emerald: "bg-emerald-50 text-emerald-700",
+    rose: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
+    amber: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+    blue: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
+    emerald: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
   };
 
   return <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", classes[tone])}>{children}</span>;
@@ -41,15 +41,15 @@ export function ActivityRow({ item }: { item: any }) {
   return (
     <Link
       href={item.href}
-      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70"
+      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/88 dark:hover:border-primary/30 dark:hover:bg-slate-900"
     >
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
-        <p className="mt-1 truncate text-xs text-slate-500">{item.subtitle}</p>
+        <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{item.title}</p>
+        <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{item.subtitle}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <StatusPill tone={item.tone}>{item.badge}</StatusPill>
-        <ChevronRight className="size-4 text-slate-400" />
+        <ChevronRight className="size-4 text-slate-400 dark:text-slate-500" />
       </div>
     </Link>
   );
@@ -116,12 +116,12 @@ export function CompactEmptyState({
   description: string;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center">
-      <div className="mx-auto flex size-10 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm">
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center dark:border-slate-800 dark:bg-slate-900/75">
+      <div className="mx-auto flex size-10 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm dark:bg-slate-950 dark:text-slate-400">
         <TrendingUp className="size-4" />
       </div>
-      <p className="mt-3 text-sm font-medium text-slate-900">{title}</p>
-      <p className="mt-1.5 text-sm leading-6 text-slate-500">{description}</p>
+      <p className="mt-3 text-sm font-medium text-slate-900 dark:text-slate-100">{title}</p>
+      <p className="mt-1.5 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
     </div>
   );
 }
@@ -137,14 +137,14 @@ const ICON_MAP = {
 
 export function AlertCard({ alert, index = 0 }: { alert: any; index?: number }) {
   const toneClasses = {
-    rose: "border-rose-100 bg-rose-50/50 text-rose-950 hover:bg-rose-50 hover:border-rose-200",
-    amber: "border-amber-100 bg-amber-50/50 text-amber-950 hover:bg-amber-50 hover:border-amber-200",
-    teal: "border-sky-100 bg-sky-50/50 text-sky-950 hover:bg-sky-50 hover:border-sky-200",
+    rose: "border-rose-100 bg-rose-50/50 text-rose-950 hover:bg-rose-50 hover:border-rose-200 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-100 dark:hover:border-rose-500/30 dark:hover:bg-rose-500/15",
+    amber: "border-amber-100 bg-amber-50/50 text-amber-950 hover:bg-amber-50 hover:border-amber-200 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100 dark:hover:border-amber-500/30 dark:hover:bg-amber-500/15",
+    teal: "border-sky-100 bg-sky-50/50 text-sky-950 hover:bg-sky-50 hover:border-sky-200 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-100 dark:hover:border-sky-500/30 dark:hover:bg-sky-500/15",
   };
   const iconToneClasses = {
-    rose: "bg-rose-500 text-white shadow-sm shadow-rose-200",
-    amber: "bg-amber-500 text-white shadow-sm shadow-amber-200",
-    teal: "bg-sky-500 text-white shadow-sm shadow-sky-200",
+    rose: "bg-rose-500 text-white shadow-sm shadow-rose-200 dark:shadow-rose-950/70",
+    amber: "bg-amber-500 text-white shadow-sm shadow-amber-200 dark:shadow-amber-950/70",
+    teal: "bg-sky-500 text-white shadow-sm shadow-sky-200 dark:shadow-sky-950/70",
   };
   
   // Use icon mapping to avoid passing function from server
@@ -199,15 +199,15 @@ export function TaskRow({ task }: { task: any }) {
   return (
     <Link
       href={task.href}
-      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70"
+      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/88 dark:hover:border-primary/30 dark:hover:bg-slate-900"
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className={`flex size-9 shrink-0 items-center justify-center rounded-full ${toneClasses[task.tone as keyof typeof toneClasses]}`}>
           <Icon className="size-4" />
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-900">{task.title}</p>
-          <p className="mt-1 truncate text-xs text-slate-500">{task.subtitle}</p>
+          <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{task.title}</p>
+          <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{task.subtitle}</p>
         </div>
       </div>
       <StatusPill tone={task.tone}>{task.badge}</StatusPill>
@@ -229,14 +229,14 @@ export function ProgressMetric({
   const progress = Math.min(100, Math.round((value / Math.max(target, 1)) * 100));
 
   return (
-    <div className="space-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5">
+    <div className="space-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 dark:border-slate-800 dark:bg-slate-950/88">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-900">{label}</p>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           {value}/{target}
         </p>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
         <div className={`h-full rounded-full ${colorClassName}`} style={{ width: `${progress}%` }} />
       </div>
     </div>

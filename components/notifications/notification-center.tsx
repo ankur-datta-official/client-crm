@@ -84,34 +84,34 @@ export function NotificationCenter({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="relative flex size-10 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50 outline-none" aria-label="Open notifications">
-          <Bell className="size-5 text-slate-600" />
+        <button className="relative flex size-10 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm outline-none transition-all hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/90 dark:hover:border-slate-700 dark:hover:bg-slate-900" aria-label="Open notifications">
+          <Bell className="size-5 text-slate-600 dark:text-slate-300" />
           {unreadCount > 0 ? (
-            <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-black text-white shadow-sm ring-2 ring-white">
+            <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-black text-white shadow-sm ring-2 ring-white dark:ring-slate-950">
               {unreadCount}
             </span>
           ) : null}
           <span className="sr-only">Notifications</span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={10} className="w-[min(22rem,calc(100vw-1rem))] p-0 rounded-2xl shadow-xl border-slate-200">
+      <DropdownMenuContent align="end" sideOffset={10} className="w-[min(22rem,calc(100vw-1rem))] rounded-2xl border-slate-200 p-0 shadow-xl dark:border-slate-800 dark:bg-slate-950">
         <div className="flex items-center justify-between px-3 py-3">
           <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
           <Button type="button" variant="ghost" size="sm" className="h-auto px-2 text-xs" disabled={isPending || unreadCount === 0} onClick={handleMarkAllAsRead}>
             Mark all as read
           </Button>
         </div>
-        <DropdownMenuSeparator />
+        <DropdownMenuSeparator className="dark:bg-slate-800" />
         {!hasNotifications ? (
           <div className="px-3 py-6 text-sm text-muted-foreground">No notifications yet.</div>
         ) : (
           <div className="max-h-[26rem] overflow-y-auto p-2">
             {notifications.map((notification) => (
-              <DropdownMenuItem key={notification.id} asChild className={cn("block cursor-pointer rounded-xl px-3 py-3", !notification.is_read && "bg-primary/5")}>
+              <DropdownMenuItem key={notification.id} asChild className={cn("block cursor-pointer rounded-xl px-3 py-3", !notification.is_read && "bg-primary/5 dark:bg-primary/10")}>
                 <Link href={notification.link ?? "#"} onClick={() => handleNotificationClick(notification)}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{notification.title}</p>
+                      <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{notification.title}</p>
                       <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{notification.message}</p>
                     </div>
                     {!notification.is_read ? (

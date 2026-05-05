@@ -37,7 +37,7 @@ export function GlobalSearchResults({
     : 0;
 
   return (
-    <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-background shadow-soft">
+    <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-background shadow-soft dark:border-slate-800 dark:bg-slate-950">
       {isLoading ? (
         <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -89,7 +89,7 @@ export function GlobalSearchResults({
               );
             })}
           </div>
-          <div className="border-t px-4 py-3">
+          <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
             <Link href={`/search?q=${encodeURIComponent(query.trim())}`} onClick={onResultClick} className="text-sm font-medium text-primary hover:underline">
               View all results
             </Link>

@@ -11,11 +11,11 @@ export function FormRequiredNote({
   message: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-soft">
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-soft dark:border-slate-800 dark:bg-slate-950/88 dark:text-slate-300">
       <div className="flex items-start gap-3">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">Required fields are marked with <span className="text-rose-600">*</span>.</p>
+          <p className="font-medium text-slate-900 dark:text-slate-100">Required fields are marked with <span className="text-rose-600">*</span>.</p>
           <p>{message}</p>
         </div>
       </div>
@@ -29,7 +29,7 @@ export function FormContextHint({
   message: string;
 }) {
   return (
-    <div className="rounded-2xl border border-teal-200 bg-teal-50/80 px-4 py-3 text-sm text-teal-900">
+    <div className="rounded-2xl border border-teal-200 bg-teal-50/80 px-4 py-3 text-sm text-teal-900 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-teal-200">
       <div className="flex items-start gap-3">
         <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
         <p>{message}</p>
@@ -49,6 +49,7 @@ export function FormActionBar({
     <div
       className={cn(
         "rounded-2xl border border-slate-200 bg-white p-3 shadow-soft",
+        "dark:border-slate-800 dark:bg-slate-950/88",
         className,
       )}
     >
@@ -80,7 +81,7 @@ export function FormSection({
           <CardDescription>{description}</CardDescription>
         </div>
         {optional ? (
-          <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+          <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
             Optional
           </span>
         ) : null}

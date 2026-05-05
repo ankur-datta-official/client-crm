@@ -1,5 +1,23 @@
 import { z } from "zod";
 
+function normalizeAppUrl(rawUrl: string) {
+  const value = rawUrl.trim();
+
+  if (!value) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+
+  if (value.startsWith("localhost") || value.startsWith("127.0.0.1")) {
+    return `http://${value}`;
+  }
+
+  return `https://${value}`;
+}
+
 const clientEnvSchema = z.object({
   supabaseUrl: z.string().url("NEXT_PUBLIC_SUPABASE_URL must be a valid Supabase project URL."),
   supabasePublishableKey: z
@@ -12,7 +30,7 @@ export const env = {
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
   supabasePublishableKey:
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-  appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
+  appUrl: normalizeAppUrl(process.env.NEXT_PUBLIC_APP_URL ?? ""),
 };
 
 export function hasSupabaseEnv() {

@@ -89,7 +89,7 @@ export function ReportDataTable<T extends Record<string, any>>({
   return (
     <div className={cn("space-y-4", className)}>
       <div className="flex items-center justify-between gap-4 print:hidden">
-        {title ? <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">{title}</h3> : null}
+        {title ? <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">{title}</h3> : null}
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="rounded-xl" onClick={exportToCSV} disabled={data.length === 0}>
             <Download className="mr-2 size-3.5" /> Export CSV
@@ -100,15 +100,15 @@ export function ReportDataTable<T extends Record<string, any>>({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] px-4 py-3 print:hidden sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-600">
+      <div className="flex flex-col gap-3 rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] px-4 py-3 print:hidden sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-[linear-gradient(180deg,#0f172a_0%,#020617_100%)]">
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           {totalItems === 0
             ? "No rows to show."
             : `Showing ${startIndex + 1}-${endIndex} of ${totalItems} rows`}
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Rows</span>
+            <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Rows</span>
             <Select
               value={pageSize}
               onValueChange={(value) => {
@@ -116,7 +116,7 @@ export function ReportDataTable<T extends Record<string, any>>({
                 setPage(1);
               }}
             >
-              <SelectTrigger className="h-9 w-[90px] rounded-xl bg-white text-sm">
+              <SelectTrigger className="h-9 w-[90px] rounded-xl bg-white text-sm dark:bg-slate-950">
                 <SelectValue placeholder="10" />
               </SelectTrigger>
               <SelectContent>
@@ -128,7 +128,7 @@ export function ReportDataTable<T extends Record<string, any>>({
             </Select>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-500">
+            <span className="text-sm text-slate-500 dark:text-slate-400">
               Page {safePage} of {totalPages}
             </span>
             <Button

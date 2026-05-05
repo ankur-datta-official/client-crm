@@ -18,6 +18,7 @@ import { createNotification } from "@/lib/notifications/notifications";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
 import { createClient } from "@/lib/supabase/server";
 import { checkCompanyLimit, requireFeature } from "@/lib/subscription/subscription-queries";
+import { ensureCanAssignUser, ensureCanWorkWithCompany, notifyDirectManagerOfActivity } from "@/lib/team/hierarchy";
 
 export type CrmActionState = {
   ok: boolean;
@@ -158,6 +159,12 @@ async function validateCompanyRelations(
 
     if (!assignedUser) {
       fieldErrors.assigned_user_id = "Selected assigned user is not part of this workspace.";
+    } else {
+      try {
+        await ensureCanAssignUser(values.assigned_user_id);
+      } catch (error) {
+        fieldErrors.assigned_user_id = error instanceof Error ? error.message : "You cannot assign this user.";
+      }
     }
   }
 
@@ -255,7 +262,15 @@ async function validateInteractionRelations(
       .eq("id", values.assigned_user_id)
       .eq("organization_id", organizationId)
       .maybeSingle();
-    if (!assigned) fieldErrors.assigned_user_id = "Selected assigned user is not part of this workspace.";
+    if (!assigned) {
+      fieldErrors.assigned_user_id = "Selected assigned user is not part of this workspace.";
+    } else {
+      try {
+        await ensureCanAssignUser(values.assigned_user_id);
+      } catch (error) {
+        fieldErrors.assigned_user_id = error instanceof Error ? error.message : "You cannot assign this user.";
+      }
+    }
   }
 
   return fieldErrors;
@@ -593,6 +608,7 @@ export async function updateCompanyAction(id: string, values: unknown): Promise<
   const parsed = companySchema.safeParse(values);
 
   if (!parsed.success) return getValidationState(parsed.error);
+  await ensureCanWorkWithCompany(id);
 
   const relationErrors = await validateCompanyRelations(organization.id, parsed.data);
   if (Object.keys(relationErrors).length > 0) {
@@ -622,6 +638,12 @@ export async function updateCompanyAction(id: string, values: unknown): Promise<
   if (error) return { ok: false, error: error.message };
 
   await insertActivityLog("company.updated", "company", id);
+  await notifyDirectManagerOfActivity({
+    actorUserId: user.id,
+    title: "Junior updated a company",
+    message: `${parsed.data.name} was updated by one of your assigned team members.`,
+    link: `/companies/${id}`,
+  });
 
   if (existing?.pipeline_stage_id !== parsed.data.pipeline_stage_id) {
     await insertActivityLog("company.pipeline_stage_changed", "company", id, {
@@ -809,6 +831,7 @@ export async function createInteractionAction(values: unknown): Promise<CrmActio
   const organization = await requireOrganization();
   const parsed = interactionSchema.safeParse(values);
   if (!parsed.success) return getValidationState(parsed.error);
+  await ensureCanWorkWithCompany(parsed.data.company_id);
 
   const relationErrors = await validateInteractionRelations(organization.id, parsed.data);
   if (Object.keys(relationErrors).length > 0) return { ok: false, error: Object.values(relationErrors)[0], fieldErrors: relationErrors };
@@ -834,6 +857,12 @@ export async function createInteractionAction(values: unknown): Promise<CrmActio
     return { ok: false, error: getSafeErrorMessage(error, "Unable to create the meeting right now.") };
   }
   await insertActivityLog("meeting.created", "interaction", data.id, { company_id: parsed.data.company_id });
+  await notifyDirectManagerOfActivity({
+    actorUserId: user.id,
+    title: "Junior logged a meeting",
+    message: "A direct junior team member logged a company meeting or interaction.",
+    link: `/meetings/${data.id}`,
+  });
   if (parsed.data.next_followup_at) await insertActivityLog("meeting.next_followup_added", "interaction", data.id, { next_followup_at: parsed.data.next_followup_at });
   if (parsed.data.assigned_user_id && parsed.data.assigned_user_id !== user.id) {
     await createNotification({
@@ -855,7 +884,9 @@ export async function updateInteractionAction(id: string, values: unknown): Prom
   if (!parsed.success) return getValidationState(parsed.error);
 
   try {
+    const user = await requireAuth();
     const { organization, interaction } = await requireInteractionInOrganization(id);
+    await ensureCanWorkWithCompany(interaction.company_id);
     const relationErrors = await validateInteractionRelations(organization.id, parsed.data);
     if (Object.keys(relationErrors).length > 0) return { ok: false, error: Object.values(relationErrors)[0], fieldErrors: relationErrors };
 
@@ -869,6 +900,12 @@ export async function updateInteractionAction(id: string, values: unknown): Prom
 
     if (error) return { ok: false, error: error.message };
     await insertActivityLog("meeting.updated", "interaction", id, { company_id: parsed.data.company_id });
+    await notifyDirectManagerOfActivity({
+      actorUserId: user.id,
+      title: "Junior updated a meeting",
+      message: "A direct junior team member updated a company meeting or interaction.",
+      link: `/meetings/${id}`,
+    });
     if (parsed.data.next_followup_at) await insertActivityLog("meeting.next_followup_added", "interaction", id, { next_followup_at: parsed.data.next_followup_at });
     await updateCompanyRatingFromInteraction(parsed.data.company_id, parsed.data.success_rating, leadTemperature);
     revalidatePath("/meetings");
@@ -931,6 +968,7 @@ export async function moveCompanyToPipelineStage(companyId: string, stageId: str
   const supabase = await createClient();
 
   try {
+    await ensureCanWorkWithCompany(companyId);
     const [stage, existingCompanyResult] = await Promise.all([
       getPipelineStageInOrganization(stageId),
       supabase
@@ -978,6 +1016,12 @@ export async function moveCompanyToPipelineStage(companyId: string, stageId: str
       to_stage_name: stage.name,
       is_won: stage.is_won,
       is_lost: stage.is_lost,
+    });
+    await notifyDirectManagerOfActivity({
+      actorUserId: user.id,
+      title: "Junior moved a lead stage",
+      message: `${existingCompanyResult.data.name} moved to ${stage.name}.`,
+      link: `/companies/${companyId}`,
     });
 
     revalidatePath("/pipeline");

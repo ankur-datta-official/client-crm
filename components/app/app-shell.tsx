@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app/app-sidebar";
 import { AppTopbar } from "@/components/app/app-topbar";
 import type { NotificationRow } from "@/lib/notifications/notifications";
@@ -16,6 +16,14 @@ export type AppShellProps = {
   walletSummary: WalletSummary | null;
 };
 
+function getInitialSidebarState() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem("crm-sidebar-collapsed") === "true";
+}
+
 export function AppShell({ 
   children, 
   profile, 
@@ -25,10 +33,22 @@ export function AppShell({
   walletSummary
 }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarState);
+
+  useEffect(() => {
+    window.localStorage.setItem("crm-sidebar-collapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   return (
     <div className="min-h-screen bg-background md:flex md:h-screen md:overflow-hidden">
-      <AppSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} organizationName={organizationName} />
+      <AppSidebar
+        open={sidebarOpen}
+        onOpenChange={setSidebarOpen}
+        collapsed={sidebarCollapsed}
+        onCollapsedChange={setSidebarCollapsed}
+        organizationName={organizationName}
+        profile={profile}
+      />
       <div className="flex min-w-0 flex-1 flex-col md:h-screen md:min-h-0">
         <AppTopbar
           onMenuClick={() => setSidebarOpen(true)}

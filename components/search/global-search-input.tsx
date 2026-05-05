@@ -73,7 +73,7 @@ export function GlobalSearchInput() {
 
   return (
     <div ref={containerRef} className="relative hidden w-full max-w-2xl md:block">
-      <div className="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 shadow-sm transition-all duration-200 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/15">
+      <div className="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 shadow-sm transition-all duration-200 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/15 dark:border-slate-800 dark:bg-slate-950/90">
         <Search className="size-4 text-muted-foreground" />
         <Input
           value={query}

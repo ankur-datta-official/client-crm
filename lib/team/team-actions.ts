@@ -15,6 +15,7 @@ import { createNotification } from "@/lib/notifications/notifications";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
 import { createClient } from "@/lib/supabase/server";
 import { checkUserLimit } from "@/lib/subscription/subscription-queries";
+import { sendTeamInviteEmail } from "./invite-email";
 import { getPermissions, getRoleById, getRoles } from "./team-queries";
 
 type InviteTeamMemberInput = {
@@ -165,21 +166,43 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
     throw new Error(getSafeErrorMessage(error, "Unable to create the invitation right now."));
   }
 
+  let emailDelivery: Awaited<ReturnType<typeof sendTeamInviteEmail>>;
+
+  try {
+    emailDelivery = await sendTeamInviteEmail({
+      email,
+      token: data.token,
+      fullName: parsedInput.fullName || null,
+    });
+  } catch (deliveryError) {
+    logServerError("team.invite.email", deliveryError, { organizationId: organization.id, email });
+    emailDelivery = {
+      ok: false,
+      reason: deliveryError instanceof Error ? deliveryError.message : "Email delivery could not be completed.",
+    };
+  }
+
   await logActivity(organization.id, "team.member.invited", "team_invitation", data.id, {
     email,
     role_id: parsedInput.roleId,
+    email_delivery_method: emailDelivery.ok ? emailDelivery.method : "manual_fallback",
   });
 
   await createNotification({
     userId: user.id,
     type: "team.invitation.created",
     title: "Invitation created",
-    message: `An invite link is ready for ${email}.`,
+    message: emailDelivery.ok
+      ? `Invitation email sent to ${email}.`
+      : `Invite created for ${email}, but email delivery needs manual fallback.`,
     link: "/team",
   });
 
   revalidatePath("/team");
-  return data;
+  return {
+    ...data,
+    emailDelivery,
+  };
 }
 
 export async function cancelTeamInvitation(invitationId: string) {
@@ -255,18 +278,56 @@ export async function resendTeamInvitation(invitationId: string) {
     throw new Error(error.message);
   }
 
+  const { data: invitationDetails } = await supabase
+    .from("team_invitations")
+    .select("email, full_name")
+    .eq("id", invitationId)
+    .eq("organization_id", organization.id)
+    .maybeSingle();
+
+  let emailDelivery: Awaited<ReturnType<typeof sendTeamInviteEmail>>;
+
+  try {
+    emailDelivery = await sendTeamInviteEmail({
+      email: invitationDetails?.email ?? invitation.email,
+      token,
+      fullName: invitationDetails?.full_name ?? null,
+    });
+  } catch (deliveryError) {
+    logServerError("team.invite.resend_email", deliveryError, { organizationId: organization.id, email: invitation.email });
+    emailDelivery = {
+      ok: false,
+      reason: deliveryError instanceof Error ? deliveryError.message : "Email delivery could not be completed.",
+    };
+  }
+
   await logActivity(organization.id, "team.invitation.resent", "team_invitation", invitationId, {
     email: invitation.email,
+    email_delivery_method: emailDelivery.ok ? emailDelivery.method : "manual_fallback",
   });
 
   revalidatePath("/team");
-  return { success: true, token };
+  return { success: true, token, emailDelivery };
 }
 
 export async function acceptTeamInvitation(token: string) {
   const user = await requireAuth();
-  const profile = await getCurrentProfile();
   const supabase = await createClient();
+  const profile = await getCurrentProfile();
+
+  const { data: invitationRecord } = await supabase
+    .from("team_invitations")
+    .select("id, email, organization_id, status, expires_at")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (!invitationRecord || invitationRecord.status !== "pending" || new Date(invitationRecord.expires_at).getTime() <= Date.now()) {
+    throw new Error("This invitation is invalid or has expired.");
+  }
+
+  if (!user.email || normalizeEmail(user.email) !== normalizeEmail(invitationRecord.email)) {
+    throw new Error("Please sign in with the same email address that received this invitation.");
+  }
 
   if (profile?.organization_id && profile.is_active) {
     throw new Error("This account already belongs to an active organization.");
@@ -365,6 +426,66 @@ export async function updateTeamMemberRole(userId: string, roleId: string) {
   });
 
   revalidatePath("/team");
+  return { success: true };
+}
+
+export async function updateTeamMemberManager(userId: string, managerUserId: string | null) {
+  await ensureRoleManagementAccess();
+  const organization = await requireOrganization();
+  const user = await requireAuth();
+  const supabase = await createClient();
+
+  if (userId === user.id && managerUserId) {
+    throw new Error("You cannot report to yourself.");
+  }
+
+  const { data: targetProfile, error: targetError } = await supabase
+    .from("profiles")
+    .select("id, email, organization_id")
+    .eq("id", userId)
+    .eq("organization_id", organization.id)
+    .maybeSingle();
+
+  if (targetError || !targetProfile) {
+    throw new Error("Team member not found.");
+  }
+
+  if (managerUserId) {
+    const { data: managerProfile, error: managerError } = await supabase
+      .from("profiles")
+      .select("id, email")
+      .eq("id", managerUserId)
+      .eq("organization_id", organization.id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (managerError || !managerProfile) {
+      throw new Error("Selected senior team member was not found.");
+    }
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      manager_user_id: managerUserId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+    .eq("organization_id", organization.id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await logActivity(organization.id, "team.member.manager_changed", "profile", userId, {
+    email: targetProfile.email,
+    manager_user_id: managerUserId,
+    updated_by: user.id,
+  });
+
+  revalidatePath("/team");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   return { success: true };
 }
 

@@ -57,6 +57,8 @@ export function PipelineReport({ data }: { data: PipelineReportData }) {
     },
   ];
 
+  const getGradientId = (prefix: string, index: number) => `${prefix}-gradient-${index}`;
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -70,6 +72,18 @@ export function PipelineReport({ data }: { data: PipelineReportData }) {
         <ReportChartCard title="Pipeline Funnel (Count by Stage)" description="See how deal volume narrows as opportunities move forward." badge={`${data.companiesByStage.length} stages`} headerRight={<MiniStat label="Won/Lost" value={`${data.wonLostCount.won}/${data.wonLostCount.lost}`} />} isEmpty={data.companiesByStage.length === 0}>
           <ResponsiveContainer width="100%" height="100%">
             <FunnelChart>
+              <defs>
+                {data.companiesByStage.map((_, index) => {
+                  const colorStart = REPORT_CHART_COLORS[index % REPORT_CHART_COLORS.length];
+                  const colorEnd = REPORT_CHART_COLORS[(index + 3) % REPORT_CHART_COLORS.length];
+                  return (
+                    <linearGradient key={getGradientId("pipeline-funnel", index)} id={getGradientId("pipeline-funnel", index)} x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor={colorStart} stopOpacity={0.9} />
+                      <stop offset="100%" stopColor={colorEnd} stopOpacity={1} />
+                    </linearGradient>
+                  );
+                })}
+              </defs>
               <Tooltip content={<ReportChartTooltip />} />
               <Funnel
                 data={data.companiesByStage}
@@ -77,7 +91,7 @@ export function PipelineReport({ data }: { data: PipelineReportData }) {
                 nameKey="stage"
               >
                 {data.companiesByStage.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color || REPORT_CHART_COLORS[index % REPORT_CHART_COLORS.length]} />
+                  <Cell key={`cell-${index}`} fill={`url(#${getGradientId("pipeline-funnel", index)})`} />
                 ))}
                 <LabelList position="right" fill="#64748b" dataKey="stage" />
               </Funnel>
@@ -88,8 +102,32 @@ export function PipelineReport({ data }: { data: PipelineReportData }) {
         <ReportChartCard title="Pipeline Value by Stage" description="Review where estimated deal value is concentrated across the funnel." badge="Stage value" headerRight={<MiniStat label="Peak stage" value={topValueStage?.stage || "N/A"} />} isEmpty={data.pipelineValueByStage.length === 0}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.pipelineValueByStage}>
+              <defs>
+                {data.pipelineValueByStage.map((_, index) => {
+                  const colorStart = REPORT_CHART_COLORS[(index + 1) % REPORT_CHART_COLORS.length];
+                  const colorEnd = REPORT_CHART_COLORS[(index + 4) % REPORT_CHART_COLORS.length];
+                  return (
+                    <linearGradient key={getGradientId("pipeline-stage-value", index)} id={getGradientId("pipeline-stage-value", index)} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={colorStart} stopOpacity={1} />
+                      <stop offset="100%" stopColor={colorEnd} stopOpacity={0.84} />
+                    </linearGradient>
+                  );
+                })}
+              </defs>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="stage" fontSize={12} tick={{ fill: "#64748b" }} />
+              <XAxis
+                dataKey="stage"
+                interval={0}
+                minTickGap={0}
+                tickMargin={8}
+                fontSize={12}
+                tick={{ fill: "#64748b" }}
+                tickFormatter={(value) => {
+                  const stage = String(value ?? "").trim();
+                  if (!stage) return "Meeting";
+                  return stage === "Meeting Scheduled" ? "Meeting" : stage;
+                }}
+              />
               <YAxis 
                 fontSize={12} 
                 tick={{ fill: "#64748b" }}
@@ -98,7 +136,7 @@ export function PipelineReport({ data }: { data: PipelineReportData }) {
               <Tooltip content={<ReportChartTooltip />} formatter={(value: number) => formatCurrency(value)} />
               <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={34}>
                 {data.pipelineValueByStage.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color || REPORT_CHART_COLORS[index % REPORT_CHART_COLORS.length]} />
+                  <Cell key={`cell-${index}`} fill={`url(#${getGradientId("pipeline-stage-value", index)})`} />
                 ))}
               </Bar>
             </BarChart>
@@ -110,6 +148,13 @@ export function PipelineReport({ data }: { data: PipelineReportData }) {
         <ReportChartCard title="Average Success Rating by Stage" description="Identify where deal quality is strongest or weakest." badge="Confidence" isEmpty={data.avgRatingByStage.length === 0}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.avgRatingByStage}>
+              <defs>
+                <linearGradient id="pipelineRatingLine" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#8b5cf6" />
+                  <stop offset="50%" stopColor="#06b6d4" />
+                  <stop offset="100%" stopColor="#0f766e" />
+                </linearGradient>
+              </defs>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="stage" fontSize={12} tick={{ fill: "#64748b" }} />
               <YAxis domain={[0, 10]} fontSize={12} tick={{ fill: "#64748b" }} />
@@ -117,10 +162,10 @@ export function PipelineReport({ data }: { data: PipelineReportData }) {
               <Line
                 type="monotone"
                 dataKey="avgRating"
-                stroke="#8b5cf6"
+                stroke="url(#pipelineRatingLine)"
                 strokeWidth={3}
-                dot={{ fill: "#8b5cf6", r: 4, stroke: "#ffffff", strokeWidth: 2 }}
-                activeDot={{ r: 6, fill: "#8b5cf6", stroke: "#ffffff", strokeWidth: 2 }}
+                dot={{ fill: "#0f766e", r: 4, stroke: "#ffffff", strokeWidth: 2 }}
+                activeDot={{ r: 6, fill: "#0284c7", stroke: "#ffffff", strokeWidth: 2 }}
               />
             </LineChart>
           </ResponsiveContainer>

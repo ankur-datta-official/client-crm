@@ -11,7 +11,7 @@ import type { RoleWithPermissions } from "@/lib/team/types";
 type RoleFormProps = {
   selectedRole: RoleWithPermissions | null;
   canManage: boolean;
-  onSaved: () => void;
+  onSaved: (roleId: string | null) => void;
 };
 
 export function RoleForm({ selectedRole, canManage, onSaved }: RoleFormProps) {
@@ -32,12 +32,13 @@ export function RoleForm({ selectedRole, canManage, onSaved }: RoleFormProps) {
       try {
         if (selectedRole) {
           await updateRole(selectedRole.id, { name, description });
+          onSaved(selectedRole.id);
         } else {
-          await createRole({ name, description });
+          const createdRole = await createRole({ name, description });
           setName("");
           setDescription("");
+          onSaved(createdRole.id);
         }
-        onSaved();
       } catch (submissionError) {
         setError(submissionError instanceof Error ? submissionError.message : "Unable to save role.");
       }
@@ -51,10 +52,12 @@ export function RoleForm({ selectedRole, canManage, onSaved }: RoleFormProps) {
       <div>
         <h3 className="text-base font-semibold">{selectedRole ? "Role details" : "Create custom role"}</h3>
         <p className="text-sm text-muted-foreground">
-          {selectedRole ? "Rename or describe a selected custom role." : "Create a custom team role for your organization."}
+          {selectedRole
+            ? "Rename or describe a selected custom role."
+            : "Create a custom team role, then choose exactly what that role can access."}
         </p>
       </div>
-      <FormRequiredNote message="Only the role name is required. Add a short description if you want other admins to understand when this role should be used." />
+      <FormRequiredNote message="Only the role name is required. After you save the role, you can configure its permissions on the right and assign it to team members from the Team Members tab." />
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
       <div className="space-y-2">
         <Label htmlFor="role-name">Role Name <span className="text-destructive">*</span></Label>

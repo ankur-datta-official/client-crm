@@ -81,6 +81,25 @@ function rewardTypeLabel(type: Reward["reward_type"]) {
   }
 }
 
+function challengeMetricLabel(metric: ChallengeTemplate["target_metric"]) {
+  switch (metric) {
+    case "followup_completed":
+      return "Follow-up completed";
+    case "lead_converted_won":
+      return "Lead converted to won";
+    case "lead_created":
+      return "Lead created";
+    case "lead_qualified":
+      return "Lead qualified";
+    default:
+      return metric.replaceAll("_", " ");
+  }
+}
+
+function cadenceLabel(cadence: ChallengeTemplate["cadence"]) {
+  return cadence === "daily" ? "Daily challenge" : "Weekly challenge";
+}
+
 function rewardMetadataValue(reward: Reward, key: string) {
   const value = reward.metadata?.[key];
   return typeof value === "string" && value.trim() ? value : null;
@@ -866,7 +885,7 @@ export function ScoringAdminPanel({
           <Card className="rounded-2xl">
             <CardHeader>
               <CardTitle>Rewards & Thresholds</CardTitle>
-              <CardDescription>Control reward pricing and fulfillment status.</CardDescription>
+              <CardDescription>Manage the current rewards users can unlock with points.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <Table>
@@ -977,7 +996,7 @@ export function ScoringAdminPanel({
           <Card className="rounded-2xl">
             <CardHeader>
               <CardTitle>Challenges</CardTitle>
-              <CardDescription>Maintain bonus thresholds for daily and weekly gamification.</CardDescription>
+              <CardDescription>Manage the current daily and weekly bonus goals users work toward.</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -995,7 +1014,9 @@ export function ScoringAdminPanel({
                     <TableRow key={challenge.id}>
                       <TableCell>
                         <p className="font-medium text-slate-900">{challenge.name}</p>
-                        <p className="text-xs text-slate-500">{challenge.target_metric} • {challenge.cadence}</p>
+                        <p className="text-xs text-slate-500">
+                          {challengeMetricLabel(challenge.target_metric)} - {cadenceLabel(challenge.cadence)}
+                        </p>
                       </TableCell>
                       <TableCell>{challenge.target_count}</TableCell>
                       <TableCell>

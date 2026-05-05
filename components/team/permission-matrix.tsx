@@ -50,8 +50,28 @@ export function PermissionMatrix({ role, permissions, canManage, onSaved }: Perm
 
   if (!role) {
     return (
-      <div className="rounded-lg border bg-white p-8 text-center text-muted-foreground">
-        Select a role to review its permissions.
+      <div className="rounded-2xl border bg-white p-8">
+        <div className="mx-auto max-w-xl text-center">
+          <div className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Role permissions</div>
+          <h3 className="mt-3 text-2xl font-semibold text-foreground">Create the role first, then choose what it can access.</h3>
+          <p className="mt-3 text-sm text-muted-foreground">
+            After you save a new custom role, this panel will open its permission checklist automatically so you can finish the setup safely.
+          </p>
+        </div>
+        <div className="mt-6 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm">
+            <div className="font-medium text-foreground">Keep access limited</div>
+            <p className="mt-2 text-muted-foreground">Only enable the pages and actions this role genuinely needs.</p>
+          </div>
+          <div className="rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm">
+            <div className="font-medium text-foreground">Review sensitive actions</div>
+            <p className="mt-2 text-muted-foreground">Team, settings, subscription, and scoring controls should stay with trusted admins.</p>
+          </div>
+          <div className="rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm">
+            <div className="font-medium text-foreground">Assign when ready</div>
+            <p className="mt-2 text-muted-foreground">Your new role will appear in team member and invitation role selectors automatically.</p>
+          </div>
+        </div>
       </div>
     );
   }

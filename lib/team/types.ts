@@ -13,6 +13,9 @@ export type TeamMember = {
   role_id: string | null;
   role_name: string | null;
   role_slug: string | null;
+  manager_user_id?: string | null;
+  manager_name?: string | null;
+  manager_email?: string | null;
 };
 
 export type TeamInvitation = {
@@ -60,6 +63,68 @@ export type Permission = {
   key: string;
   name: string;
   description: string | null;
+};
+
+export const PERFORMANCE_TARGET_METRICS = {
+  leads_created: "Leads created",
+  meetings_logged: "Meetings logged",
+  followups_completed: "Follow-ups completed",
+} as const;
+
+export const PERFORMANCE_TARGET_PERIODS = ["daily", "monthly"] as const;
+
+export type PerformanceTargetMetric = keyof typeof PERFORMANCE_TARGET_METRICS;
+export type PerformanceTargetPeriod = (typeof PERFORMANCE_TARGET_PERIODS)[number];
+
+export type UserPerformanceTarget = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  metric_key: PerformanceTargetMetric;
+  period_type: PerformanceTargetPeriod;
+  target_value: number;
+  effective_date: string;
+  notes: string | null;
+  assigned_by: string | null;
+  created_at: string;
+  updated_at: string;
+  profile?: {
+    full_name: string | null;
+    email: string;
+  } | null;
+};
+
+export type PerformanceTrendPoint = {
+  date: string;
+  label: string;
+  target: number;
+  achievement: number;
+};
+
+export type PerformanceMetricSnapshot = {
+  metric: PerformanceTargetMetric;
+  label: string;
+  dailyTarget: number;
+  dailyActual: number;
+  monthlyTarget: number;
+  monthlyActual: number;
+};
+
+export type CurrentUserPerformanceSnapshot = {
+  metrics: PerformanceMetricSnapshot[];
+  trend: PerformanceTrendPoint[];
+};
+
+export type ManagedActivityReportItem = {
+  id: string;
+  created_at: string;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  actor_user_id: string | null;
+  actor_name: string;
+  actor_email: string;
 };
 
 export const PERMISSION_GROUPS = {

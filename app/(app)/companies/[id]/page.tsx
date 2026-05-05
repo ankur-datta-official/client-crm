@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Building2, CalendarClock, FileText, Handshake, LifeBuoy, NotebookTabs, Users, Plus, Download, Eye } from "lucide-react";
+import { CalendarClock, FileText, Handshake, LifeBuoy, Users, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CompanyProfileHeader } from "@/components/crm/company-profile-header";
@@ -40,10 +40,10 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
     <div className="space-y-5">
       <CompanyProfileHeader company={company} />
       <section className="grid gap-4 md:grid-cols-3">
-        <StatCard title="Estimated Value" value={formatCurrency(company.estimated_value)} icon={Building2} tone="teal" />
-        <StatCard title="Success Rating" value={company.success_rating ? `${company.success_rating}/10` : "Not rated"} icon={NotebookTabs} tone="amber" />
-        <StatCard title="Lead Temperature" value={company.lead_temperature} icon={Handshake} tone={company.lead_temperature === "hot" ? "rose" : "blue"} />
-        <StatCard title="Lead Score" value={String(company.lead_score)} icon={Handshake} tone="amber" />
+        <StatCard title="Estimated Value" value={formatCurrency(company.estimated_value)} iconName="building" tone="teal" />
+        <StatCard title="Success Rating" value={company.success_rating ? `${company.success_rating}/10` : "Not rated"} iconName="notebook" tone="amber" />
+        <StatCard title="Lead Temperature" value={company.lead_temperature} iconName="handshake" tone={company.lead_temperature === "hot" ? "rose" : "blue"} />
+        <StatCard title="Lead Score" value={String(company.lead_score)} iconName="handshake" tone="amber" />
       </section>
       <Card>
         <CardHeader>

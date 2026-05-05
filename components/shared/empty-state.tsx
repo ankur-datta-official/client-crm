@@ -16,11 +16,11 @@ export function EmptyState({ title, description, icon: Icon, actionLabel, action
   return (
     <Card>
       <CardContent className="flex min-h-[18rem] flex-col items-center justify-center p-8 text-center">
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
           <Icon className="size-6" />
         </div>
-        <h2 className="mt-4 text-lg font-semibold text-slate-900">{title}</h2>
-        <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">{description}</p>
+        <h2 className="mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+        <p className="mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
         {actionLabel ? (
           actionHref ? (
             <Button asChild className="mt-5" type="button">
