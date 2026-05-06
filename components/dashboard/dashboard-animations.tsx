@@ -28,24 +28,24 @@ export function StatusPill({
   children: React.ReactNode;
 }) {
   const classes = {
-    rose: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
-    amber: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
-    blue: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
-    emerald: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+    rose: "bg-rose-50 text-rose-700 dark:border dark:border-rose-300/18 dark:bg-[linear-gradient(180deg,rgba(136,19,55,0.92)_0%,rgba(103,12,42,0.95)_100%)] dark:text-rose-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_20px_-12px_rgba(225,29,72,0.55)]",
+    amber: "bg-amber-50 text-amber-700 dark:border dark:border-amber-300/18 dark:bg-[linear-gradient(180deg,rgba(133,77,14,0.92)_0%,rgba(113,63,18,0.95)_100%)] dark:text-amber-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_20px_-12px_rgba(245,158,11,0.45)]",
+    blue: "bg-sky-50 text-sky-700 dark:border dark:border-sky-300/18 dark:bg-[linear-gradient(180deg,rgba(12,74,110,0.92)_0%,rgba(8,47,73,0.96)_100%)] dark:text-sky-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_20px_-12px_rgba(14,165,233,0.45)]",
+    emerald: "bg-emerald-50 text-emerald-700 dark:border dark:border-emerald-300/18 dark:bg-[linear-gradient(180deg,rgba(6,78,59,0.92)_0%,rgba(6,58,46,0.96)_100%)] dark:text-emerald-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_20px_-12px_rgba(16,185,129,0.42)]",
   };
 
-  return <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", classes[tone])}>{children}</span>;
+  return <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium tracking-[0.01em]", classes[tone])}>{children}</span>;
 }
 
 export function ActivityRow({ item }: { item: any }) {
   return (
     <Link
       href={item.href}
-      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/88 dark:hover:border-primary/30 dark:hover:bg-slate-900"
+      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)]"
     >
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{item.title}</p>
-        <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{item.subtitle}</p>
+        <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-300">{item.subtitle}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <StatusPill tone={item.tone}>{item.badge}</StatusPill>
@@ -83,7 +83,7 @@ export function DashboardCard({
       transition={{ duration: 0.5, delay }}
       className="h-full"
     >
-      <Card className={className}>
+      <Card className={cn("border-slate-200/80 bg-white/95 dark:border-slate-800/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.96)_100%)]", className)}>
         <CardHeader className="pb-4">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -188,9 +188,9 @@ export function AlertCard({ alert, index = 0 }: { alert: any; index?: number }) 
 
 export function TaskRow({ task }: { task: any }) {
   const toneClasses = {
-    rose: "bg-rose-50 text-rose-700",
-    amber: "bg-amber-50 text-amber-700",
-    blue: "bg-sky-50 text-sky-700",
+    rose: "bg-rose-50 text-rose-700 dark:border dark:border-rose-300/18 dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_58%),linear-gradient(180deg,rgba(136,19,55,0.92)_0%,rgba(103,12,42,0.96)_100%)] dark:text-rose-100 dark:shadow-[0_10px_24px_-16px_rgba(225,29,72,0.55)]",
+    amber: "bg-amber-50 text-amber-700 dark:border dark:border-amber-300/18 dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_58%),linear-gradient(180deg,rgba(133,77,14,0.92)_0%,rgba(113,63,18,0.96)_100%)] dark:text-amber-100 dark:shadow-[0_10px_24px_-16px_rgba(245,158,11,0.5)]",
+    blue: "bg-sky-50 text-sky-700 dark:border dark:border-sky-300/18 dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_58%),linear-gradient(180deg,rgba(12,74,110,0.92)_0%,rgba(8,47,73,0.96)_100%)] dark:text-sky-100 dark:shadow-[0_10px_24px_-16px_rgba(14,165,233,0.5)]",
   };
   
   // Use icon mapping to avoid passing function from server
@@ -199,7 +199,7 @@ export function TaskRow({ task }: { task: any }) {
   return (
     <Link
       href={task.href}
-      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/88 dark:hover:border-primary/30 dark:hover:bg-slate-900"
+      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)]"
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className={`flex size-9 shrink-0 items-center justify-center rounded-full ${toneClasses[task.tone as keyof typeof toneClasses]}`}>
@@ -207,7 +207,7 @@ export function TaskRow({ task }: { task: any }) {
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{task.title}</p>
-          <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{task.subtitle}</p>
+          <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-300">{task.subtitle}</p>
         </div>
       </div>
       <StatusPill tone={task.tone}>{task.badge}</StatusPill>
@@ -229,14 +229,14 @@ export function ProgressMetric({
   const progress = Math.min(100, Math.round((value / Math.max(target, 1)) * 100));
 
   return (
-    <div className="space-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 dark:border-slate-800 dark:bg-slate-950/88">
+    <div className="space-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</p>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+        <p className="text-sm text-slate-500 dark:text-slate-300">
           {value}/{target}
         </p>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800/80">
         <div className={`h-full rounded-full ${colorClassName}`} style={{ width: `${progress}%` }} />
       </div>
     </div>

@@ -176,7 +176,7 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
 
       {documents.length > 0 ? (
         <div className="space-y-3">
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
               Showing {rangeStart}-{rangeEnd} of {documents.length} documents
             </p>
@@ -213,7 +213,7 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
                 </thead>
                 <tbody>
                   {visibleDocuments.map((document) => (
-                    <tr key={document.id} className="border-b border-border/80 last:border-0 transition-colors hover:bg-slate-50/80">
+                    <tr key={document.id} className="border-b border-border/80 last:border-0 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-900/90">
                       <td className="crm-table-cell">
                         <div className="flex flex-col">
                           <Link href={`/documents/${document.id}`} className="font-medium text-primary hover:underline">
@@ -291,7 +291,7 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
               Page {currentPage} of {totalPages}
             </p>
@@ -371,7 +371,7 @@ function DocumentCard({
   isDownloading: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 shadow-soft">
+    <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.9)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <Link href={`/documents/${document.id}`} className="font-semibold text-primary truncate block">

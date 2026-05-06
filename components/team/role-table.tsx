@@ -56,7 +56,7 @@ export function RoleTable({ roles, permissions, canManage }: RoleTableProps) {
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="space-y-4">
-        <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/5 via-white to-emerald-50/60 p-4 shadow-sm">
+        <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/5 via-white to-emerald-50/60 p-4 shadow-sm dark:border-teal-500/20 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(6,78,59,0.18),rgba(15,23,42,0.98))] dark:shadow-[0_20px_44px_-28px_rgba(2,6,23,0.98)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
               <h3 className="text-base font-semibold text-foreground">Custom role setup</h3>
@@ -76,15 +76,15 @@ export function RoleTable({ roles, permissions, canManage }: RoleTableProps) {
             ) : null}
           </div>
           <div className="mt-4 grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
-            <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+            <div className="rounded-xl border border-white/70 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-900/80">
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Step 1</div>
               <p className="mt-2 text-sm text-foreground">Add a clear role name such as Sales Intern or Support Lead.</p>
             </div>
-            <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+            <div className="rounded-xl border border-white/70 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-900/80">
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Step 2</div>
               <p className="mt-2 text-sm text-foreground">Turn permissions on only for the actions that role should perform.</p>
             </div>
-            <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+            <div className="rounded-xl border border-white/70 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-900/80">
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Step 3</div>
               <p className="mt-2 text-sm text-foreground">Assign the finished role to users from the Team Members tab.</p>
             </div>
@@ -92,7 +92,7 @@ export function RoleTable({ roles, permissions, canManage }: RoleTableProps) {
         </div>
 
         <RoleForm key={selectedRole?.id ?? "new-role"} selectedRole={selectedRole} canManage={canManage} onSaved={handleRoleSaved} />
-        <div className="overflow-hidden rounded-lg border bg-white">
+        <div className="overflow-hidden rounded-lg border bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_20px_40px_-30px_rgba(2,6,23,0.95)]">
           <Table>
             <TableHeader className="bg-muted/40">
               <TableRow>

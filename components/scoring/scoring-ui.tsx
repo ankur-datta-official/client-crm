@@ -63,9 +63,9 @@ function formatDateTime(value?: string | null) {
 }
 
 function scoreTone(points: number) {
-  if (points > 0) return "text-emerald-700";
-  if (points < 0) return "text-rose-700";
-  return "text-slate-600";
+  if (points > 0) return "text-emerald-700 dark:text-emerald-300";
+  if (points < 0) return "text-rose-700 dark:text-rose-300";
+  return "text-slate-600 dark:text-slate-300";
 }
 
 function rewardTypeLabel(type: Reward["reward_type"]) {
@@ -130,12 +130,12 @@ function rewardAccentClasses(reward: Reward) {
   const tier = rewardMetadataValue(reward, "tier")?.toLowerCase();
 
   if (tier === "bronze") return "border-l-amber-500 bg-amber-50/40";
-  if (tier === "silver") return "border-l-slate-500 bg-slate-50";
+  if (tier === "silver") return "border-l-slate-500 bg-slate-50 dark:bg-slate-900/70";
   if (tier === "gold") return "border-l-yellow-500 bg-yellow-50/40";
   if (tier === "pro") return "border-l-sky-500 bg-sky-50/35";
   if (tier === "elite") return "border-l-emerald-500 bg-emerald-50/35";
   if (tier === "legend") return "border-l-violet-500 bg-violet-50/35";
-  return "border-l-slate-300 bg-white";
+  return "border-l-slate-300 bg-white dark:border-l-slate-700 dark:bg-slate-900/75";
 }
 
 function currentRankForPoints(points: number) {
@@ -166,9 +166,9 @@ export function WalletSummaryPanel({
   const streak = summary?.streaks[0];
 
   return (
-    <Card className="rounded-2xl border-slate-200 bg-white">
+    <Card className="rounded-2xl border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/85">
       <CardHeader className={compact ? "pb-3" : undefined}>
-        <CardTitle className="flex items-center gap-2 text-slate-900">
+        <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
           <Wallet className="size-5 text-amber-600" />
           Wallet Balance
         </CardTitle>
@@ -177,13 +177,13 @@ export function WalletSummaryPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-5">
-          <p className="text-sm font-medium text-slate-600">Available points</p>
-          <p className="mt-2 text-4xl font-semibold tracking-tight text-slate-900">
+        <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-5 dark:border-amber-500/20 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(120,53,15,0.18),rgba(6,78,59,0.2))]">
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Available points</p>
+          <p className="mt-2 text-4xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
             {summary?.wallet_balance ?? 0}
           </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Lifetime earned: <span className="font-medium text-slate-700">{summary?.wallet_lifetime_earned ?? 0}</span>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            Lifetime earned: <span className="font-medium text-slate-700 dark:text-slate-200">{summary?.wallet_lifetime_earned ?? 0}</span>
           </p>
         </div>
         <div className={`grid gap-3 ${compact ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
@@ -206,12 +206,12 @@ function MiniInfo({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/75">
       <div className="flex items-center gap-2 text-slate-500">
         <Icon className="size-4" />
         <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
       </div>
-      <p className="mt-3 text-xl font-semibold text-slate-900">{value}</p>
+      <p className="mt-3 text-xl font-semibold text-slate-900 dark:text-slate-100">{value}</p>
     </div>
   );
 }
@@ -228,7 +228,7 @@ export function LeaderboardPanel({
   return (
     <Card className="rounded-2xl">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-slate-900">
+        <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
           <Trophy className="size-5 text-amber-600" />
           {title}
         </CardTitle>
@@ -240,8 +240,8 @@ export function LeaderboardPanel({
         ) : (
           <div className="space-y-3">
             {entries.map((entry) => (
-              <div key={entry.user_id} className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3">
-                <div className="flex size-10 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+              <div key={entry.user_id} className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800 dark:bg-slate-900/70">
+                <div className="flex size-10 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   #{entry.rank}
                 </div>
                 <UserAvatar
@@ -251,11 +251,11 @@ export function LeaderboardPanel({
                   className="size-10"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-slate-900">{entry.full_name ?? entry.email}</p>
+                  <p className="truncate font-medium text-slate-900 dark:text-slate-100">{entry.full_name ?? entry.email}</p>
                   <p className="truncate text-sm text-slate-500">{entry.period_points} pts this period</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold text-slate-900">{entry.wallet_balance}</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{entry.wallet_balance}</p>
                   <p className="text-xs text-slate-500">balance</p>
                 </div>
               </div>
@@ -288,10 +288,10 @@ export function ScoringActivityPanel({
         ) : (
           <div className="space-y-3">
             {activities.map((activity) => (
-              <div key={activity.id} className="rounded-2xl border border-slate-200 p-4">
+              <div key={activity.id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800 dark:bg-slate-900/70">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="font-medium text-slate-900">{activity.title}</p>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{activity.title}</p>
                     <p className="mt-1 text-sm text-slate-500">
                       {activity.description || activity.action_key.replaceAll("_", " ")}
                     </p>
@@ -332,10 +332,10 @@ export function ChallengeProgressPanel({
             {challenges.map((challenge) => {
               const ratio = Math.min(100, Math.round((challenge.progress_count / Math.max(challenge.target_count, 1)) * 100));
               return (
-                <div key={challenge.id} className="rounded-2xl border border-slate-200 p-4">
+                <div key={challenge.id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800 dark:bg-slate-900/70">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-slate-900">{challenge.name ?? "Challenge"}</p>
+                      <p className="font-medium text-slate-900 dark:text-slate-100">{challenge.name ?? "Challenge"}</p>
                       <p className="mt-1 text-sm text-slate-500">
                         {challenge.progress_count}/{challenge.target_count} completed
                       </p>
@@ -344,7 +344,7 @@ export function ChallengeProgressPanel({
                       {challenge.is_completed ? "Completed" : challenge.cadence ?? "Active"}
                     </Badge>
                   </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div className="h-full rounded-full bg-emerald-500" style={{ width: `${ratio}%` }} />
                   </div>
                 </div>
@@ -399,11 +399,11 @@ export function RewardsMarketplace({
     <div className="space-y-6">
       <WalletSummaryPanel summary={summary} compact />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <Card className="overflow-hidden rounded-2xl border-slate-200">
+        <Card className="overflow-hidden rounded-2xl border-slate-200 dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(17,24,39,0.96))] dark:shadow-[0_24px_60px_-32px_rgba(2,6,23,0.98)]">
           <CardHeader>
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2 text-slate-900">
+                <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
                   <Crown className="size-5 text-amber-600" />
                   Reward Journey
                 </CardTitle>
@@ -421,10 +421,10 @@ export function RewardsMarketplace({
               <MiniInfo icon={Medal} label="Rank" value={rankState.current.name} />
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/85 dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     {nextReward ? `Next package: ${nextReward.name}` : "All visible packages completed"}
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
@@ -437,15 +437,15 @@ export function RewardsMarketplace({
                 </div>
                 <Badge variant={pointsUntilNextReward === 0 ? "success" : "secondary"}>{nextRewardProgress}%</Badge>
               </div>
-              <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-100">
+              <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                 <div className="h-full rounded-full bg-emerald-500" style={{ width: `${nextRewardProgress}%` }} />
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/75">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     {rankState.next ? `Next rank: ${rankState.next.name}` : "Top rank reached"}
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
@@ -456,16 +456,16 @@ export function RewardsMarketplace({
                 </div>
                 <Badge variant="info">{nextRankProgress}%</Badge>
               </div>
-              <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white">
+              <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white dark:bg-slate-950">
                 <div className="h-full rounded-full bg-sky-500" style={{ width: `${nextRankProgress}%` }} />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-slate-200">
+        <Card className="rounded-2xl border-slate-200 dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(17,24,39,0.96))] dark:shadow-[0_24px_60px_-32px_rgba(2,6,23,0.98)]">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-slate-900">
+            <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
               <Sparkles className="size-5 text-emerald-600" />
               Fastest Ways To Earn
             </CardTitle>
@@ -480,12 +480,12 @@ export function RewardsMarketplace({
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.title} className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+                <div key={item.title} className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800 dark:bg-slate-900/70">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                     <Icon className="size-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-900">{item.title}</p>
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title}</p>
                     <p className="text-sm text-slate-500">{item.points}</p>
                   </div>
                 </div>
@@ -495,20 +495,20 @@ export function RewardsMarketplace({
         </Card>
       </div>
       {error ? (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-100">
           <AlertTitle>Reward redemption failed</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
       {message ? (
-        <Alert>
+        <Alert className="dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100">
           <AlertTitle>Reward redeemed</AlertTitle>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ) : null}
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Reward Packages</h2>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Reward Packages</h2>
           <p className="text-sm text-slate-500">Tiered badges, feature unlocks, and limited admin rewards.</p>
         </div>
         <Badge variant="outline">{marketplaceRewards.length} active packages</Badge>
@@ -529,19 +529,19 @@ export function RewardsMarketplace({
           const rank = rewardMetadataValue(reward, "rank");
 
           return (
-            <Card key={reward.id} className={`rounded-2xl border-l-4 ${rewardAccentClasses(reward)}`}>
+            <Card key={reward.id} className={`rounded-2xl border-l-4 dark:border-slate-800/80 dark:shadow-[0_20px_44px_-30px_rgba(2,6,23,0.98)] ${rewardAccentClasses(reward)}`}>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 gap-3">
-                    <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-800 shadow-sm ring-1 ring-slate-200">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-800 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700">
                       <Icon className="size-5" />
                     </div>
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <CardTitle className="text-slate-900">{reward.name}</CardTitle>
+                        <CardTitle className="text-slate-900 dark:text-slate-100">{reward.name}</CardTitle>
                         {tier ? <Badge variant="outline">{tier}</Badge> : null}
                       </div>
-                      <CardDescription>{reward.description ?? "Reward available for redemption."}</CardDescription>
+                      <CardDescription className="dark:text-slate-400">{reward.description ?? "Reward available for redemption."}</CardDescription>
                     </div>
                   </div>
                   <Badge variant={isOwned ? "success" : isPendingRedemption ? "warning" : "info"}>
@@ -551,21 +551,21 @@ export function RewardsMarketplace({
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950/85">
                     <p className="text-xs uppercase tracking-wide text-slate-500">Cost</p>
-                    <p className="text-xl font-semibold text-slate-900">{reward.cost_points} pts</p>
+                    <p className="text-xl font-semibold text-slate-900 dark:text-slate-100">{reward.cost_points} pts</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950/85">
                     <p className="text-xs uppercase tracking-wide text-slate-500">Rank offer</p>
-                    <p className="text-xl font-semibold text-slate-900">{rank ?? "Member"}</p>
+                    <p className="text-xl font-semibold text-slate-900 dark:text-slate-100">{rank ?? "Member"}</p>
                   </div>
                 </div>
-                <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/85">
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <span className="text-slate-500">Qualification</span>
-                    <span className="font-medium text-slate-700">{progress}%</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">{progress}%</span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} />
                   </div>
                   <p className="text-xs text-slate-500">
@@ -581,20 +581,20 @@ export function RewardsMarketplace({
                 <div className="grid gap-3 text-sm sm:grid-cols-2">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-slate-500">Prize / benefit</p>
-                    <p className="mt-1 font-medium text-slate-800">{benefit ?? rewardTypeLabel(reward.reward_type)}</p>
+                    <p className="mt-1 font-medium text-slate-800 dark:text-slate-200">{benefit ?? rewardTypeLabel(reward.reward_type)}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-slate-500">Requirement</p>
-                    <p className="mt-1 font-medium text-slate-800">{requirement ?? `${reward.cost_points} points`}</p>
+                    <p className="mt-1 font-medium text-slate-800 dark:text-slate-200">{requirement ?? `${reward.cost_points} points`}</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-sm text-slate-500">
                   <span>Fulfillment</span>
-                  <span className="font-medium text-slate-700">{reward.fulfillment_mode}</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{reward.fulfillment_mode}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-slate-500">
                   <span>Inventory</span>
-                  <span className="font-medium text-slate-700">{reward.inventory ?? "Unlimited"}</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{reward.inventory ?? "Unlimited"}</span>
                 </div>
                 <Button
                   className="w-full"
@@ -633,14 +633,14 @@ export function RewardsMarketplace({
         })}
       </div>
 
-      <Card className="rounded-2xl">
+      <Card className="rounded-2xl dark:border-slate-800 dark:bg-slate-900/85">
         <CardHeader>
           <CardTitle>Redemption History</CardTitle>
           <CardDescription>Track pending and fulfilled rewards for your account.</CardDescription>
         </CardHeader>
         <CardContent>
           {redemptions.length === 0 ? (
-            <p className="text-sm text-slate-500">No rewards redeemed yet.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">No rewards redeemed yet.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -764,7 +764,7 @@ export function ScoringAdminPanel({
                     {rules.map((rule) => (
                       <TableRow key={rule.id}>
                         <TableCell>
-                          <p className="font-medium text-slate-900">{rule.name}</p>
+                          <p className="font-medium text-slate-900 dark:text-slate-100">{rule.name}</p>
                           <p className="text-xs text-slate-500">{rule.action_key}</p>
                         </TableCell>
                         <TableCell>
@@ -833,7 +833,7 @@ export function ScoringAdminPanel({
                       {sourceRules.map((rule) => (
                         <TableRow key={rule.id}>
                           <TableCell>
-                            <p className="font-medium text-slate-900">{rule.source_name}</p>
+                            <p className="font-medium text-slate-900 dark:text-slate-100">{rule.source_name}</p>
                             <p className="text-xs text-slate-500">{rule.normalized_source}</p>
                           </TableCell>
                           <TableCell>
@@ -902,7 +902,7 @@ export function ScoringAdminPanel({
                   {rewards.map((reward) => (
                     <TableRow key={reward.id}>
                       <TableCell>
-                        <p className="font-medium text-slate-900">{reward.name}</p>
+                        <p className="font-medium text-slate-900 dark:text-slate-100">{reward.name}</p>
                         <p className="text-xs text-slate-500">{rewardTypeLabel(reward.reward_type)}</p>
                       </TableCell>
                       <TableCell>
@@ -949,9 +949,9 @@ export function ScoringAdminPanel({
                 ) : (
                   <div className="space-y-3">
                     {redemptions.map((redemption) => (
-                      <div key={redemption.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div key={redemption.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between dark:border-slate-800 dark:bg-slate-900/70">
                         <div>
-                          <p className="font-medium text-slate-900">{redemption.rewards_catalog?.name ?? redemption.reward_id}</p>
+                          <p className="font-medium text-slate-900 dark:text-slate-100">{redemption.rewards_catalog?.name ?? redemption.reward_id}</p>
                           <p className="text-sm text-slate-500">
                             {redemption.points_spent} pts • {redemption.status} • {formatDateTime(redemption.created_at)}
                           </p>
@@ -1013,7 +1013,7 @@ export function ScoringAdminPanel({
                   {challenges.map((challenge) => (
                     <TableRow key={challenge.id}>
                       <TableCell>
-                        <p className="font-medium text-slate-900">{challenge.name}</p>
+                        <p className="font-medium text-slate-900 dark:text-slate-100">{challenge.name}</p>
                         <p className="text-xs text-slate-500">
                           {challengeMetricLabel(challenge.target_metric)} - {cadenceLabel(challenge.cadence)}
                         </p>

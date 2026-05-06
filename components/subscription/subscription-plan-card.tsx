@@ -39,8 +39,8 @@ export function SubscriptionPlanCard({ plan, isCurrent, canManage, featureItems 
     <Card
       className={
         isCurrent
-          ? "relative overflow-hidden border-teal-300 bg-gradient-to-br from-white via-teal-50/80 to-emerald-50/90 shadow-[0_28px_80px_-52px_rgba(13,148,136,0.65)]"
-          : "relative overflow-hidden border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-56px_rgba(15,23,42,0.45)] transition-all duration-200 hover:-translate-y-1 hover:border-teal-200 hover:shadow-[0_32px_80px_-52px_rgba(13,148,136,0.35)]"
+          ? "relative overflow-hidden border-teal-300 bg-gradient-to-br from-white via-teal-50/80 to-emerald-50/90 shadow-[0_28px_80px_-52px_rgba(13,148,136,0.65)] dark:border-teal-500/30 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(6,78,59,0.22),rgba(15,23,42,0.98))] dark:shadow-[0_28px_80px_-40px_rgba(2,6,23,0.98)]"
+          : "relative overflow-hidden border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-56px_rgba(15,23,42,0.45)] transition-all duration-200 hover:-translate-y-1 hover:border-teal-200 hover:shadow-[0_32px_80px_-52px_rgba(13,148,136,0.35)] dark:border-slate-800/80 dark:bg-slate-950/88 dark:shadow-[0_22px_70px_-56px_rgba(2,6,23,0.9)] dark:hover:border-teal-500/30 dark:hover:shadow-[0_32px_80px_-52px_rgba(20,184,166,0.18)]"
       }
     >
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500" />
@@ -55,7 +55,7 @@ export function SubscriptionPlanCard({ plan, isCurrent, canManage, featureItems 
                 </Badge>
               ) : null}
               {isPopular ? (
-                <Badge variant="outline" className="max-w-full rounded-full border-sky-200 bg-sky-50 px-3 py-1 text-[10px] font-semibold text-sky-700 sm:text-[11px]">
+                <Badge variant="outline" className="max-w-full rounded-full border-sky-200 bg-sky-50 px-3 py-1 text-[10px] font-semibold text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/12 dark:text-sky-200 sm:text-[11px]">
                   <Sparkles className="mr-1 h-3.5 w-3.5" />
                   Growth ready
                 </Badge>
@@ -66,21 +66,21 @@ export function SubscriptionPlanCard({ plan, isCurrent, canManage, featureItems 
                 </Badge>
               ) : null}
             </div>
-            <CardTitle className="text-2xl text-slate-950">{plan.name}</CardTitle>
-            <CardDescription className="mt-2 min-h-[48px] text-sm leading-6 text-slate-600">{plan.description}</CardDescription>
+            <CardTitle className="text-2xl text-slate-950 dark:text-slate-100">{plan.name}</CardTitle>
+            <CardDescription className="mt-2 min-h-[48px] text-sm leading-6 text-slate-600 dark:text-slate-300">{plan.description}</CardDescription>
           </div>
-          <div className="rounded-2xl bg-slate-100 p-2.5 text-slate-500">
+          <div className="rounded-2xl bg-slate-100 p-2.5 text-slate-500 dark:bg-slate-900 dark:text-slate-300">
             <ArrowRight className="h-4 w-4" />
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="rounded-[24px] border border-slate-200/80 bg-white/85 p-4 shadow-sm">
-          <div className="text-4xl font-semibold tracking-tight text-slate-950">
+        <div className="rounded-[24px] border border-slate-200/80 bg-white/85 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/85">
+          <div className="text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
             {isEnterprise ? "Custom" : `$${Number(plan.monthly_price).toFixed(0)}`}
-            <span className="ml-1 text-sm font-normal text-slate-500">/month</span>
+            <span className="ml-1 text-sm font-normal text-slate-500 dark:text-slate-400">/month</span>
           </div>
-          <p className="mt-2 text-xs leading-5 text-slate-500">
+          <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
             {isEnterprise
               ? "Tailored pricing for advanced governance, support, and scale."
               : "Flexible monthly pricing designed for growing CRM operations."}
@@ -94,20 +94,20 @@ export function SubscriptionPlanCard({ plan, isCurrent, canManage, featureItems 
           <PlanLimitRow label="File limit" value={plan.file_size_limit_mb === null ? "Unlimited" : `${plan.file_size_limit_mb} MB`} />
         </div>
 
-        <div className="space-y-2 rounded-[24px] border border-slate-200/80 bg-slate-50/85 p-4 text-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Included features</p>
+        <div className="space-y-2 rounded-[24px] border border-slate-200/80 bg-slate-50/85 p-4 text-sm dark:border-slate-800 dark:bg-slate-900/65">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Included features</p>
           {featureItems.map((item) => (
-            <div key={item} className="flex items-center gap-2 text-slate-600">
-              <CheckCircle2 className="h-4 w-4 text-teal-600" />
+            <div key={item} className="flex items-center gap-2 text-slate-600 dark:text-slate-200">
+              <CheckCircle2 className="h-4 w-4 text-teal-600 dark:text-teal-300" />
               <span>{item}</span>
             </div>
           ))}
         </div>
-        {error ? <p className="rounded-md bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : null}
+        {error ? <p className="rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-200">{error}</p> : null}
         {canManage ? (
           <Button
             type="button"
-            className={isCurrent ? "w-full border-slate-200 bg-white text-slate-500 hover:bg-white" : "w-full bg-slate-950 text-white hover:bg-slate-800"}
+            className={isCurrent ? "w-full border-slate-200 bg-white text-slate-500 hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-900" : "w-full bg-slate-950 text-white hover:bg-slate-800"}
             variant={isCurrent ? "outline" : "default"}
             disabled={isPending || isCurrent}
             onClick={handleSwitch}
@@ -115,7 +115,7 @@ export function SubscriptionPlanCard({ plan, isCurrent, canManage, featureItems 
             {isCurrent ? "Current Plan" : isPending ? "Switching..." : "Switch Plan"}
           </Button>
         ) : (
-          <p className="text-sm leading-6 text-slate-500">Manual billing changes are handled by your workspace administrator.</p>
+          <p className="text-sm leading-6 text-slate-500 dark:text-slate-300">Manual billing changes are handled by your workspace administrator.</p>
         )}
       </CardContent>
     </Card>
@@ -124,9 +124,9 @@ export function SubscriptionPlanCard({ plan, isCurrent, canManage, featureItems 
 
 function PlanLimitRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-3">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-semibold text-slate-900">{value}</span>
+    <div className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-3 dark:border-slate-800 dark:bg-slate-900/70">
+      <span className="text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="font-semibold text-slate-900 dark:text-slate-100">{value}</span>
     </div>
   );
 }

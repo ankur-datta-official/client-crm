@@ -104,10 +104,13 @@ export function CompanyTable({ companies, industries, categories, stages, teamMe
       ) : (
         <div className="space-y-3 md:hidden">
           {visibleCompanies.map((company) => (
-            <div key={company.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+            <div
+              key={company.id}
+              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.9)]"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{company.name}</p>
+                  <p className="truncate font-medium text-slate-900 dark:text-slate-50">{company.name}</p>
                   <p className="mt-1 truncate text-sm text-muted-foreground">
                     Primary: {company.primary_contact?.name ?? "No primary contact"}
                   </p>
@@ -137,7 +140,7 @@ export function CompanyTable({ companies, industries, categories, stages, teamMe
 
       {companies.length > 0 ? (
         <div className="space-y-3">
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
               Showing {rangeStart}-{rangeEnd} of {companies.length} companies
             </p>
@@ -145,7 +148,7 @@ export function CompanyTable({ companies, industries, categories, stages, teamMe
               <span>Rows per page</span>
               <select
                 aria-label="Rows per page"
-                className="rounded-full border border-input bg-background px-3 py-1.5 text-foreground outline-none transition focus:border-ring"
+                className="rounded-full border border-input bg-background px-3 py-1.5 text-foreground outline-none transition focus:border-ring dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark]"
                 value={String(resolvedPageSize)}
                 onChange={(event) => updateListParams({ pageSize: event.target.value, page: null })}
               >
@@ -176,8 +179,8 @@ export function CompanyTable({ companies, industries, categories, stages, teamMe
                 </thead>
                 <tbody>
                   {visibleCompanies.map((company) => (
-                    <tr key={company.id} className="border-b border-border/80 last:border-0 transition-colors hover:bg-slate-50/80">
-                      <td className="crm-table-cell truncate font-medium text-slate-900">{company.name}</td>
+                    <tr key={company.id} className="border-b border-border/80 last:border-0 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-900/90">
+                      <td className="crm-table-cell truncate font-medium text-slate-900 dark:text-slate-50">{company.name}</td>
                       <td className="crm-table-cell truncate">{company.primary_contact?.name ?? "-"}</td>
                       <td className="crm-table-cell truncate">{company.industries?.name ?? "-"}</td>
                       <td className="crm-table-cell truncate">
@@ -211,7 +214,7 @@ export function CompanyTable({ companies, industries, categories, stages, teamMe
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
               Page {currentPage} of {totalPages}
             </p>

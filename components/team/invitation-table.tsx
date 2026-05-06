@@ -54,7 +54,7 @@ export function InvitationTable({ invitations, canManage }: InvitationTableProps
     <div className="space-y-4">
       <div className="grid gap-3 md:hidden">
         {invitations.map((invitation) => (
-          <div key={invitation.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+          <div key={invitation.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.9)]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate font-medium">{invitation.email}</p>

@@ -38,6 +38,14 @@ const trendToneClasses = {
   slate: "text-slate-600 dark:text-slate-300",
 };
 
+const toneSurfaceClasses = {
+  teal: "dark:border-teal-500/20 dark:bg-[radial-gradient(circle_at_top_right,rgba(20,184,166,0.12),transparent_30%),linear-gradient(180deg,rgba(17,24,39,0.98)_0%,rgba(15,23,42,0.96)_100%)]",
+  amber: "dark:border-amber-500/20 dark:bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_30%),linear-gradient(180deg,rgba(17,24,39,0.98)_0%,rgba(15,23,42,0.96)_100%)]",
+  rose: "dark:border-rose-500/20 dark:bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.1),transparent_30%),linear-gradient(180deg,rgba(17,24,39,0.98)_0%,rgba(15,23,42,0.96)_100%)]",
+  blue: "dark:border-sky-500/20 dark:bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.12),transparent_30%),linear-gradient(180deg,rgba(17,24,39,0.98)_0%,rgba(15,23,42,0.96)_100%)]",
+  slate: "dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(17,24,39,0.98)_0%,rgba(15,23,42,0.96)_100%)]",
+};
+
 export function StatCard({
   title,
   value,
@@ -63,7 +71,8 @@ export function StatCard({
     >
       <Card
         className={cn(
-          "rounded-[24px] border border-slate-200/80 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all duration-200 dark:border-slate-800/80 dark:bg-slate-950/88 dark:shadow-[0_10px_24px_rgba(2,6,23,0.45)]",
+          "rounded-[24px] border border-slate-200/80 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all duration-200 dark:shadow-[0_12px_30px_-18px_rgba(2,6,23,0.9)]",
+          toneSurfaceClasses[tone],
           href && "hover:border-slate-300 hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)] hover:bg-slate-50/30 dark:hover:border-slate-700 dark:hover:bg-slate-900/80",
           className,
         )}

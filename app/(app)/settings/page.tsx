@@ -63,7 +63,7 @@ export default async function SettingsPage() {
         title="Settings"
         description="Manage the basic things your team needs to use the CRM smoothly."
         actions={(
-          <Button asChild variant="outline" className="rounded-xl border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50">
+          <Button asChild variant="outline" className="rounded-xl border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-900">
             <Link href="/settings/profile">
               View Profile
               <ArrowRight className="h-4 w-4" />
@@ -77,7 +77,7 @@ export default async function SettingsPage() {
       </GuidanceStrip>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Card className="border-teal-200/80 bg-gradient-to-br from-white via-teal-50/40 to-emerald-50/60 shadow-[0_24px_80px_-56px_rgba(13,148,136,0.45)] dark:border-teal-500/20 dark:from-slate-950 dark:via-teal-950/20 dark:to-emerald-950/20 dark:shadow-[0_24px_80px_-56px_rgba(13,148,136,0.3)]">
+        <Card className="border-teal-200/80 bg-gradient-to-br from-white via-teal-50/40 to-emerald-50/60 shadow-[0_24px_80px_-56px_rgba(13,148,136,0.45)] dark:border-teal-500/20 dark:bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(15,23,42,0.95),rgba(6,78,59,0.18))] dark:shadow-[0_28px_80px_-48px_rgba(2,6,23,0.98)]">
           <CardContent className="p-6 lg:p-8">
             <div className="space-y-6">
               <div className="flex flex-wrap items-center gap-2">
@@ -90,14 +90,14 @@ export default async function SettingsPage() {
               </div>
 
               <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/90 bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-teal-700 shadow-sm dark:border-slate-800 dark:bg-slate-900/85 dark:text-teal-300">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/90 bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-teal-700 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/95 dark:text-teal-200 dark:shadow-[0_12px_24px_-18px_rgba(15,23,42,0.95)]">
                   <Sparkles className="h-3.5 w-3.5" />
                   Easy for new users
                 </div>
                 <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
                   Set up your CRM in a simple order, without guessing what to do next.
                 </h2>
-                <p className="max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-400">
+                <p className="max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300">
                   Each section below has one clear job. Finish them one by one and your workspace will be ready for daily use.
                 </p>
               </div>
@@ -123,33 +123,33 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="h-fit border-slate-200/80 bg-white shadow-[0_20px_70px_-56px_rgba(15,23,42,0.45)] dark:border-slate-800/80 dark:bg-slate-950/85 dark:shadow-[0_20px_70px_-56px_rgba(2,6,23,0.85)]">
+        <Card className="h-fit border-slate-200/80 bg-white shadow-[0_20px_70px_-56px_rgba(15,23,42,0.45)] dark:border-slate-800/80 dark:bg-[linear-gradient(180deg,rgba(2,6,23,0.96),rgba(15,23,42,0.92))] dark:shadow-[0_20px_70px_-56px_rgba(2,6,23,0.92)]">
           <CardHeader className="pb-4">
             <div className="space-y-3">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
                   <CardTitle className="text-xl">What to do next</CardTitle>
-                  <CardDescription>Follow this small checklist if you are setting things up for the first time.</CardDescription>
+                  <CardDescription className="dark:text-slate-300">Follow this small checklist if you are setting things up for the first time.</CardDescription>
                 </div>
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-right dark:border-emerald-500/20 dark:bg-emerald-500/10">
-                  <p className="text-lg font-semibold text-emerald-700">{completedCount}/{setupChecklist.length}</p>
-                  <p className="text-xs font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-300">Done</p>
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-right dark:border-emerald-400/35 dark:bg-emerald-950 dark:shadow-[0_12px_24px_-18px_rgba(16,185,129,0.35)]">
+                  <p className="text-lg font-semibold text-emerald-700 dark:text-emerald-200">{completedCount}/{setupChecklist.length}</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-100">Done</p>
                 </div>
               </div>
-              <div className="rounded-2xl border border-teal-100 bg-teal-50/80 p-3 text-sm text-teal-800 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-teal-200">
+              <div className="rounded-2xl border border-teal-100 bg-teal-50/80 p-3 text-sm text-teal-800 dark:border-teal-400/35 dark:bg-teal-950 dark:text-white dark:shadow-[0_12px_24px_-18px_rgba(20,184,166,0.35)]">
                 <span className="font-semibold">Next focus:</span> {firstPending}
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {setupChecklist.map((item, index) => (
-              <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/70">
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-500 shadow-sm dark:bg-slate-950 dark:text-slate-400">
-                  {item.done ? <CheckCircle2 className="size-4 text-emerald-600" /> : index + 1}
+              <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-700/80 dark:bg-slate-900/85">
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-500 shadow-sm dark:bg-slate-950 dark:text-slate-300">
+                  {item.done ? <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-300" /> : index + 1}
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.label}</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{item.detail}</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-300">{item.detail}</p>
                 </div>
               </div>
             ))}
@@ -239,7 +239,7 @@ function SettingsSection({
     <section className="space-y-5">
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
-        <p className="max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-400">{description}</p>
+        <p className="max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">{description}</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {children}
@@ -258,10 +258,10 @@ function QuickStartCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/90 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">{step}</p>
+    <div className="rounded-2xl border border-white/90 bg-white/90 p-4 shadow-sm dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] dark:shadow-[0_18px_36px_-24px_rgba(2,6,23,0.95)]">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700 dark:text-teal-200">{step}</p>
       <h3 className="mt-3 text-lg font-semibold text-slate-950 dark:text-slate-100">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">{detail}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{detail}</p>
     </div>
   );
 }

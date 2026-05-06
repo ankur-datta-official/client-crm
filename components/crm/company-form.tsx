@@ -181,14 +181,22 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
           <textarea
             id="notes"
             {...form.register("notes")}
-            className="min-h-32 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm"
+            className="min-h-32 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-slate-800 dark:bg-slate-950/80 dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]"
             placeholder="Capture relationship context, requirements, risks, and decision notes."
           />
         </div>
       </FormSection>
 
-      {serverError ? <p className="rounded-md bg-rose-50 p-3 text-sm text-rose-700">{serverError}</p> : null}
-      {successMessage ? <p className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">{successMessage}</p> : null}
+      {serverError ? (
+        <p className="rounded-xl border border-rose-200/70 bg-rose-50/90 p-3 text-sm text-rose-700 shadow-sm dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200">
+          {serverError}
+        </p>
+      ) : null}
+      {successMessage ? (
+        <p className="rounded-xl border border-emerald-200/70 bg-emerald-50/90 p-3 text-sm text-emerald-700 shadow-sm dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+          {successMessage}
+        </p>
+      ) : null}
       <FormActionBar>
         <Button asChild variant="outline">
           <Link href={company ? `/companies/${company.id}` : "/companies"}>Cancel</Link>
@@ -235,7 +243,10 @@ function SelectField({
         <Label>{label}{props.required ? <span className="text-destructive"> *</span> : null}</Label>
         {helper}
       </div>
-      <select {...props} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm shadow-sm">
+      <select
+        {...props}
+        className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/30 dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]"
+      >
         {children}
       </select>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

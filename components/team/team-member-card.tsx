@@ -35,7 +35,7 @@ export function TeamMemberCard({
   const fallbackRoleId = member.role_id ?? roles.find((role) => role.slug === "viewer")?.id ?? roles[0]?.id;
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900/85">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-medium">{getDisplayName(member.full_name, member.email)}</p>

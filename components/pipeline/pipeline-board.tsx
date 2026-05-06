@@ -349,7 +349,7 @@ export function PipelineBoard({
             />
           </div>
           <details>
-            <summary className="cursor-pointer list-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+            <summary className="cursor-pointer list-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-200">
               More filters
             </summary>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -412,8 +412,8 @@ export function PipelineBoard({
           className={cn(
             "rounded-lg border px-4 py-3 text-sm",
             feedback.tone === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-rose-200 bg-rose-50 text-rose-700",
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200"
+              : "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200",
           )}
         >
           {feedback.message}
@@ -438,7 +438,7 @@ export function PipelineBoard({
         />
       ) : null}
 
-      <section className="overflow-hidden rounded-lg border bg-white">
+      <section className="overflow-hidden rounded-lg border bg-white dark:border-slate-800 dark:bg-slate-950/85">
         <div className="overflow-x-auto">
           <div className="flex min-h-[32rem] min-w-max items-start gap-4 p-4">
             {stageGroups.map((group) => (
@@ -476,7 +476,7 @@ export function PipelineBoard({
                     }}
                   >
                     {group.companies.length === 0 ? (
-                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground dark:border-slate-800 dark:bg-slate-950/40">
                         No deals in this stage yet. Move a deal here from another column or add a new lead to start the process.
                       </div>
                     ) : (
@@ -529,55 +529,55 @@ function SummaryCard({
 }) {
   const toneStyles = {
     emerald: {
-      card: "border-teal-200/80 bg-gradient-to-br from-white via-teal-50/70 to-emerald-50/90",
-      glow: "bg-teal-400/10",
-      iconWrap: "border-teal-200/80 bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-teal-200/60",
-      value: "text-slate-950",
+      card: "border-teal-200/80 bg-gradient-to-br from-white via-teal-50/70 to-emerald-50/90 dark:border-teal-500/20 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(6,78,59,0.22))]",
+      glow: "bg-teal-400/10 dark:bg-teal-400/12",
+      iconWrap: "border-teal-200/80 bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-teal-200/60 dark:border-teal-400/20 dark:shadow-teal-950/40",
+      value: "text-slate-950 dark:text-slate-50",
       accent: "bg-gradient-to-r from-teal-500 to-emerald-500",
-      chip: "bg-teal-100 text-teal-700",
+      chip: "bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-200",
     },
     sky: {
-      card: "border-cyan-200/80 bg-gradient-to-br from-white via-sky-50/80 to-cyan-50/90",
-      glow: "bg-cyan-400/10",
-      iconWrap: "border-cyan-200/80 bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-cyan-200/60",
-      value: "text-slate-950",
+      card: "border-cyan-200/80 bg-gradient-to-br from-white via-sky-50/80 to-cyan-50/90 dark:border-cyan-500/20 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(8,47,73,0.26))]",
+      glow: "bg-cyan-400/10 dark:bg-cyan-400/12",
+      iconWrap: "border-cyan-200/80 bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-cyan-200/60 dark:border-cyan-400/20 dark:shadow-cyan-950/40",
+      value: "text-slate-950 dark:text-slate-50",
       accent: "bg-gradient-to-r from-sky-500 to-cyan-500",
-      chip: "bg-sky-100 text-sky-700",
+      chip: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200",
     },
     amber: {
-      card: "border-orange-200/80 bg-gradient-to-br from-white via-amber-50/80 to-orange-50/90",
-      glow: "bg-amber-400/10",
-      iconWrap: "border-orange-200/80 bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-amber-200/60",
-      value: "text-slate-950",
+      card: "border-orange-200/80 bg-gradient-to-br from-white via-amber-50/80 to-orange-50/90 dark:border-amber-500/20 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(120,53,15,0.2))]",
+      glow: "bg-amber-400/10 dark:bg-amber-400/12",
+      iconWrap: "border-orange-200/80 bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-amber-200/60 dark:border-amber-400/20 dark:shadow-amber-950/40",
+      value: "text-slate-950 dark:text-slate-50",
       accent: "bg-gradient-to-r from-amber-500 to-orange-500",
-      chip: "bg-amber-100 text-amber-700",
+      chip: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
     },
     violet: {
-      card: "border-fuchsia-200/80 bg-gradient-to-br from-white via-violet-50/80 to-fuchsia-50/90",
-      glow: "bg-violet-400/10",
-      iconWrap: "border-fuchsia-200/80 bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-violet-200/60",
-      value: "text-slate-950",
+      card: "border-fuchsia-200/80 bg-gradient-to-br from-white via-violet-50/80 to-fuchsia-50/90 dark:border-violet-500/20 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(91,33,182,0.2))]",
+      glow: "bg-violet-400/10 dark:bg-violet-400/12",
+      iconWrap: "border-fuchsia-200/80 bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-violet-200/60 dark:border-violet-400/20 dark:shadow-violet-950/40",
+      value: "text-slate-950 dark:text-slate-50",
       accent: "bg-gradient-to-r from-violet-500 to-fuchsia-500",
-      chip: "bg-violet-100 text-violet-700",
+      chip: "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-200",
     },
     rose: {
-      card: "border-pink-200/80 bg-gradient-to-br from-white via-rose-50/80 to-pink-50/90",
-      glow: "bg-rose-400/10",
-      iconWrap: "border-pink-200/80 bg-gradient-to-br from-rose-500 to-pink-500 text-white shadow-rose-200/60",
-      value: "text-slate-950",
+      card: "border-pink-200/80 bg-gradient-to-br from-white via-rose-50/80 to-pink-50/90 dark:border-rose-500/20 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(136,19,55,0.2))]",
+      glow: "bg-rose-400/10 dark:bg-rose-400/12",
+      iconWrap: "border-pink-200/80 bg-gradient-to-br from-rose-500 to-pink-500 text-white shadow-rose-200/60 dark:border-rose-400/20 dark:shadow-rose-950/40",
+      value: "text-slate-950 dark:text-slate-50",
       accent: "bg-gradient-to-r from-rose-500 to-pink-500",
-      chip: "bg-rose-100 text-rose-700",
+      chip: "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200",
     },
   }[tone];
 
   return (
-    <Card className={cn("group relative overflow-hidden border shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl", toneStyles.card)}>
+    <Card className={cn("group relative overflow-hidden border shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:shadow-[0_24px_60px_-34px_rgba(2,6,23,0.98)]", toneStyles.card)}>
       <div className={cn("absolute inset-x-0 top-0 h-1.5", toneStyles.accent)} />
       <div className={cn("absolute -right-8 -top-10 size-28 rounded-full blur-3xl", toneStyles.glow)} />
       <CardContent className="relative flex min-h-[182px] flex-col justify-between gap-5 p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-600">{title}</p>
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{title}</p>
           </div>
           <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-2xl border shadow-lg", toneStyles.iconWrap)}>
             {icon}
@@ -587,13 +587,13 @@ function SummaryCard({
           <div className="flex items-end gap-2">
             <p className={cn("text-4xl font-bold tracking-tight", toneStyles.value)}>{value}</p>
           </div>
-          <p className="max-w-[20ch] text-sm leading-6 text-slate-600">{description}</p>
+          <p className="max-w-[20ch] text-sm leading-6 text-slate-600 dark:text-slate-300">{description}</p>
         </div>
         <div className="flex items-center justify-between">
           <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", toneStyles.chip)}>
             Live pipeline
           </span>
-          <span className="text-[11px] font-medium text-slate-500">Updated now</span>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Updated now</span>
         </div>
       </CardContent>
     </Card>
@@ -703,8 +703,8 @@ function PipelineColumn({
   return (
     <div
       className={cn(
-        "flex h-[calc(100vh-17rem)] min-h-[38rem] w-[19.5rem] shrink-0 flex-col rounded-2xl border bg-slate-50/70 shadow-sm",
-        isHovering && canDrop && "border-primary bg-primary/5",
+        "flex h-[calc(100vh-17rem)] min-h-[38rem] w-[19.5rem] shrink-0 flex-col rounded-2xl border bg-slate-50/70 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.9)]",
+        isHovering && canDrop && "border-primary bg-primary/5 dark:bg-primary/10",
       )}
       onDragOver={(event) => {
         if (!canDrop) {
@@ -722,25 +722,25 @@ function PipelineColumn({
         onDrop();
       }}
     >
-      <div className="border-b bg-slate-50/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-slate-50/80">
+      <div className="border-b bg-slate-50/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-slate-50/80 dark:border-slate-800 dark:bg-slate-900/95 dark:supports-[backdrop-filter]:bg-slate-900/85">
         <div className="flex items-center gap-3">
           <span
             className="size-3 rounded-full"
             style={{ backgroundColor: stage.id === "unassigned" ? "#94a3b8" : stage.color }}
           />
           <div className="min-w-0">
-            <h2 className="truncate font-semibold">{stage.name}</h2>
+            <h2 className="truncate font-semibold text-slate-900 dark:text-slate-100">{stage.name}</h2>
             <p className="text-xs text-muted-foreground">{probabilityLabel}</p>
           </div>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2.5 text-sm">
-          <div className="rounded-xl border bg-white px-3 py-2.5">
+          <div className="rounded-xl border bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/80">
             <p className="text-xs text-muted-foreground">Deals</p>
-            <p className="mt-1 font-semibold">{companies.length}</p>
+            <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{companies.length}</p>
           </div>
-          <div className="rounded-xl border bg-white px-3 py-2.5">
+          <div className="rounded-xl border bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/80">
             <p className="text-xs text-muted-foreground">Value</p>
-            <p className="mt-1 font-semibold">{formatCurrency(totalEstimatedValue)}</p>
+            <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(totalEstimatedValue)}</p>
           </div>
         </div>
       </div>
@@ -798,7 +798,7 @@ function PipelineDealCard({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        "cursor-grab overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md active:cursor-grabbing",
+        "cursor-grab overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md active:cursor-grabbing dark:border-slate-800/90 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(17,24,39,0.96))] dark:shadow-[0_18px_36px_-26px_rgba(2,6,23,0.95)] dark:hover:border-slate-700 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1),rgba(30,41,59,0.96))]",
         isDragging && "opacity-60",
       )}
     >
@@ -823,7 +823,7 @@ function PipelineDealCard({
           <div className="flex flex-wrap gap-2">
             <RatingBadge rating={company.success_rating} />
             <LeadTemperatureBadge temperature={company.lead_temperature} />
-            <span className="rounded-md border px-2 py-1 text-[11px] font-medium capitalize">
+            <span className="rounded-md border px-2 py-1 text-[11px] font-medium capitalize dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200">
               {company.priority} priority
             </span>
           </div>
@@ -848,7 +848,7 @@ function PipelineDealCard({
           />
         </dl>
 
-        <div className="flex items-center gap-2 border-t pt-3">
+        <div className="flex items-center gap-2 border-t pt-3 dark:border-slate-800">
           <Button asChild size="sm" variant="outline">
             <Link href={`/companies/${company.id}`}>Open</Link>
           </Button>
@@ -890,12 +890,12 @@ function DetailRow({
   value: string;
 }) {
   return (
-    <div className="min-w-0 rounded-xl border bg-white/90 px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+    <div className="min-w-0 rounded-xl border bg-white/90 px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950/85 dark:shadow-[0_12px_24px_-18px_rgba(2,6,23,0.95)]">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 shrink-0">{icon}</span>
         <div className="min-w-0 flex-1">
           <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/90">{label}</dt>
-          <dd className="mt-1 break-words text-[13px] font-medium leading-5 text-slate-800">{value}</dd>
+          <dd className="mt-1 break-words text-[13px] font-medium leading-5 text-slate-800 dark:text-slate-200">{value}</dd>
         </div>
       </div>
     </div>

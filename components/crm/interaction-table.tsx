@@ -94,9 +94,9 @@ export function InteractionTable({ interactions, companies, contacts }: { intera
       ) : (
         <div className="space-y-3 md:hidden">
           {visibleInteractions.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+            <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.9)]">
               <div className="flex items-start justify-between gap-3">
-                <p className="truncate font-medium">{item.companies?.name}</p>
+                <p className="truncate font-medium text-slate-900 dark:text-slate-50">{item.companies?.name}</p>
                 <InteractionTypeBadge type={item.interaction_type} />
               </div>
               <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{item.discussion_details}</p>
@@ -123,7 +123,7 @@ export function InteractionTable({ interactions, companies, contacts }: { intera
 
       {interactions.length > 0 ? (
         <div className="space-y-3">
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
               Showing {rangeStart}-{rangeEnd} of {interactions.length} meetings
             </p>
@@ -131,7 +131,7 @@ export function InteractionTable({ interactions, companies, contacts }: { intera
               <span>Rows per page</span>
               <select
                 aria-label="Rows per page"
-                className="rounded-full border border-input bg-background px-3 py-1.5 text-foreground outline-none transition focus:border-ring"
+                className="rounded-full border border-input bg-background px-3 py-1.5 text-foreground outline-none transition focus:border-ring dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark]"
                 value={String(resolvedPageSize)}
                 onChange={(event) => updateListParams({ pageSize: event.target.value, page: null })}
               >
@@ -162,9 +162,9 @@ export function InteractionTable({ interactions, companies, contacts }: { intera
                 </thead>
                 <tbody>
                   {visibleInteractions.map((item) => (
-                    <tr key={item.id} className="border-b border-border/80 last:border-0 transition-colors hover:bg-slate-50/80">
+                    <tr key={item.id} className="border-b border-border/80 last:border-0 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-900/90">
                       <td className="crm-table-cell truncate">{new Date(item.meeting_datetime).toLocaleDateString()}</td>
-                      <td className="crm-table-cell truncate">{item.companies?.name ?? "-"}</td>
+                      <td className="crm-table-cell truncate font-medium text-slate-900 dark:text-slate-50">{item.companies?.name ?? "-"}</td>
                       <td className="crm-table-cell truncate">{item.contact_persons?.name ?? "-"}</td>
                       <td className="crm-table-cell"><InteractionTypeBadge type={item.interaction_type} /></td>
                       <td className="crm-table-cell truncate">{item.discussion_details}</td>
@@ -192,7 +192,7 @@ export function InteractionTable({ interactions, companies, contacts }: { intera
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
               Page {currentPage} of {totalPages}
             </p>

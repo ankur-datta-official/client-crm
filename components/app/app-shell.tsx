@@ -16,14 +16,6 @@ export type AppShellProps = {
   walletSummary: WalletSummary | null;
 };
 
-function getInitialSidebarState() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return window.localStorage.getItem("crm-sidebar-collapsed") === "true";
-}
-
 export function AppShell({ 
   children, 
   profile, 
@@ -33,14 +25,20 @@ export function AppShell({
   walletSummary
 }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarState);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.localStorage.getItem("crm-sidebar-collapsed") === "true";
+  });
 
   useEffect(() => {
     window.localStorage.setItem("crm-sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
   return (
-    <div className="min-h-screen bg-background md:flex md:h-screen md:overflow-hidden">
+    <div className="min-h-dvh bg-background md:flex md:h-screen md:overflow-hidden">
       <AppSidebar
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
@@ -57,7 +55,7 @@ export function AppShell({
           unreadNotificationCount={unreadNotificationCount}
           walletSummary={walletSummary}
         />
-        <main className="mx-auto w-full max-w-[1500px] min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 md:px-6 lg:px-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1500px] min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:py-6 md:overflow-y-auto md:px-6 lg:px-8">{children}</main>
       </div>
     </div>
   );

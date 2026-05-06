@@ -32,7 +32,7 @@ export function DocumentPreviewCard({
   const canPreview = Boolean(signedViewUrl) && (isImage || isPdf);
 
   return (
-    <Card className="overflow-hidden rounded-2xl border border-slate-200 shadow-soft">
+    <Card className="overflow-hidden rounded-2xl border border-slate-200 shadow-soft dark:border-slate-800 dark:bg-slate-900/85">
       <CardHeader>
         <CardTitle>File Preview</CardTitle>
         <CardDescription>
@@ -44,7 +44,7 @@ export function DocumentPreviewCard({
       <CardContent>
         {canPreview && signedViewUrl ? (
           isImage ? (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
               <Image
                 src={signedViewUrl}
                 alt={document.title}
@@ -56,7 +56,7 @@ export function DocumentPreviewCard({
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
                 <iframe
                   src={signedViewUrl}
                   title={`${document.title} preview`}
@@ -74,7 +74,7 @@ export function DocumentPreviewCard({
             <div className="mb-4 rounded-full bg-white p-3 text-slate-600 shadow-sm">
               {isImage ? <ImageIcon className="h-6 w-6" /> : isPdf ? <FileText className="h-6 w-6" /> : <FileIcon className="h-6 w-6" />}
             </div>
-            <p className="text-base font-semibold text-slate-900">{document.file_name}</p>
+            <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{document.file_name}</p>
             <p className="mt-2 text-sm text-muted-foreground">
               Preview not available for this file type.
             </p>

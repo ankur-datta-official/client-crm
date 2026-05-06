@@ -80,7 +80,7 @@ export default async function TeamPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {managedActivity.map((item) => (
-                  <div key={item.id} className="rounded-xl border bg-white px-4 py-3">
+                  <div key={item.id} className="rounded-xl border bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900/85">
                     <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                       <div className="font-medium text-foreground">{item.actor_name}</div>
                       <div className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString()}</div>
@@ -105,7 +105,7 @@ export default async function TeamPage() {
 
         <TabsContent value="invitations" className="space-y-4">
           {!canInvite ? (
-            <div className="rounded-lg border bg-white p-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border bg-white p-4 text-sm text-muted-foreground dark:border-slate-800 dark:bg-slate-900/85">
               You can review invitation history here, but you do not have permission to create or manage invites.
             </div>
           ) : null}
@@ -114,7 +114,7 @@ export default async function TeamPage() {
 
         <TabsContent value="roles" className="space-y-4">
           {!canManageRoles ? (
-            <div className="rounded-lg border bg-white p-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border bg-white p-4 text-sm text-muted-foreground dark:border-slate-800 dark:bg-slate-900/85">
               You can review roles and permissions here. Editing is limited to users with settings management access.
             </div>
           ) : null}

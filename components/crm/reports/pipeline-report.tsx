@@ -214,9 +214,9 @@ export function PipelineReport({ data }: { data: PipelineReportData }) {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-slate-50 px-3 py-2 text-right ring-1 ring-slate-200">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-800">{value}</p>
+    <div className="rounded-2xl bg-slate-50 px-3 py-2 text-right ring-1 ring-slate-200 dark:bg-slate-900/85 dark:ring-slate-700">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">{value}</p>
     </div>
   );
 }

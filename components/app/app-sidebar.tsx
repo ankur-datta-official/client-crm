@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Building2, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { sidebarItems } from "@/config/navigation";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Button } from "@/components/ui/button";
 import type { Profile } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
@@ -178,15 +179,27 @@ export function AppSidebar({
         <div className={cn("shrink-0 border-t border-slate-200/80 bg-white/80 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-950/75", collapsed ? "px-2 py-3" : "px-3 py-3")}>
           {collapsed ? (
             <div className="flex justify-center">
-              <div className="relative flex size-11 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#0f172a,#334155)] text-sm font-semibold text-white shadow-sm">
-                {(profile?.full_name?.trim()?.[0] ?? profile?.email?.[0] ?? "U").toUpperCase()}
+              <div className="relative">
+                <UserAvatar
+                  imageUrl={profile?.avatar_url}
+                  fullName={profile?.full_name}
+                  email={profile?.email}
+                  className="size-11 rounded-2xl bg-[linear-gradient(145deg,#0f172a,#334155)] text-white shadow-sm"
+                  initialsClassName="text-sm font-semibold"
+                />
                 <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
               </div>
             </div>
           ) : (
             <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-[0_8px_24px_rgba(2,6,23,0.35)]">
-              <div className="relative flex size-10 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#0f172a,#334155)] text-sm font-semibold text-white shadow-sm">
-                {(profile?.full_name?.trim()?.[0] ?? profile?.email?.[0] ?? "U").toUpperCase()}
+              <div className="relative">
+                <UserAvatar
+                  imageUrl={profile?.avatar_url}
+                  fullName={profile?.full_name}
+                  email={profile?.email}
+                  className="size-10 rounded-2xl bg-[linear-gradient(145deg,#0f172a,#334155)] text-white shadow-sm"
+                  initialsClassName="text-sm font-semibold"
+                />
                 <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
               </div>
               <div className="min-w-0 flex-1">

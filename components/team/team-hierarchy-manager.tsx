@@ -22,13 +22,13 @@ export function TeamHierarchyManager({ members, canManage }: TeamHierarchyManage
   }
 
   return (
-    <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/5 via-white to-emerald-50/70 p-5 shadow-sm">
+    <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/5 via-white to-emerald-50/70 p-5 shadow-sm dark:border-teal-500/20 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(6,78,59,0.22),rgba(15,23,42,0.98))] dark:shadow-[0_20px_44px_-28px_rgba(2,6,23,0.98)]">
       <div className="flex items-start gap-3">
-        <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary dark:bg-teal-500/15 dark:text-teal-300">
           <Users2 className="h-5 w-5" />
         </div>
         <div className="space-y-1">
-          <h3 className="text-base font-semibold">Senior to junior reporting line</h3>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Senior to junior reporting line</h3>
           <p className="text-sm text-muted-foreground">
             Set who each team member reports to. Senior users can then assign work to their direct juniors and receive activity updates.
           </p>
@@ -43,7 +43,7 @@ export function TeamHierarchyManager({ members, canManage }: TeamHierarchyManage
 
       <div className="mt-5 grid gap-3">
         {activeMembers.map((member) => (
-          <div key={member.id} className="grid gap-3 rounded-xl border bg-white/90 p-4 md:grid-cols-[1.2fr_0.8fr] md:items-center">
+          <div key={member.id} className="grid gap-3 rounded-xl border bg-white/90 p-4 md:grid-cols-[1.2fr_0.8fr] md:items-center dark:border-slate-800 dark:bg-slate-900/85">
             <div>
               <div className="font-medium text-foreground">{member.full_name ?? member.email}</div>
               <div className="text-sm text-muted-foreground">
@@ -53,7 +53,7 @@ export function TeamHierarchyManager({ members, canManage }: TeamHierarchyManage
             <label className="space-y-2">
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Reports to</span>
               <select
-                className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring"
+                className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark]"
                 value={member.manager_user_id ?? ""}
                 disabled={isPending}
                 onChange={(event) => {

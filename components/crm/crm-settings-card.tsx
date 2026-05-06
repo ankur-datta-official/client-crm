@@ -30,6 +30,7 @@ export function CrmSettingsCard({
     <Card
       className={cn(
         "group relative h-full overflow-hidden border-slate-200/80 bg-white/95 shadow-[0_20px_70px_-56px_rgba(15,23,42,0.45)] transition-all duration-200 hover:-translate-y-1 hover:border-teal-200 hover:shadow-[0_28px_80px_-52px_rgba(13,148,136,0.28)] dark:border-slate-800/80 dark:bg-slate-950/80 dark:shadow-[0_20px_70px_-56px_rgba(2,6,23,0.9)] dark:hover:border-teal-500/30 dark:hover:shadow-[0_28px_80px_-52px_rgba(20,184,166,0.18)]",
+        "group relative h-full overflow-hidden border-slate-200/80 bg-white/95 shadow-[0_20px_70px_-56px_rgba(15,23,42,0.45)] transition-all duration-200 hover:-translate-y-1 hover:border-teal-200 hover:shadow-[0_28px_80px_-52px_rgba(13,148,136,0.28)] dark:border-slate-800/80 dark:bg-[linear-gradient(180deg,rgba(2,6,23,0.95),rgba(15,23,42,0.92))] dark:shadow-[0_20px_70px_-56px_rgba(2,6,23,0.9)] dark:hover:border-teal-500/30 dark:hover:shadow-[0_28px_80px_-52px_rgba(20,184,166,0.18)]",
         disabled && "hover:translate-y-0 hover:shadow-soft",
       )}
     >
@@ -44,7 +45,7 @@ export function CrmSettingsCard({
               variant={disabled ? "outline" : "secondary"}
               className={cn(
                 "max-w-full shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold",
-                !disabled && "border-teal-100 bg-teal-50 text-teal-700",
+                !disabled && "border-teal-100 bg-teal-50 text-teal-700 dark:border-teal-400/35 dark:bg-teal-950 dark:text-white dark:shadow-[0_12px_24px_-18px_rgba(20,184,166,0.4)]",
               )}
             >
               {badge}
@@ -56,10 +57,10 @@ export function CrmSettingsCard({
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
             <p className="text-sm leading-6 text-slate-600 dark:text-slate-400">{description}</p>
           </div>
-          {meta ? <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">{meta}</p> : null}
+          {meta ? <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400 dark:text-slate-300">{meta}</p> : null}
         </div>
         <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-          <p className="text-xs text-slate-500 dark:text-slate-400">{disabled ? "Not available yet" : "Open settings"}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-300">{disabled ? "Not available yet" : "Open settings"}</p>
           {disabled || !href ? (
             <Button type="button" variant="outline" disabled>
               {ctaLabel}

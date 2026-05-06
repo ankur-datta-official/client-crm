@@ -45,13 +45,13 @@ export function TeamTargetManager({ members, targets, canManage }: TeamTargetMan
   }
 
   return (
-    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.9)]">
       <div className="flex items-start gap-3">
-        <div className="flex size-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+        <div className="flex size-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">
           <Target className="h-5 w-5" />
         </div>
         <div className="space-y-1">
-          <h3 className="text-base font-semibold">Team targets</h3>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Team targets</h3>
           <p className="text-sm text-muted-foreground">
             Assign daily or monthly targets to keep each junior team member focused on measurable CRM work.
           </p>
@@ -65,7 +65,7 @@ export function TeamTargetManager({ members, targets, canManage }: TeamTargetMan
       ) : null}
 
       <form
-        className="mt-5 grid gap-3 rounded-xl border bg-muted/20 p-4 md:grid-cols-5"
+        className="mt-5 grid gap-3 rounded-xl border bg-muted/20 p-4 md:grid-cols-5 dark:border-slate-800 dark:bg-slate-950/60"
         onSubmit={(event) => {
           event.preventDefault();
           setError(null);
@@ -87,7 +87,7 @@ export function TeamTargetManager({ members, targets, canManage }: TeamTargetMan
         }}
       >
         <select
-          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring"
+          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark]"
           value={form.userId}
           onChange={(event) => setForm((current) => ({ ...current, userId: event.target.value }))}
         >
@@ -99,7 +99,7 @@ export function TeamTargetManager({ members, targets, canManage }: TeamTargetMan
         </select>
 
         <select
-          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring"
+          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark]"
           value={form.metricKey}
           onChange={(event) => setForm((current) => ({ ...current, metricKey: event.target.value }))}
         >
@@ -111,7 +111,7 @@ export function TeamTargetManager({ members, targets, canManage }: TeamTargetMan
         </select>
 
         <select
-          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring"
+          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark]"
           value={form.periodType}
           onChange={(event) => {
             const periodType = event.target.value as "daily" | "monthly";
@@ -132,7 +132,7 @@ export function TeamTargetManager({ members, targets, canManage }: TeamTargetMan
         <input
           type="number"
           min={1}
-          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring"
+          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring dark:border-slate-800 dark:bg-slate-950/85"
           value={form.targetValue}
           onChange={(event) => setForm((current) => ({ ...current, targetValue: event.target.value }))}
           placeholder="Target"
@@ -141,7 +141,7 @@ export function TeamTargetManager({ members, targets, canManage }: TeamTargetMan
         <div className="flex gap-2">
           <input
             type="date"
-            className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring"
+            className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none transition focus:border-ring dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark]"
             value={form.effectiveDate}
             onChange={(event) => setForm((current) => ({ ...current, effectiveDate: event.target.value }))}
           />
@@ -158,7 +158,7 @@ export function TeamTargetManager({ members, targets, canManage }: TeamTargetMan
           </div>
         ) : (
           targets.map((target) => (
-            <div key={target.id} className="flex flex-col gap-3 rounded-xl border bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <div key={target.id} className="flex flex-col gap-3 rounded-xl border bg-white px-4 py-3 md:flex-row md:items-center md:justify-between dark:border-slate-800 dark:bg-slate-950/80">
               <div>
                 <div className="font-medium text-foreground">
                   {target.profile?.full_name ?? target.profile?.email ?? "Unknown user"} • {PERFORMANCE_TARGET_METRICS[target.metric_key]} • {target.period_type}
