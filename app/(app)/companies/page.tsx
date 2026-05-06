@@ -5,7 +5,7 @@ import { GuidanceStrip } from "@/components/shared/guidance-strip";
 import { CompanyTable } from "@/components/crm/company-table";
 import { PageHeader } from "@/components/shared/page-header";
 import { CompanyImportModal } from "@/components/crm/companies/company-import-modal";
-import { getCompanies, getCompanyFormOptions } from "@/lib/crm/queries";
+import { getCompaniesPaginated, getCompanyFormOptions } from "@/lib/crm/queries";
 import type { CompanyFilters } from "@/lib/crm/types";
 
 export default async function CompaniesPage({
@@ -14,8 +14,8 @@ export default async function CompaniesPage({
   searchParams: Promise<CompanyFilters>;
 }) {
   const filters = await searchParams;
-  const [companies, options] = await Promise.all([
-    getCompanies(filters),
+  const [companyPage, options] = await Promise.all([
+    getCompaniesPaginated(filters),
     getCompanyFormOptions(),
   ]);
 
@@ -39,7 +39,7 @@ export default async function CompaniesPage({
       <GuidanceStrip dismissible storageKey="crm-tip-companies">
         Start by adding a company, then attach contacts, meetings, and follow-ups as the relationship grows.
       </GuidanceStrip>
-      <CompanyTable companies={companies} {...options} />
+      <CompanyTable companies={companyPage.rows} totalCount={companyPage.total} {...options} />
     </div>
   );
 }

@@ -22,7 +22,6 @@ import type { WalletSummary } from "@/lib/scoring/types";
 import { getDisplayName } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 
 export type AppTopbarProps = {
   onMenuClick?: () => void;
@@ -67,25 +66,20 @@ export function AppTopbar({
         <ThemeToggle />
         
         {/* Premium Score Wallet */}
-        <motion.div
-          whileHover={{ y: -1 }}
-          whileTap={{ scale: 0.98 }}
+        <Link
+          href="/rewards"
+          className="group flex items-center gap-2.5 rounded-2xl border border-amber-200/50 bg-gradient-to-br from-amber-50 to-orange-50/50 px-3.5 py-1.5 shadow-sm transition-all hover:-translate-y-px hover:border-amber-300 hover:shadow-md active:scale-[0.98] dark:border-amber-400/20 dark:from-amber-500/10 dark:to-orange-500/5"
         >
-          <Link
-            href="/rewards"
-            className="group flex items-center gap-2.5 rounded-2xl border border-amber-200/50 bg-gradient-to-br from-amber-50 to-orange-50/50 px-3.5 py-1.5 shadow-sm transition-all hover:border-amber-300 hover:shadow-md dark:border-amber-400/20 dark:from-amber-500/10 dark:to-orange-500/5"
-          >
-            <div className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-orange-400 text-white shadow-inner ring-2 ring-white/50 group-hover:animate-pulse dark:ring-slate-950/70">
-              <Wallet2 className="size-4.5" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[9px] font-bold uppercase tracking-[0.05em] text-amber-600/80 leading-none">Wallet</span>
-              <span className="text-[15px] font-black text-amber-700 leading-tight tracking-tight dark:text-amber-300">
-                {walletSummary?.wallet_balance?.toLocaleString() ?? 0}
-              </span>
-            </div>
-          </Link>
-        </motion.div>
+          <div className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-orange-400 text-white shadow-inner ring-2 ring-white/50 group-hover:animate-pulse dark:ring-slate-950/70">
+            <Wallet2 className="size-4.5" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-bold uppercase tracking-[0.05em] text-amber-600/80 leading-none">Wallet</span>
+            <span className="text-[15px] font-black text-amber-700 leading-tight tracking-tight dark:text-amber-300">
+              {walletSummary?.wallet_balance?.toLocaleString() ?? 0}
+            </span>
+          </div>
+        </Link>
 
         {/* Premium Profile Dropdown */}
         <DropdownMenu>

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 import { resolveProfileAvatarUrl } from "@/lib/profile/profile-utils";
 import { createClient } from "@/lib/supabase/server";
@@ -41,14 +42,14 @@ type RolePermissionRow = {
   } | null;
 };
 
-export async function getCurrentUser(): Promise<User | null> {
+export const getCurrentUser = cache(async (): Promise<User | null> => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   return user;
-}
+});
 
 export async function requireAuth(): Promise<User> {
   const user = await getCurrentUser();
@@ -60,7 +61,7 @@ export async function requireAuth(): Promise<User> {
   return user;
 }
 
-export async function getCurrentProfile(): Promise<Profile | null> {
+export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -86,9 +87,9 @@ export async function getCurrentProfile(): Promise<Profile | null> {
     ...data,
     avatar_url: await resolveProfileAvatarUrl(data.avatar_url),
   };
-}
+});
 
-export async function getCurrentOrganization(): Promise<Organization | null> {
+export const getCurrentOrganization = cache(async (): Promise<Organization | null> => {
   const profile = await getCurrentProfile();
 
   if (!profile?.organization_id || !profile.is_active) {
@@ -107,7 +108,17 @@ export async function getCurrentOrganization(): Promise<Organization | null> {
   }
 
   return data;
-}
+});
+
+export const getCurrentAppContext = cache(async () => {
+  const user = await requireAuth();
+  const [profile, organization] = await Promise.all([
+    getCurrentProfile(),
+    getCurrentOrganization(),
+  ]);
+
+  return { user, profile, organization };
+});
 
 export async function requireOrganization(): Promise<Organization> {
   await requireAuth();

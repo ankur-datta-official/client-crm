@@ -6,8 +6,8 @@ import { PageHeader } from "@/components/shared/page-header";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { FollowupTable } from "@/components/crm/followup-table";
-import { getFollowups } from "@/lib/crm/followup-queries";
-import { getCompanies, getTeamMembers } from "@/lib/crm/queries";
+import { getFollowupsPaginated } from "@/lib/crm/followup-queries";
+import { getCompanyOptions, getTeamMembers } from "@/lib/crm/queries";
 import type { FollowupFilters } from "@/lib/crm/types";
 
 export default async function FollowupsPage({
@@ -43,11 +43,11 @@ export default async function FollowupsPage({
 }
 
 async function FollowupsList({ filters }: { filters: FollowupFilters }) {
-  const [followups, companies, teamMembers] = await Promise.all([
-    getFollowups(filters),
-    getCompanies({}),
+  const [followupPage, companies, teamMembers] = await Promise.all([
+    getFollowupsPaginated(filters),
+    getCompanyOptions(),
     getTeamMembers(),
   ]);
 
-  return <FollowupTable followups={followups} companies={companies} teamMembers={teamMembers} />;
+  return <FollowupTable followups={followupPage.rows} companies={companies} teamMembers={teamMembers} totalCount={followupPage.total} />;
 }

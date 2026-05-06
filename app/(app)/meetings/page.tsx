@@ -4,15 +4,15 @@ import { Button } from "@/components/ui/button";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
 import { InteractionTable } from "@/components/crm/interaction-table";
 import { PageHeader } from "@/components/shared/page-header";
-import { getCompanies, getContacts, getInteractions } from "@/lib/crm/queries";
+import { getCompanyOptions, getContactOptions, getInteractionsPaginated } from "@/lib/crm/queries";
 import type { InteractionFilters } from "@/lib/crm/types";
 
 export default async function MeetingsPage({ searchParams }: { searchParams: Promise<InteractionFilters> }) {
   const filters = await searchParams;
-  const [interactions, companies, contacts] = await Promise.all([
-    getInteractions(filters),
-    getCompanies({}),
-    getContacts({}),
+  const [interactionPage, companies, contacts] = await Promise.all([
+    getInteractionsPaginated(filters),
+    getCompanyOptions(),
+    getContactOptions(),
   ]);
 
   return (
@@ -25,7 +25,7 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
       <GuidanceStrip dismissible storageKey="crm-tip-meetings">
         Capture the discussion, next action, and follow-up date so your team always knows what happened and what comes next.
       </GuidanceStrip>
-      <InteractionTable interactions={interactions} companies={companies} contacts={contacts} />
+      <InteractionTable interactions={interactionPage.rows} companies={companies} contacts={contacts} totalCount={interactionPage.total} />
     </div>
   );
 }

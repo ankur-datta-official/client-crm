@@ -19,20 +19,31 @@ import type { Company, ContactPerson, Interaction } from "@/lib/crm/types";
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
-export function InteractionTable({ interactions, companies, contacts }: { interactions: Interaction[]; companies: Company[]; contacts: ContactPerson[] }) {
+export function InteractionTable({
+  interactions,
+  companies,
+  contacts,
+  totalCount,
+}: {
+  interactions: Interaction[];
+  companies: Pick<Company, "id" | "name">[];
+  contacts: Pick<ContactPerson, "id" | "name">[];
+  totalCount?: number;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [archiveId, setArchiveId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const pageSizeParam = Number(searchParams.get("pageSize"));
   const resolvedPageSize = PAGE_SIZE_OPTIONS.includes(pageSizeParam as (typeof PAGE_SIZE_OPTIONS)[number]) ? pageSizeParam : DEFAULT_PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(interactions.length / resolvedPageSize));
+  const totalItems = totalCount ?? interactions.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / resolvedPageSize));
   const pageParam = Number(searchParams.get("page"));
   const currentPage = Number.isInteger(pageParam) && pageParam > 0 ? Math.min(pageParam, totalPages) : 1;
   const pageStart = (currentPage - 1) * resolvedPageSize;
-  const visibleInteractions = interactions.slice(pageStart, pageStart + resolvedPageSize);
-  const rangeStart = interactions.length === 0 ? 0 : pageStart + 1;
-  const rangeEnd = Math.min(pageStart + visibleInteractions.length, interactions.length);
+  const visibleInteractions = totalCount === undefined ? interactions.slice(pageStart, pageStart + resolvedPageSize) : interactions;
+  const rangeStart = totalItems === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + visibleInteractions.length, totalItems);
 
   function applyFilters(formData: FormData) {
     const params = new URLSearchParams();
@@ -89,7 +100,7 @@ export function InteractionTable({ interactions, companies, contacts }: { intera
         </div>
       </form>
 
-      {interactions.length === 0 ? (
+      {totalItems === 0 ? (
         <EmptyState title="No meetings logged yet" description="Record your first client discussion." icon={Plus} actionLabel="Log Meeting" actionHref="/meetings/new" />
       ) : (
         <div className="space-y-3 md:hidden">
@@ -121,11 +132,11 @@ export function InteractionTable({ interactions, companies, contacts }: { intera
         </div>
       )}
 
-      {interactions.length > 0 ? (
+      {totalItems > 0 ? (
         <div className="space-y-3">
           <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
-              Showing {rangeStart}-{rangeEnd} of {interactions.length} meetings
+              Showing {rangeStart}-{rangeEnd} of {totalItems} meetings
             </p>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>Rows per page</span>

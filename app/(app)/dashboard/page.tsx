@@ -35,13 +35,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentProfile } from "@/lib/auth/session";
-import { getFollowupReport, getSalesOverviewReport } from "@/lib/crm/report-queries";
 import { getFollowups } from "@/lib/crm/followup-queries";
 import { getHelpRequests, getOpenHelpRequestsCount } from "@/lib/crm/help-request-queries";
 import { getInteractions, getPipelineCompanies, getPipelineStagesForBoard, getPipelineSummary } from "@/lib/crm/queries";
 import type { Followup, HelpRequest, Interaction, PipelineBoardCompany, PipelineStage } from "@/lib/crm/types";
 import { formatCurrency } from "@/lib/crm/utils";
-import { getCurrentUserWalletSummary } from "@/lib/scoring/queries";
 import { getCurrentUserPerformanceSnapshot } from "@/lib/team/performance-queries";
 import { getDisplayName } from "@/lib/utils";
 
@@ -91,10 +89,7 @@ export default async function DashboardPage({
     pipelineCompanies,
     pipelineStages,
     interactions,
-    salesOverview,
-    followupReport,
     safeOpenHelpRequestsCount,
-    safeWalletSummary,
     yesterdayFollowups,
     performanceSnapshot,
   ] = await Promise.all([
@@ -113,18 +108,7 @@ export default async function DashboardPage({
       dateFrom: from,
       dateTo: to
     }),
-    getSalesOverviewReport({ 
-      dateRange: from && to ? "custom" : "this_month",
-      startDate: from,
-      endDate: to
-    }),
-    getFollowupReport({ 
-      dateRange: from && to ? "custom" : "this_month",
-      startDate: from,
-      endDate: to
-    }),
     getSafeOpenHelpRequestsCount(),
-    getCurrentUserWalletSummary(),
     getFollowups({
       dateStart: new Date(new Date().setHours(0, 0, 0, 0) - 86400000).toISOString(),
       dateEnd: new Date(new Date().setHours(23, 59, 59, 999) - 86400000).toISOString(),

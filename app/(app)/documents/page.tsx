@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
 import { PageHeader } from "@/components/shared/page-header";
 import { DocumentTable } from "@/components/crm/document-table";
-import { getDocuments } from "@/lib/crm/document-queries";
-import { getCompanies, getTeamMembers } from "@/lib/crm/queries";
+import { getDocumentsPaginated } from "@/lib/crm/document-queries";
+import { getCompanyOptions, getTeamMembers } from "@/lib/crm/queries";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 
 export const metadata = {
@@ -54,17 +54,18 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
 }
 
 async function DocumentListContainer({ filters }: { filters: any }) {
-  const [documents, companies, teamMembers] = await Promise.all([
-    getDocuments(filters),
-    getCompanies({}),
+  const [documentPage, companies, teamMembers] = await Promise.all([
+    getDocumentsPaginated(filters),
+    getCompanyOptions(),
     getTeamMembers(),
   ]);
 
   return (
     <DocumentTable 
-      documents={documents} 
+      documents={documentPage.rows} 
       companies={companies} 
       teamMembers={teamMembers} 
+      totalCount={documentPage.total}
     />
   );
 }

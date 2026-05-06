@@ -19,20 +19,21 @@ import type { Company, ContactPerson } from "@/lib/crm/types";
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
-export function ContactTable({ contacts, companies }: { contacts: ContactPerson[]; companies: Company[] }) {
+export function ContactTable({ contacts, companies, totalCount }: { contacts: ContactPerson[]; companies: Pick<Company, "id" | "name">[]; totalCount?: number }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [archiveId, setArchiveId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const pageSizeParam = Number(searchParams.get("pageSize"));
   const resolvedPageSize = PAGE_SIZE_OPTIONS.includes(pageSizeParam as (typeof PAGE_SIZE_OPTIONS)[number]) ? pageSizeParam : DEFAULT_PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(contacts.length / resolvedPageSize));
+  const totalItems = totalCount ?? contacts.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / resolvedPageSize));
   const pageParam = Number(searchParams.get("page"));
   const currentPage = Number.isInteger(pageParam) && pageParam > 0 ? Math.min(pageParam, totalPages) : 1;
   const pageStart = (currentPage - 1) * resolvedPageSize;
-  const visibleContacts = contacts.slice(pageStart, pageStart + resolvedPageSize);
-  const rangeStart = contacts.length === 0 ? 0 : pageStart + 1;
-  const rangeEnd = Math.min(pageStart + visibleContacts.length, contacts.length);
+  const visibleContacts = totalCount === undefined ? contacts.slice(pageStart, pageStart + resolvedPageSize) : contacts;
+  const rangeStart = totalItems === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + visibleContacts.length, totalItems);
 
   function applyFilters(formData: FormData) {
     const params = new URLSearchParams();
@@ -85,7 +86,7 @@ export function ContactTable({ contacts, companies }: { contacts: ContactPerson[
         </div>
       </form>
 
-      {contacts.length === 0 ? (
+      {totalItems === 0 ? (
         <EmptyState
           title="No contacts yet"
           description="No contacts yet. Add decision makers under your companies."
@@ -125,11 +126,11 @@ export function ContactTable({ contacts, companies }: { contacts: ContactPerson[
         </div>
       )}
 
-      {contacts.length > 0 ? (
+      {totalItems > 0 ? (
         <div className="space-y-3">
           <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
-              Showing {rangeStart}-{rangeEnd} of {contacts.length} contacts
+              Showing {rangeStart}-{rangeEnd} of {totalItems} contacts
             </p>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>Rows per page</span>

@@ -4,14 +4,14 @@ import { Button } from "@/components/ui/button";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
 import { ContactTable } from "@/components/crm/contact-table";
 import { PageHeader } from "@/components/shared/page-header";
-import { getCompanies, getContacts } from "@/lib/crm/queries";
+import { getCompanyOptions, getContactsPaginated } from "@/lib/crm/queries";
 import type { ContactFilters } from "@/lib/crm/types";
 
 export default async function ContactsPage({ searchParams }: { searchParams: Promise<ContactFilters> }) {
   const filters = await searchParams;
-  const [contacts, companies] = await Promise.all([
-    getContacts(filters),
-    getCompanies({}),
+  const [contactPage, companies] = await Promise.all([
+    getContactsPaginated(filters),
+    getCompanyOptions(),
   ]);
 
   return (
@@ -31,7 +31,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
       <GuidanceStrip dismissible storageKey="crm-tip-contacts">
         Add contacts under your companies so every meeting, follow-up, and document stays tied to the right people.
       </GuidanceStrip>
-      <ContactTable contacts={contacts} companies={companies} />
+      <ContactTable contacts={contactPage.rows} companies={companies} totalCount={contactPage.total} />
     </div>
   );
 }

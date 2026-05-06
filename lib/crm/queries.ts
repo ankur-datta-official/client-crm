@@ -1,4 +1,5 @@
 import { requireOrganization } from "@/lib/auth/session";
+import { resolvePagination, type PaginatedResult } from "@/lib/pagination";
 import { createClient } from "@/lib/supabase/server";
 import { getAssignableTeamMembers } from "@/lib/team/hierarchy";
 import { getFollowups } from "./followup-queries";
@@ -161,6 +162,59 @@ export async function getCompanies(filters: CompanyFilters = {}) {
   return attachPrimaryContacts((data ?? []) as Company[]);
 }
 
+export async function getCompaniesPaginated(filters: CompanyFilters & { page?: string; pageSize?: string } = {}): Promise<PaginatedResult<Company>> {
+  const organization = await requireOrganization();
+  const supabase = await createClient();
+  const { page, pageSize, from, to } = resolvePagination(filters);
+  let query = supabase
+    .from("companies")
+    .select(companySelect, { count: "exact" })
+    .eq("organization_id", organization.id)
+    .neq("status", "archived")
+    .order("updated_at", { ascending: false });
+
+  if (filters.search) {
+    const search = filters.search.trim();
+    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,website.ilike.%${search}%`);
+  }
+  if (filters.industry) query = query.eq("industry_id", filters.industry);
+  if (filters.category) query = query.eq("category_id", filters.category);
+  if (filters.pipeline) query = query.eq("pipeline_stage_id", filters.pipeline);
+  if (filters.priority) query = query.eq("priority", filters.priority);
+  if (filters.temperature) query = query.eq("lead_temperature", filters.temperature);
+  if (filters.assigned) query = query.eq("assigned_user_id", filters.assigned);
+
+  const { data, error, count } = await query.range(from, to);
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    rows: await attachPrimaryContacts((data ?? []) as Company[]),
+    total: count ?? 0,
+    page,
+    pageSize,
+  };
+}
+
+export async function getCompanyOptions(limit = 200) {
+  const organization = await requireOrganization();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("companies")
+    .select("id, name")
+    .eq("organization_id", organization.id)
+    .neq("status", "archived")
+    .order("name")
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as Pick<Company, "id" | "name">[];
+}
+
 export async function getCompanyById(id: string) {
   const organization = await requireOrganization();
   const supabase = await createClient();
@@ -239,6 +293,56 @@ export async function getContacts(filters: ContactFilters = {}) {
   }
 
   return (data ?? []) as ContactPerson[];
+}
+
+export async function getContactsPaginated(filters: ContactFilters & { page?: string; pageSize?: string } = {}): Promise<PaginatedResult<ContactPerson>> {
+  const organization = await requireOrganization();
+  const supabase = await createClient();
+  const { page, pageSize, from, to } = resolvePagination(filters);
+  let query = supabase
+    .from("contact_persons")
+    .select(
+      `
+      *,
+      companies(id, name, phone, email)
+    `,
+      { count: "exact" },
+    )
+    .eq("organization_id", organization.id)
+    .neq("status", "archived")
+    .order("updated_at", { ascending: false });
+
+  if (filters.search) {
+    const search = filters.search.trim();
+    query = query.or(`name.ilike.%${search}%,mobile.ilike.%${search}%,email.ilike.%${search}%,designation.ilike.%${search}%`);
+  }
+  if (filters.company) query = query.eq("company_id", filters.company);
+  if (filters.decisionRole) query = query.eq("decision_role", filters.decisionRole);
+  if (filters.relationshipLevel) query = query.eq("relationship_level", filters.relationshipLevel);
+  if (filters.preferredMethod) query = query.eq("preferred_contact_method", filters.preferredMethod);
+  if (filters.status) query = query.eq("status", filters.status);
+
+  const { data, error, count } = await query.range(from, to);
+  if (error) throw new Error(error.message);
+  return { rows: (data ?? []) as ContactPerson[], total: count ?? 0, page, pageSize };
+}
+
+export async function getContactOptions(limit = 300) {
+  const organization = await requireOrganization();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("contact_persons")
+    .select("id, name, company_id")
+    .eq("organization_id", organization.id)
+    .neq("status", "archived")
+    .order("name")
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as Pick<ContactPerson, "id" | "name" | "company_id">[];
 }
 
 export async function getContactsByCompany(companyId: string, includeArchived = false) {
@@ -323,6 +427,36 @@ export async function getInteractions(filters: InteractionFilters = {}) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as Interaction[];
+}
+
+export async function getInteractionsPaginated(filters: InteractionFilters & { page?: string; pageSize?: string } = {}): Promise<PaginatedResult<Interaction>> {
+  const organization = await requireOrganization();
+  const supabase = await createClient();
+  const { page, pageSize, from, to } = resolvePagination(filters);
+  let query = supabase
+    .from("interactions")
+    .select(interactionSelect, { count: "exact" })
+    .eq("organization_id", organization.id)
+    .neq("status", "archived")
+    .order("meeting_datetime", { ascending: false });
+
+  if (filters.search) {
+    const search = filters.search.trim();
+    query = query.or(`discussion_details.ilike.%${search}%,next_action.ilike.%${search}%`);
+  }
+  if (filters.company) query = query.eq("company_id", filters.company);
+  if (filters.contact) query = query.eq("contact_person_id", filters.contact);
+  if (filters.type) query = query.eq("interaction_type", filters.type);
+  if (filters.ratingMin) query = query.gte("success_rating", Number(filters.ratingMin));
+  if (filters.ratingMax) query = query.lte("success_rating", Number(filters.ratingMax));
+  if (filters.temperature) query = query.eq("lead_temperature", filters.temperature);
+  if (filters.dateFrom) query = query.gte("meeting_datetime", filters.dateFrom);
+  if (filters.dateTo) query = query.lte("meeting_datetime", filters.dateTo);
+  if (filters.status) query = query.eq("status", filters.status);
+
+  const { data, error, count } = await query.range(from, to);
+  if (error) throw new Error(error.message);
+  return { rows: (data ?? []) as Interaction[], total: count ?? 0, page, pageSize };
 }
 
 export async function getInteractionsByCompany(companyId: string, includeArchived = false) {

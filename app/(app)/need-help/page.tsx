@@ -6,8 +6,8 @@ import { PageHeader } from "@/components/shared/page-header";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { HelpRequestTable } from "@/components/crm/help-request-table";
-import { getHelpRequests } from "@/lib/crm/help-request-queries";
-import { getCompanies, getTeamMembers } from "@/lib/crm/queries";
+import { getHelpRequestsPaginated } from "@/lib/crm/help-request-queries";
+import { getCompanyOptions, getTeamMembers } from "@/lib/crm/queries";
 import type { HelpRequestFilters } from "@/lib/crm/types";
 
 export default async function NeedHelpPage({
@@ -43,11 +43,11 @@ export default async function NeedHelpPage({
 }
 
 async function HelpRequestsList({ filters }: { filters: HelpRequestFilters }) {
-  const [helpRequests, companies, teamMembers] = await Promise.all([
-    getHelpRequests(filters),
-    getCompanies({}),
+  const [helpRequestPage, companies, teamMembers] = await Promise.all([
+    getHelpRequestsPaginated(filters),
+    getCompanyOptions(),
     getTeamMembers(),
   ]);
 
-  return <HelpRequestTable helpRequests={helpRequests} companies={companies} teamMembers={teamMembers} />;
+  return <HelpRequestTable helpRequests={helpRequestPage.rows} companies={companies} teamMembers={teamMembers} totalCount={helpRequestPage.total} />;
 }

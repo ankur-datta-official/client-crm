@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
-import { TabsContent } from "@/components/ui/tabs";
 import { ReportFilterBar } from "@/components/crm/reports/report-filter-bar";
 import { ReportTabs } from "@/components/crm/reports/report-tabs";
 import { SalesOverviewReport } from "@/components/crm/reports/sales-overview-report";
@@ -106,46 +105,47 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
       <ReportTabs currentTab={currentTab} lockedTabs={lockedTabs} description={tabDescriptions[currentTab] ?? tabDescriptions["sales-overview"]}>
         <Suspense fallback={<ReportLoadingFallback />}>
-          <TabsContent value="sales-overview">
-            <SalesOverviewReportView filters={filters} />
-          </TabsContent>
-          <TabsContent value="leads">
-            <LeadReportView filters={filters} />
-          </TabsContent>
-          <TabsContent value="pipeline">
-            <PipelineReportView filters={filters} />
-          </TabsContent>
-          <TabsContent value="meetings">
-            <MeetingReportView filters={filters} />
-          </TabsContent>
-          <TabsContent value="follow-ups">
-            <FollowupReportView filters={filters} />
-          </TabsContent>
-          <TabsContent value="documents">
-            {lockedTabs.includes("documents") ? (
-              <FeatureLockCard featureName="Document Reports" description={getUpgradeMessage("advanced_reports")} />
-            ) : (
-              <DocumentReportView filters={filters} />
-            )}
-          </TabsContent>
-          <TabsContent value="help-requests">
-            {lockedTabs.includes("help-requests") ? (
-              <FeatureLockCard featureName="Help Request Reports" description={getUpgradeMessage("advanced_reports")} />
-            ) : (
-              <HelpRequestReportView filters={filters} />
-            )}
-          </TabsContent>
-          <TabsContent value="team">
-            {lockedTabs.includes("team") ? (
-              <FeatureLockCard featureName="Team Performance Reports" description={getUpgradeMessage("advanced_reports")} />
-            ) : (
-              <TeamPerformanceReportView filters={filters} />
-            )}
-          </TabsContent>
+          <ActiveReportView currentTab={currentTab} filters={filters} lockedTabs={lockedTabs} />
         </Suspense>
       </ReportTabs>
     </div>
   );
+}
+
+async function ActiveReportView({
+  currentTab,
+  filters,
+  lockedTabs,
+}: {
+  currentTab: string;
+  filters: ReportFilters;
+  lockedTabs: string[];
+}) {
+  switch (currentTab) {
+    case "leads":
+      return <LeadReportView filters={filters} />;
+    case "pipeline":
+      return <PipelineReportView filters={filters} />;
+    case "meetings":
+      return <MeetingReportView filters={filters} />;
+    case "follow-ups":
+      return <FollowupReportView filters={filters} />;
+    case "documents":
+      return lockedTabs.includes("documents")
+        ? <FeatureLockCard featureName="Document Reports" description={getUpgradeMessage("advanced_reports")} />
+        : <DocumentReportView filters={filters} />;
+    case "help-requests":
+      return lockedTabs.includes("help-requests")
+        ? <FeatureLockCard featureName="Help Request Reports" description={getUpgradeMessage("advanced_reports")} />
+        : <HelpRequestReportView filters={filters} />;
+    case "team":
+      return lockedTabs.includes("team")
+        ? <FeatureLockCard featureName="Team Performance Reports" description={getUpgradeMessage("advanced_reports")} />
+        : <TeamPerformanceReportView filters={filters} />;
+    case "sales-overview":
+    default:
+      return <SalesOverviewReportView filters={filters} />;
+  }
 }
 
 async function SalesOverviewReportView({ filters }: { filters: ReportFilters }) {

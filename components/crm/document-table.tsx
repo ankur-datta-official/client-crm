@@ -35,14 +35,15 @@ import {
 
 type DocumentTableProps = {
   documents: Document[];
-  companies: Company[];
+  companies: Pick<Company, "id" | "name">[];
   teamMembers: TeamMemberOption[];
+  totalCount?: number;
 };
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
-export function DocumentTable({ documents, companies, teamMembers }: DocumentTableProps) {
+export function DocumentTable({ documents, companies, teamMembers, totalCount }: DocumentTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [archiveId, setArchiveId] = useState<string | null>(null);
@@ -50,13 +51,14 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
   const { downloadDocument, downloadingDocumentId, downloadError, clearDownloadError } = useDocumentDownload();
   const pageSizeParam = Number(searchParams.get("pageSize"));
   const resolvedPageSize = PAGE_SIZE_OPTIONS.includes(pageSizeParam as (typeof PAGE_SIZE_OPTIONS)[number]) ? pageSizeParam : DEFAULT_PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(documents.length / resolvedPageSize));
+  const totalItems = totalCount ?? documents.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / resolvedPageSize));
   const pageParam = Number(searchParams.get("page"));
   const currentPage = Number.isInteger(pageParam) && pageParam > 0 ? Math.min(pageParam, totalPages) : 1;
   const pageStart = (currentPage - 1) * resolvedPageSize;
-  const visibleDocuments = documents.slice(pageStart, pageStart + resolvedPageSize);
-  const rangeStart = documents.length === 0 ? 0 : pageStart + 1;
-  const rangeEnd = Math.min(pageStart + visibleDocuments.length, documents.length);
+  const visibleDocuments = totalCount === undefined ? documents.slice(pageStart, pageStart + resolvedPageSize) : documents;
+  const rangeStart = totalItems === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + visibleDocuments.length, totalItems);
 
   function applyFilters(formData: FormData) {
     const params = new URLSearchParams();
@@ -153,7 +155,7 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
       </Card>
 
       <div className="space-y-3 md:hidden">
-        {documents.length === 0 ? (
+        {totalItems === 0 ? (
           <EmptyState
             title="No documents found"
             description="No documents uploaded. Upload quotations, proposals, or company profiles."
@@ -174,11 +176,11 @@ export function DocumentTable({ documents, companies, teamMembers }: DocumentTab
         )}
       </div>
 
-      {documents.length > 0 ? (
+      {totalItems > 0 ? (
         <div className="space-y-3">
           <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
-              Showing {rangeStart}-{rangeEnd} of {documents.length} documents
+              Showing {rangeStart}-{rangeEnd} of {totalItems} documents
             </p>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>Rows per page</span>
