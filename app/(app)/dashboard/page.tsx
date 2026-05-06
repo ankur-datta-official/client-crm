@@ -295,7 +295,7 @@ export default async function DashboardPage({
 
   return (
     <div className="space-y-6">
-      <AnimatedHeader>
+      <AnimatedHeader data-tour="tour-dashboard-overview">
         <div className="space-y-1">
           <h1 className="text-[1.9rem] font-semibold tracking-normal text-slate-900 dark:text-slate-100 sm:text-[2.15rem]">
             Welcome back, {displayName} <span aria-hidden="true">{"\u{1F44B}"}</span>

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, Menu, Settings, User, Wallet2, LogOut } from "lucide-react";
+import { ChevronDown, LifeBuoy, Menu, Settings, User, Wallet2, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { NotificationCenter } from "@/components/notifications/notification-center";
+import { useProductTour } from "@/components/providers/product-tour-provider";
 import { UserAvatar } from "@/components/shared/user-avatar";
 import { GlobalSearchInput } from "@/components/search/global-search-input";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export function AppTopbar({
   walletSummary
 }: AppTopbarProps) {
   const router = useRouter();
+  const { startTour, isActive } = useProductTour();
   const displayName = getDisplayName(profile?.full_name, profile?.email, "Workspace user");
 
   async function handleLogout() {
@@ -88,7 +90,10 @@ export function AppTopbar({
         {/* Premium Profile Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="group flex min-w-0 items-center gap-3 rounded-[20px] border border-slate-200/80 bg-white p-1.5 pr-4 shadow-sm outline-none transition-all duration-300 hover:border-primary/30 hover:bg-slate-50/50 hover:shadow-md active:scale-[0.98] dark:border-slate-800 dark:bg-slate-900/90 dark:hover:border-primary/40 dark:hover:bg-slate-900">
+            <button
+              data-tour="tour-quick-restart"
+              className="group flex min-w-0 items-center gap-3 rounded-[20px] border border-slate-200/80 bg-white p-1.5 pr-4 shadow-sm outline-none transition-all duration-300 hover:border-primary/30 hover:bg-slate-50/50 hover:shadow-md active:scale-[0.98] dark:border-slate-800 dark:bg-slate-900/90 dark:hover:border-primary/40 dark:hover:bg-slate-900"
+            >
               <div className="relative">
                 <UserAvatar
                   imageUrl={profile?.avatar_url}
@@ -137,6 +142,21 @@ export function AppTopbar({
                   </div>
                   <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100">Organization</span>
                 </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => startTour("manual")}
+                disabled={isActive}
+                className="rounded-xl focus:bg-primary/5 focus:text-primary cursor-pointer transition-colors group px-3 py-2.5"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-slate-50 text-slate-500 transition-colors group-focus:bg-primary/10 group-focus:text-primary dark:bg-slate-900 dark:text-slate-400">
+                    <LifeBuoy className="size-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100">How it works</span>
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Replay the quick product tutorial</span>
+                  </div>
+                </div>
               </DropdownMenuItem>
             </div>
             <DropdownMenuSeparator className="mx-2 bg-slate-100/80 dark:bg-slate-800" />

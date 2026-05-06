@@ -20,6 +20,17 @@ type AppSidebarProps = {
 
 const navSections = ["Overview", "Workspace", "Performance", "Admin"] as const;
 
+const tourAnchorByHref: Partial<Record<(typeof sidebarItems)[number]["href"], string>> = {
+  "/dashboard": "tour-nav-dashboard",
+  "/companies": "tour-nav-companies",
+  "/contacts": "tour-nav-contacts",
+  "/meetings": "tour-nav-meetings",
+  "/followups": "tour-nav-followups",
+  "/pipeline": "tour-nav-pipeline",
+  "/documents": "tour-nav-documents",
+  "/reports": "tour-nav-reports",
+};
+
 const navIconStyles: Record<string, string> = {
   "/dashboard": "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-sky-700 ring-1 ring-sky-200/80",
   "/companies": "bg-[linear-gradient(135deg,#ecfeff,#cffafe)] text-cyan-700 ring-1 ring-cyan-200/80",
@@ -139,6 +150,7 @@ export function AppSidebar({
                           key={item.href}
                           href={item.href}
                           title={item.title}
+                          data-tour={tourAnchorByHref[item.href]}
                           onClick={() => onOpenChange?.(false)}
                           className={cn(
                             "group relative flex min-h-[2.9rem] items-center overflow-hidden rounded-2xl py-2.5 text-sm font-medium text-slate-600 transition-all duration-200 dark:text-slate-300",

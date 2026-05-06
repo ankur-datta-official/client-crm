@@ -15,7 +15,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
   ]);
 
   return (
-    <div>
+    <div data-tour="tour-contacts-overview">
       <PageHeader
         title="Contacts"
         description="Keep track of decision makers, influencers, and day-to-day contact details."

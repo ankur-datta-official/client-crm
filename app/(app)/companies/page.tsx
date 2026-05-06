@@ -20,7 +20,7 @@ export default async function CompaniesPage({
   ]);
 
   return (
-    <div>
+    <div data-tour="tour-companies-overview">
       <PageHeader
         title="Companies & Leads"
         description="Track every prospect, buyer, and relationship from one place."

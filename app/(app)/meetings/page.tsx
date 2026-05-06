@@ -16,7 +16,7 @@ export default async function MeetingsPage({ searchParams }: { searchParams: Pro
   ]);
 
   return (
-    <div>
+    <div data-tour="tour-meetings-overview">
       <PageHeader
         title="Meetings"
         description="Log client conversations and turn discussions into next actions."

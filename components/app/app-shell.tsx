@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app/app-sidebar";
 import { AppTopbar } from "@/components/app/app-topbar";
+import { ProductTourProvider } from "@/components/providers/product-tour-provider";
 import type { NotificationRow } from "@/lib/notifications/notifications";
 import type { Profile } from "@/lib/auth/session";
 import type { WalletSummary } from "@/lib/scoring/types";
+import type { ProductTourState } from "@/lib/product-tour/types";
 
 export type AppShellProps = {
   children: React.ReactNode;
@@ -14,6 +16,7 @@ export type AppShellProps = {
   notifications: NotificationRow[];
   unreadNotificationCount: number;
   walletSummary: WalletSummary | null;
+  initialProductTourState: ProductTourState;
 };
 
 export function AppShell({ 
@@ -22,7 +25,8 @@ export function AppShell({
   organizationName, 
   notifications, 
   unreadNotificationCount,
-  walletSummary
+  walletSummary,
+  initialProductTourState,
 }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -38,25 +42,27 @@ export function AppShell({
   }, [sidebarCollapsed]);
 
   return (
-    <div className="min-h-dvh bg-background md:flex md:h-screen md:overflow-hidden">
-      <AppSidebar
-        open={sidebarOpen}
-        onOpenChange={setSidebarOpen}
-        collapsed={sidebarCollapsed}
-        onCollapsedChange={setSidebarCollapsed}
-        organizationName={organizationName}
-        profile={profile}
-      />
-      <div className="flex min-w-0 flex-1 flex-col md:h-screen md:min-h-0">
-        <AppTopbar
-          onMenuClick={() => setSidebarOpen(true)}
+    <ProductTourProvider initialState={initialProductTourState}>
+      <div className="min-h-dvh bg-background md:flex md:h-screen md:overflow-hidden">
+        <AppSidebar
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
+          collapsed={sidebarCollapsed}
+          onCollapsedChange={setSidebarCollapsed}
+          organizationName={organizationName}
           profile={profile}
-          notifications={notifications}
-          unreadNotificationCount={unreadNotificationCount}
-          walletSummary={walletSummary}
         />
-        <main className="mx-auto w-full max-w-[1500px] min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:py-6 md:overflow-y-auto md:px-6 lg:px-8">{children}</main>
+        <div className="flex min-w-0 flex-1 flex-col md:h-screen md:min-h-0">
+          <AppTopbar
+            onMenuClick={() => setSidebarOpen(true)}
+            profile={profile}
+            notifications={notifications}
+            unreadNotificationCount={unreadNotificationCount}
+            walletSummary={walletSummary}
+          />
+          <main className="mx-auto w-full max-w-[1500px] min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:py-6 md:overflow-y-auto md:px-6 lg:px-8">{children}</main>
+        </div>
       </div>
-    </div>
+    </ProductTourProvider>
   );
 }

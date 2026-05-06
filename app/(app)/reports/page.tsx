@@ -81,7 +81,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="tour-reports-overview">
       <PageHeader
         title="Reports & Analytics"
         description="Track sales health, team activity, pipeline momentum, and execution quality with richer visual analytics."

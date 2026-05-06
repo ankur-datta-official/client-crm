@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, type HTMLMotionProps } from "framer-motion";
 import Link from "next/link";
 import { 
   ArrowRight, 
@@ -287,12 +287,17 @@ export function PipelineFunnel({ stages }: { stages: any[] }) {
 
 // --- Animated Layout Wrappers ---
 
-export function AnimatedHeader({ children }: { children: React.ReactNode }) {
+export function AnimatedHeader({
+  children,
+  className,
+  ...props
+}: HTMLMotionProps<"section">) {
   return (
     <motion.section 
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col gap-4 px-1 py-1 lg:flex-row lg:items-end lg:justify-between"
+      className={cn("flex flex-col gap-4 px-1 py-1 lg:flex-row lg:items-end lg:justify-between", className)}
+      {...props}
     >
       {children}
     </motion.section>

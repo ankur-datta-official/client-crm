@@ -29,7 +29,7 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
   const filters = await searchParams;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="tour-documents-overview">
       <PageHeader
         title="Documents"
         description="Manage quotations, proposals, brochures, and submitted files."

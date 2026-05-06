@@ -18,7 +18,7 @@ export default async function FollowupsPage({
   const filters = await searchParams;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="tour-followups-overview">
       <PageHeader
         title="Follow-ups"
         description="Stay on top of next calls, reminders, and overdue client actions."

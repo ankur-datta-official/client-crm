@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { CrmSettingsCard } from "@/components/crm/crm-settings-card";
 import { ThemePreferenceCard } from "@/components/settings/theme-preference-card";
+import { ProductTourStartButton } from "@/components/tour/product-tour-start-button";
 import { PageHeader } from "@/components/shared/page-header";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
 import { Badge } from "@/components/ui/badge";
@@ -63,12 +64,15 @@ export default async function SettingsPage() {
         title="Settings"
         description="Manage the basic things your team needs to use the CRM smoothly."
         actions={(
-          <Button asChild variant="outline" className="rounded-xl border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-900">
-            <Link href="/settings/profile">
-              View Profile
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <ProductTourStartButton label="Restart Tutorial" variant="outline" className="rounded-xl" />
+            <Button asChild variant="outline" className="rounded-xl border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-900">
+              <Link href="/settings/profile">
+                View Profile
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         )}
       />
 

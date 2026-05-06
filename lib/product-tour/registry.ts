@@ -1,0 +1,68 @@
+import type { TourStep } from "@/lib/product-tour/types";
+
+export const PRODUCT_TOUR_STEPS: TourStep[] = [
+  {
+    id: "dashboard-overview",
+    route: "/dashboard",
+    target: "tour-dashboard-overview",
+    title: "Start from the dashboard",
+    description: "This page gives you the daily picture: pipeline value, follow-ups, help requests, and what needs attention first.",
+    accent: "teal",
+  },
+  {
+    id: "companies-overview",
+    route: "/companies",
+    target: "tour-companies-overview",
+    title: "Companies and leads enter here",
+    description: "Add a company first, then build the client journey around it with contacts, meetings, and follow-ups.",
+    accent: "sky",
+  },
+  {
+    id: "contacts-overview",
+    route: "/contacts",
+    target: "tour-contacts-overview",
+    title: "Contacts connect people to deals",
+    description: "Store decision makers and key people here so your team always knows who is involved in each relationship.",
+    accent: "teal",
+  },
+  {
+    id: "meetings-overview",
+    route: "/meetings",
+    target: "tour-meetings-overview",
+    title: "Meetings capture client discussions",
+    description: "Log every important conversation so next actions, issues, and deal movement stay visible for the team.",
+    accent: "amber",
+  },
+  {
+    id: "followups-overview",
+    route: "/followups",
+    target: "tour-followups-overview",
+    title: "Follow-ups keep momentum alive",
+    description: "Use follow-ups to schedule reminders, assign next actions, and stop opportunities from going cold.",
+    accent: "amber",
+  },
+  {
+    id: "pipeline-overview",
+    route: "/pipeline",
+    target: "tour-pipeline-overview",
+    title: "Pipeline shows deal movement",
+    description: "Move companies stage by stage here so everyone can see where deals are progressing or getting stuck.",
+    accent: "violet",
+  },
+  {
+    id: "reports-overview",
+    route: "/reports",
+    target: "tour-reports-overview",
+    title: "Reports explain what is working",
+    description: "Review trends, activity quality, and team performance here after your daily CRM work is being captured properly.",
+    accent: "sky",
+  },
+  {
+    id: "tour-restart",
+    route: "/dashboard",
+    target: "tour-quick-restart",
+    title: "You can restart this anytime",
+    description: "Open your profile menu or visit the Settings page whenever you want a quick refresher on how the CRM workflow works.",
+    accent: "teal",
+  },
+];

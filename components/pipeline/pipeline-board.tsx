@@ -244,7 +244,7 @@ export function PipelineBoard({
 
   if (stages.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" data-tour="tour-pipeline-overview">
         <PageHeader
           title="Pipeline"
           description="Track deals by stage, monitor value, and move opportunities through the sales process."
@@ -266,7 +266,7 @@ export function PipelineBoard({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="tour-pipeline-overview">
       <PageHeader
         title="Pipeline"
         description="Move deals across stages, spot bottlenecks, and keep follow-up momentum visible for the whole workspace."
