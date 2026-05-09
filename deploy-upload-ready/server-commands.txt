@@ -1,0 +1,35 @@
+Upload this file:
+- crm-next.zip
+
+Windows upload command:
+scp .\deploy-upload-ready\crm-next.zip <your-server-user>@145.79.11.196:/home/crm.mugnee.com/public_html/
+
+Server deploy commands:
+cd /home/crm.mugnee.com/public_html
+unzip -o crm-next.zip -d /home/crm.mugnee.com/public_html
+npm install --include=dev --legacy-peer-deps
+cp .env.production .env
+mkdir -p public/uploads storage/private storage/tmp
+npx prisma generate
+npx prisma migrate deploy
+npm run build
+pm2 delete crm-next || true
+PORT=3001 pm2 start npm --name crm-next -- start
+pm2 save
+
+First-time env setup:
+cd /home/crm.mugnee.com/public_html
+cp .env.production.example .env.production
+nano .env.production
+
+Rebuild/restart commands:
+cd /home/crm.mugnee.com/public_html
+npm install --include=dev --legacy-peer-deps
+cp .env.production .env
+mkdir -p public/uploads storage/private storage/tmp
+npx prisma generate
+npx prisma migrate deploy
+npm run build
+pm2 delete crm-next || true
+PORT=3001 pm2 start npm --name crm-next -- start
+pm2 save

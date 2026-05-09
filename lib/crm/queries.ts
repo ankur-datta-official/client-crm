@@ -305,7 +305,7 @@ export async function getCompanyOptions(limit = 200) {
   `);
 }
 
-export async function getCompanyById(id: string) {
+export async function getCompanyById(id: string): Promise<Company | null> {
   const organization = await requireOrganization();
   const rows = await prisma.$queryRaw<Array<{ payload: Company }>>(Prisma.sql`
     select
@@ -342,7 +342,7 @@ export async function getCompanyById(id: string) {
   return normalizeJsonRecord(rows[0]?.payload ?? null);
 }
 
-export async function getContacts(filters: ContactFilters = {}) {
+export async function getContacts(filters: ContactFilters = {}): Promise<ContactPerson[]> {
   const organization = await requireOrganization();
   const rows = await queryContactRows(buildContactWhere(organization.id, filters));
   return rows.flatMap((row) => (row.payload ? [row.payload] : []));
@@ -361,7 +361,7 @@ export async function getContactsPaginated(filters: ContactFilters & { page?: st
   };
 }
 
-export async function getContactOptions(limit = 300) {
+export async function getContactOptions(limit = 300): Promise<Array<Pick<ContactPerson, "id" | "name" | "company_id">>> {
   const organization = await requireOrganization();
 
   return prisma.$queryRaw<Array<Pick<ContactPerson, "id" | "name" | "company_id">>>(Prisma.sql`
@@ -377,7 +377,7 @@ export async function getContactOptions(limit = 300) {
   `);
 }
 
-export async function getContactsByCompany(companyId: string, includeArchived = false) {
+export async function getContactsByCompany(companyId: string, includeArchived = false): Promise<ContactPerson[]> {
   const organization = await requireOrganization();
   const archivedFilter = includeArchived ? Prisma.sql`` : Prisma.sql` and cp.status <> 'archived'`;
 
@@ -397,10 +397,10 @@ export async function getContactsByCompany(companyId: string, includeArchived = 
     order by cp.is_primary desc, cp.name asc
   `);
 
-  return rows.map((row) => row.payload);
+  return rows.flatMap((row) => (row.payload ? [row.payload] : []));
 }
 
-export async function getContactById(contactId: string) {
+export async function getContactById(contactId: string): Promise<ContactPerson | null> {
   const organization = await requireOrganization();
   const rows = await prisma.$queryRaw<Array<{ payload: ContactPerson }>>(Prisma.sql`
     select

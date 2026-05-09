@@ -217,7 +217,10 @@ function dedupeWorkspaces(workspaces: WorkspaceSummary[]) {
   });
 }
 
-export async function canCreateWorkspaceForUser(userId: string) {
+export async function canCreateWorkspaceForUser(
+  userId: string,
+  workspacesOverride?: WorkspaceSummary[],
+) {
   const user = await prisma.user.findUnique({
     where: {
       id: userId,
@@ -235,7 +238,7 @@ export async function canCreateWorkspaceForUser(userId: string) {
     return true;
   }
 
-  const workspaces = await listAccessibleWorkspacesForUser(userId);
+  const workspaces = workspacesOverride ?? await listAccessibleWorkspacesForUser(userId);
 
   if (workspaces.length === 0) {
     return true;

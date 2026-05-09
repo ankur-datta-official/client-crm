@@ -1,4 +1,4 @@
-import { requireAuth, requireOrganization } from "@/lib/auth/session";
+import { getCurrentAppContext } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_TOUR_VERSION, type ProductTourState } from "@/lib/product-tour/types";
 
@@ -8,9 +8,23 @@ type ProductTourProfileRow = {
   product_tour_last_started_at: Date | null;
 };
 
+function getDefaultProductTourState(): ProductTourState {
+  return {
+    version: PRODUCT_TOUR_VERSION,
+    lastCompletedVersion: null,
+    lastSkippedVersion: null,
+    lastStartedAt: null,
+    shouldAutoStart: false,
+  };
+}
+
 export async function getCurrentProductTourState(): Promise<ProductTourState> {
-  const user = await requireAuth();
-  const organization = await requireOrganization();
+  const { user, organization } = await getCurrentAppContext();
+
+  if (!organization) {
+    return getDefaultProductTourState();
+  }
+
   const data = await prisma.user.findFirst({
     where: {
       id: user.id,
@@ -30,7 +44,7 @@ export async function getCurrentProductTourState(): Promise<ProductTourState> {
   }) as ProductTourProfileRow;
 
   return {
-    version: PRODUCT_TOUR_VERSION,
+    ...getDefaultProductTourState(),
     lastCompletedVersion: row.product_tour_last_completed_version,
     lastSkippedVersion: row.product_tour_last_skipped_version,
     lastStartedAt: row.product_tour_last_started_at?.toISOString() ?? null,

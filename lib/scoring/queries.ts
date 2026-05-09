@@ -18,6 +18,18 @@ import type {
   WalletTransaction,
 } from "./types";
 
+function normalizeJsonObject(value: Prisma.JsonValue | null | undefined): Record<string, unknown> {
+  if (!value || Array.isArray(value) || typeof value !== "object") {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function normalizeCadence(value: string | null | undefined): UserChallengeProgress["cadence"] {
+  return value === "daily" || value === "weekly" ? value : undefined;
+}
+
 async function resolveLeaderboardAvatarUrls(entries: LeaderboardEntry[]) {
   return Promise.all(
     entries.map(async (entry) => ({
@@ -85,7 +97,7 @@ function asIsoString(value: Date | string | null | undefined) {
 function mapWalletTransaction(row: any): WalletTransaction {
   return {
     ...row,
-    metadata: row.metadata ?? {},
+    metadata: normalizeJsonObject(row.metadata),
     created_at: asIsoString(row.created_at)!,
   };
 }
@@ -93,7 +105,7 @@ function mapWalletTransaction(row: any): WalletTransaction {
 function mapReward(row: any): Reward {
   return {
     ...row,
-    metadata: row.metadata ?? {},
+    metadata: normalizeJsonObject(row.metadata),
     created_at: asIsoString(row.created_at)!,
     updated_at: asIsoString(row.updated_at)!,
   };
@@ -113,7 +125,7 @@ function mapChallenge(row: any): ChallengeTemplate {
 function mapUserBadge(row: any): UserBadge {
   return {
     ...row,
-    metadata: row.metadata ?? {},
+    metadata: normalizeJsonObject(row.metadata),
     awarded_at: asIsoString(row.awarded_at)!,
   };
 }
@@ -121,7 +133,7 @@ function mapUserBadge(row: any): UserBadge {
 function mapScoringActivity(row: any): ScoringActivityLog {
   return {
     ...row,
-    metadata: row.metadata ?? {},
+    metadata: normalizeJsonObject(row.metadata),
     created_at: asIsoString(row.created_at)!,
   };
 }
@@ -283,7 +295,7 @@ async function getWalletSummaryFromTables(userId?: string | null): Promise<Walle
       company_id: record.company_id,
       followup_id: record.followup_id,
       reward_id: record.reward_id,
-      metadata: record.metadata ?? {},
+      metadata: normalizeJsonObject(record.metadata),
       created_at: asIsoString(record.created_at) as string,
     })),
     badges: profile.userBadges.map((record) => ({
@@ -294,7 +306,7 @@ async function getWalletSummaryFromTables(userId?: string | null): Promise<Walle
       badge_key: record.badge_key,
       badge_name: record.badge_name,
       badge_description: record.badge_description,
-      metadata: record.metadata ?? {},
+      metadata: normalizeJsonObject(record.metadata),
       awarded_at: asIsoString(record.awarded_at) as string,
       awarded_by: record.awarded_by ?? null,
     })),
@@ -317,7 +329,7 @@ async function getWalletSummaryFromTables(userId?: string | null): Promise<Walle
       window_ends_at: asIsoString(record.window_ends_at) as string,
       name: record.challengeTemplate?.name,
       description: record.challengeTemplate?.description,
-      cadence: record.challengeTemplate?.cadence,
+      cadence: normalizeCadence(record.challengeTemplate?.cadence),
       target_metric: record.challengeTemplate?.target_metric,
     })),
   };
@@ -411,7 +423,7 @@ export async function getRewardRedemptionHistory(limit = 50) {
 
   return rows.map((row) => ({
     ...row,
-    metadata: row.metadata ?? {},
+    metadata: normalizeJsonObject(row.metadata),
     created_at: asIsoString(row.created_at)!,
     updated_at: asIsoString(row.updated_at)!,
     processed_at: asIsoString(row.processed_at),
@@ -440,7 +452,7 @@ export async function getOrganizationRewardRedemptions(limit = 50) {
 
   return rows.map((row) => ({
     ...row,
-    metadata: row.metadata ?? {},
+    metadata: normalizeJsonObject(row.metadata),
     created_at: asIsoString(row.created_at)!,
     updated_at: asIsoString(row.updated_at)!,
     processed_at: asIsoString(row.processed_at),
@@ -493,6 +505,7 @@ export async function getUserChallengeProgress(userId?: string, limit = 50) {
     window_starts_at: asIsoString(row.window_starts_at)!,
     window_ends_at: asIsoString(row.window_ends_at)!,
     updated_at: asIsoString(row.updated_at)!,
+    cadence: normalizeCadence(row.cadence),
   })) as UserChallengeProgress[];
 }
 
@@ -580,13 +593,13 @@ export async function getScoringAdminDashboard() {
   return {
     rules: rulesRows.map((row) => ({
       ...row,
-      rule_scope: row.rule_scope ?? {},
+      rule_scope: normalizeJsonObject(row.rule_scope),
       created_at: asIsoString(row.created_at)!,
       updated_at: asIsoString(row.updated_at)!,
     })) as LeadScoreRule[],
     sourceRules: sourceRuleRows.map((row) => ({
       ...row,
-      rule_scope: row.rule_scope ?? {},
+      rule_scope: normalizeJsonObject(row.rule_scope),
       created_at: asIsoString(row.created_at)!,
       updated_at: asIsoString(row.updated_at)!,
     })) as LeadSourceScoreRule[],

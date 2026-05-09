@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { getCurrentUser, requireOrganization } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 
@@ -24,54 +25,73 @@ type CreateNotificationInput = {
   link?: string | null;
 };
 
-export async function getNotifications(limit = 8): Promise<NotificationRow[]> {
+type NotificationCenterData = {
+  notifications: NotificationRow[];
+  unreadCount: number;
+};
+
+const getNotificationCenterDataCached = cache(
+  async (organizationId: string, userId: string, limit: number): Promise<NotificationCenterData> => {
+    const [rows, unreadCount] = await prisma.$transaction([
+      prisma.notification.findMany({
+        where: {
+          organization_id: organizationId,
+          user_id: userId,
+        },
+        orderBy: {
+          created_at: "desc",
+        },
+        take: limit,
+      }),
+      prisma.notification.count({
+        where: {
+          organization_id: organizationId,
+          user_id: userId,
+          is_read: false,
+        },
+      }),
+    ]);
+
+    return {
+      notifications: rows.map((row) => ({
+        id: row.id,
+        organization_id: row.organization_id,
+        user_id: row.user_id,
+        type: row.type,
+        title: row.title,
+        message: row.message,
+        link: row.link,
+        is_read: row.is_read,
+        read_at: row.read_at?.toISOString() ?? null,
+        created_at: row.created_at.toISOString(),
+      })),
+      unreadCount,
+    };
+  },
+);
+
+export async function getNotificationCenterData(limit = 8): Promise<NotificationCenterData> {
   const organization = await requireOrganization();
   const user = await getCurrentUser();
 
   if (!user) {
-    return [];
+    return {
+      notifications: [],
+      unreadCount: 0,
+    };
   }
 
-  const rows = await prisma.notification.findMany({
-    where: {
-      organization_id: organization.id,
-      user_id: user.id,
-    },
-    orderBy: {
-      created_at: "desc",
-    },
-    take: limit,
-  });
+  return getNotificationCenterDataCached(organization.id, user.id, limit);
+}
 
-  return rows.map((row) => ({
-    id: row.id,
-    organization_id: row.organization_id,
-    user_id: row.user_id,
-    type: row.type,
-    title: row.title,
-    message: row.message,
-    link: row.link,
-    is_read: row.is_read,
-    read_at: row.read_at?.toISOString() ?? null,
-    created_at: row.created_at.toISOString(),
-  }));
+export async function getNotifications(limit = 8): Promise<NotificationRow[]> {
+  const data = await getNotificationCenterData(limit);
+  return data.notifications;
 }
 
 export async function getUnreadNotificationCount() {
-  const organization = await requireOrganization();
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return 0;
-  }
-
-  return prisma.notification.count({
-    where: {
-      organization_id: organization.id,
-      user_id: user.id,
-      is_read: false,
-    },
-  });
+  const data = await getNotificationCenterData();
+  return data.unreadCount;
 }
 
 export async function markNotificationAsRead(notificationId: string) {

@@ -3,9 +3,22 @@ import { requireAuth } from "@/lib/auth/session";
 import { canCreateWorkspaceForUser, listAccessibleWorkspacesForUser } from "./service";
 import type { WorkspaceSummary } from "./types";
 
-export const getAccessibleWorkspaces = cache(async (): Promise<WorkspaceSummary[]> => {
+export const getWorkspaceSwitcherState = cache(async () => {
   const user = await requireAuth();
-  return listAccessibleWorkspacesForUser(user.id);
+  const workspaces = await listAccessibleWorkspacesForUser(user.id);
+  const canCreateWorkspace = workspaces.length === 0
+    ? true
+    : await canCreateWorkspaceForUser(user.id, workspaces);
+
+  return {
+    workspaces,
+    canCreateWorkspace,
+  };
+});
+
+export const getAccessibleWorkspaces = cache(async (): Promise<WorkspaceSummary[]> => {
+  const state = await getWorkspaceSwitcherState();
+  return state.workspaces;
 });
 
 export async function getAccessibleWorkspaceCount() {
@@ -14,6 +27,6 @@ export async function getAccessibleWorkspaceCount() {
 }
 
 export const getCanCreateWorkspace = cache(async () => {
-  const user = await requireAuth();
-  return canCreateWorkspaceForUser(user.id);
+  const state = await getWorkspaceSwitcherState();
+  return state.canCreateWorkspace;
 });

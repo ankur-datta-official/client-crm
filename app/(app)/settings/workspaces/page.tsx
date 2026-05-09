@@ -3,14 +3,11 @@ import { PageHeader } from "@/components/shared/page-header";
 import { WorkspaceManagementPanel } from "@/components/workspace/workspace-management-panel";
 import { Badge } from "@/components/ui/badge";
 import { requireAuth } from "@/lib/auth/session";
-import { getAccessibleWorkspaces, getCanCreateWorkspace } from "@/lib/workspace/queries";
+import { getWorkspaceSwitcherState } from "@/lib/workspace/queries";
 
 export default async function WorkspaceSettingsPage() {
   await requireAuth();
-  const [workspaces, canCreateWorkspace] = await Promise.all([
-    getAccessibleWorkspaces(),
-    getCanCreateWorkspace(),
-  ]);
+  const { workspaces, canCreateWorkspace } = await getWorkspaceSwitcherState();
 
   return (
     <div className="space-y-6">

@@ -38,6 +38,20 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function getVerifiedMessage(params: {
+  inviteEmail: string;
+  inviteMode: boolean;
+  verifiedFromQuery: boolean;
+}) {
+  if (!params.verifiedFromQuery) {
+    return null;
+  }
+
+  return params.inviteMode
+    ? `Email verified. Sign in with ${params.inviteEmail || "the invited email"} to accept the invitation.`
+    : "Email verified. Please sign in to continue to workspace setup.";
+}
+
 export function AuthForm({ mode, provider }: AuthFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -49,7 +63,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
   const inviteWorkspace = searchParams.get("workspace") ?? "";
   const inviteRole = searchParams.get("role") ?? "";
   const nextPath = searchParams.get("next") ?? "/onboarding/workspace";
-  const [message, setMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
@@ -61,6 +75,12 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
   const lockedInviteEmail = inviteMode && inviteEmail.length > 0;
   const inviteWorkspaceLabel = inviteWorkspace || "the CRM workspace";
   const inviteRoleLabel = inviteRole || "your assigned role";
+  const verifiedMessage = getVerifiedMessage({
+    inviteEmail,
+    inviteMode,
+    verifiedFromQuery,
+  });
+  const message = statusMessage ?? verifiedMessage;
 
   const form = useForm<AuthValues>({
     resolver: zodResolver(authSchema),
@@ -70,16 +90,6 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
       fullName: "",
     },
   });
-
-  useEffect(() => {
-    if (verifiedFromQuery) {
-      setMessage(
-        inviteMode
-          ? `Email verified. Sign in with ${inviteEmail || "the invited email"} to accept the invitation.`
-          : "Email verified. Please sign in to continue to workspace setup.",
-      );
-    }
-  }, [inviteEmail, inviteMode, verifiedFromQuery]);
 
   useEffect(() => {
     if (emailFromQuery) {
@@ -117,7 +127,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
 
   async function onSubmit(values: AuthValues) {
     setError(null);
-    setMessage(null);
+    setStatusMessage(null);
 
     const submittedEmail = normalizeEmail(values.email);
 
@@ -220,7 +230,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
         : null,
     );
     setOtp("");
-    setMessage(
+    setStatusMessage(
       typeof registerPayload.message === "string"
         ? registerPayload.message
         : "We sent a 6-digit verification code to your work email.",
@@ -235,7 +245,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
     }
 
     setError(null);
-    setMessage(null);
+    setStatusMessage(null);
     setIsVerifyingOtp(true);
 
     try {
@@ -279,7 +289,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
       setPendingVerification(null);
       setOtp("");
       setDevOtpHint(null);
-      setMessage(
+      setStatusMessage(
         inviteMode
           ? "Email verified. Redirecting you to sign in and finish accepting the invitation."
           : "Email verified. Redirecting you to sign in.",
@@ -301,7 +311,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
     }
 
     setError(null);
-    setMessage(null);
+    setStatusMessage(null);
     setIsResendingOtp(true);
 
     try {
@@ -466,7 +476,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
                   onClick={() => {
                     setPendingVerification(null);
                     setOtp("");
-                    setMessage(null);
+                    setStatusMessage(null);
                     setError(null);
                     setDevOtpHint(null);
                   }}

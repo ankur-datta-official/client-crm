@@ -1,31 +1,29 @@
 import { AppShell } from "@/components/app/app-shell";
 import { ThemeProvider } from "@/components/providers/theme-provider";
-import { getCurrentOrganization, getCurrentProfile, requireAuth } from "@/lib/auth/session";
-import { getNotifications, getUnreadNotificationCount } from "@/lib/notifications/notifications";
+import { getCurrentAppContext } from "@/lib/auth/session";
+import { getNotificationCenterData } from "@/lib/notifications/notifications";
 import { getCurrentProductTourState } from "@/lib/product-tour/server";
 import { PRODUCT_TOUR_VERSION } from "@/lib/product-tour/types";
 import { getCurrentUserWalletSummary } from "@/lib/scoring/queries";
-import { getAccessibleWorkspaces, getCanCreateWorkspace } from "@/lib/workspace/queries";
+import { getWorkspaceSwitcherState } from "@/lib/workspace/queries";
 
 export default async function ProtectedAppLayout({ children }: { children: React.ReactNode }) {
-  await requireAuth();
-  const [profile, organization, workspaces, canCreateWorkspace] = await Promise.all([
-    getCurrentProfile(),
-    getCurrentOrganization(),
-    getAccessibleWorkspaces(),
-    getCanCreateWorkspace(),
+  const [{ profile, organization }, workspaceSwitcherState] = await Promise.all([
+    getCurrentAppContext(),
+    getWorkspaceSwitcherState(),
   ]);
 
-  const [notifications, unreadNotificationCount, walletSummary, productTourState] = organization
+  const [notificationCenterData, walletSummary, productTourState] = organization
     ? await Promise.all([
-        getNotifications(),
-        getUnreadNotificationCount(),
+        getNotificationCenterData(),
         getCurrentUserWalletSummary(),
         getCurrentProductTourState(),
       ])
     : [
-        [],
-        0,
+        {
+          notifications: [],
+          unreadCount: 0,
+        },
         null,
         {
           version: PRODUCT_TOUR_VERSION,
@@ -41,12 +39,12 @@ export default async function ProtectedAppLayout({ children }: { children: React
       <AppShell
         profile={profile}
         organizationName={organization?.name ?? "Sales Workspace"}
-        notifications={notifications}
-        unreadNotificationCount={unreadNotificationCount}
+        notifications={notificationCenterData.notifications}
+        unreadNotificationCount={notificationCenterData.unreadCount}
         walletSummary={walletSummary}
         initialProductTourState={productTourState}
-        workspaces={workspaces}
-        canCreateWorkspace={canCreateWorkspace}
+        workspaces={workspaceSwitcherState.workspaces}
+        canCreateWorkspace={workspaceSwitcherState.canCreateWorkspace}
       >
         {children}
       </AppShell>

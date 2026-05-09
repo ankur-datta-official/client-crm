@@ -19,10 +19,20 @@ import { DocumentCard } from "@/components/crm/document-card";
 import { HelpRequestCard } from "@/components/crm/help-request-card";
 import { DocumentTypeBadge, DocumentStatusBadge } from "@/components/crm/document-badges";
 import { getCompanyScoringHistory } from "@/lib/scoring/queries";
+import type { Company, ContactPerson, Document, Followup, HelpRequest, Interaction } from "@/lib/crm/types";
+import type { ScoringActivityLog } from "@/lib/scoring/types";
 
 export default async function CompanyProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [company, contacts, interactions, followups, documents, helpRequests, scoringHistory] = await Promise.all([
+  const [company, contacts, interactions, followups, documents, helpRequests, scoringHistory]: [
+    Company | null,
+    ContactPerson[],
+    Interaction[],
+    Followup[],
+    Document[],
+    HelpRequest[],
+    ScoringActivityLog[],
+  ] = await Promise.all([
     getCompanyById(id),
     getContactsByCompany(id),
     getInteractionsByCompany(id),

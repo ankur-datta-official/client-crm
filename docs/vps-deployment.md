@@ -64,14 +64,14 @@ Create `.env.production` from [`.env.production.example`](/c:/Users/Mugnee/Deskt
 Minimum own-backend values:
 ```bash
 NODE_ENV=production
-NEXT_PUBLIC_APP_URL=https://crm.example.com
+NEXT_PUBLIC_APP_URL=https://crm.mugnee.com
 DATABASE_URL=postgresql://crm_app:replace-with-a-strong-password@127.0.0.1:5432/crm?schema=public
 BETTER_AUTH_SECRET=replace-with-a-long-random-secret
-BETTER_AUTH_URL=https://crm.example.com
+BETTER_AUTH_URL=https://crm.mugnee.com
 UPLOAD_DIR=/var/www/saas-crm/public/uploads
 PRIVATE_UPLOAD_DIR=/var/www/saas-crm/storage/private
 TEMP_UPLOAD_DIR=/var/www/saas-crm/storage/tmp
-PUBLIC_UPLOAD_BASE_URL=https://crm.example.com
+PUBLIC_UPLOAD_BASE_URL=https://crm.mugnee.com
 MAX_UPLOAD_SIZE_MB=25
 CRON_SECRET=replace-with-a-random-cron-secret
 ```
@@ -112,7 +112,7 @@ sudo npm install -g pm2
 Start the app:
 ```bash
 cd /var/www/saas-crm
-PORT=3000 pm2 start npm --name saas-crm -- start
+pm2 start ecosystem.config.cjs --only saas-crm
 pm2 save
 pm2 startup
 ```
@@ -122,7 +122,7 @@ Create `/etc/nginx/sites-available/saas-crm`:
 ```nginx
 server {
     listen 80;
-    server_name crm.example.com;
+    server_name crm.mugnee.com;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -147,7 +147,7 @@ sudo systemctl reload nginx
 ## 13. SSL With Certbot
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d crm.example.com
+sudo certbot --nginx -d crm.mugnee.com
 sudo certbot renew --dry-run
 ```
 
