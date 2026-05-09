@@ -1,20 +1,16 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { hasPermission } from "@/lib/auth/session";
+import { getCurrentProfile, getCurrentUser, hasPermission } from "@/lib/auth/session";
 import { buildSampleImportWorkbook, parseCompaniesCsv, parseImportWorkbook } from "@/lib/crm/company-import-shared";
 import { runCompanyContactImport } from "@/lib/crm/company-import-runner";
 import { logServerError } from "@/lib/errors";
-import { createClient } from "@/lib/supabase/server";
 import { checkFileSizeLimit, hasPlanFeatureForOrganization } from "@/lib/subscription/subscription-queries";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -25,13 +21,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("organization_id, is_active")
-      .eq("id", user.id)
-      .maybeSingle();
+    const profile = await getCurrentProfile();
 
-    if (profileError || !profile?.organization_id || !profile.is_active) {
+    if (!profile?.organization_id || !profile.is_active) {
       return NextResponse.json({ error: "Workspace not available." }, { status: 400 });
     }
 
@@ -92,7 +84,6 @@ export async function POST(request: Request) {
     }
 
     const result = await runCompanyContactImport({
-      supabase,
       organizationId,
       userId: user.id,
       companies,
@@ -116,10 +107,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -130,11 +118,7 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("organization_id, is_active")
-      .eq("id", user.id)
-      .maybeSingle();
+    const profile = await getCurrentProfile();
 
     if (!profile?.organization_id || !profile.is_active) {
       return NextResponse.json({ error: "Workspace not available." }, { status: 400 });

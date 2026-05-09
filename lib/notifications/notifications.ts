@@ -1,7 +1,7 @@
 "use server";
 
 import { getCurrentUser, requireOrganization } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 
 export type NotificationRow = {
   id: string;
@@ -32,20 +32,29 @@ export async function getNotifications(limit = 8): Promise<NotificationRow[]> {
     return [];
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("id, organization_id, user_id, type, title, message, link, is_read, read_at, created_at")
-    .eq("organization_id", organization.id)
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const rows = await prisma.notification.findMany({
+    where: {
+      organization_id: organization.id,
+      user_id: user.id,
+    },
+    orderBy: {
+      created_at: "desc",
+    },
+    take: limit,
+  });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as NotificationRow[];
+  return rows.map((row) => ({
+    id: row.id,
+    organization_id: row.organization_id,
+    user_id: row.user_id,
+    type: row.type,
+    title: row.title,
+    message: row.message,
+    link: row.link,
+    is_read: row.is_read,
+    read_at: row.read_at?.toISOString() ?? null,
+    created_at: row.created_at.toISOString(),
+  }));
 }
 
 export async function getUnreadNotificationCount() {
@@ -56,19 +65,13 @@ export async function getUnreadNotificationCount() {
     return 0;
   }
 
-  const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("notifications")
-    .select("*", { count: "exact", head: true })
-    .eq("organization_id", organization.id)
-    .eq("user_id", user.id)
-    .eq("is_read", false);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return count ?? 0;
+  return prisma.notification.count({
+    where: {
+      organization_id: organization.id,
+      user_id: user.id,
+      is_read: false,
+    },
+  });
 }
 
 export async function markNotificationAsRead(notificationId: string) {
@@ -79,20 +82,17 @@ export async function markNotificationAsRead(notificationId: string) {
     throw new Error("Authentication required.");
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("notifications")
-    .update({
+  await prisma.notification.updateMany({
+    data: {
       is_read: true,
-      read_at: new Date().toISOString(),
-    })
-    .eq("id", notificationId)
-    .eq("organization_id", organization.id)
-    .eq("user_id", user.id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+      read_at: new Date(),
+    },
+    where: {
+      id: notificationId,
+      organization_id: organization.id,
+      user_id: user.id,
+    },
+  });
 
   return { success: true };
 }
@@ -105,40 +105,34 @@ export async function markAllNotificationsAsRead() {
     throw new Error("Authentication required.");
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("notifications")
-    .update({
+  await prisma.notification.updateMany({
+    data: {
       is_read: true,
-      read_at: new Date().toISOString(),
-    })
-    .eq("organization_id", organization.id)
-    .eq("user_id", user.id)
-    .eq("is_read", false);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+      read_at: new Date(),
+    },
+    where: {
+      organization_id: organization.id,
+      user_id: user.id,
+      is_read: false,
+    },
+  });
 
   return { success: true };
 }
 
 export async function createNotification(input: CreateNotificationInput) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
-  const { error } = await supabase.from("notifications").insert({
-    organization_id: organization.id,
-    user_id: input.userId,
-    type: input.type,
-    title: input.title,
-    message: input.message,
-    link: input.link ?? null,
+  await prisma.notification.create({
+    data: {
+      organization_id: organization.id,
+      user_id: input.userId,
+      type: input.type,
+      title: input.title,
+      message: input.message,
+      link: input.link ?? null,
+    },
   });
-
-  if (error) {
-    throw new Error(error.message);
-  }
 
   return { success: true };
 }

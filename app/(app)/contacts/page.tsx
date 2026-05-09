@@ -15,7 +15,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
   ]);
 
   return (
-    <div data-tour="tour-contacts-overview">
+    <div data-tour="tour-contacts-overview" className="flex min-h-full flex-col">
       <PageHeader
         title="Contacts"
         description="Keep track of decision makers, influencers, and day-to-day contact details."
@@ -31,7 +31,9 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
       <GuidanceStrip dismissible storageKey="crm-tip-contacts">
         Add contacts under your companies so every meeting, follow-up, and document stays tied to the right people.
       </GuidanceStrip>
-      <ContactTable contacts={contactPage.rows} companies={companies} totalCount={contactPage.total} />
+      <div className="flex-1">
+        <ContactTable contacts={contactPage.rows} companies={companies} totalCount={contactPage.total} />
+      </div>
     </div>
   );
 }

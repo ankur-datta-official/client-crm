@@ -72,10 +72,10 @@
     overflow-y: auto;
   }
 
-  @media (min-width: 768px) {
-    body {
-      overflow-y: hidden;
-    }
+  /* Prevent outer (window) scrollbar when app-shell manages its own scrolling. */
+  html:has([data-app-shell-root]),
+  body:has([data-app-shell-root]) {
+    overflow: hidden;
   }
 
   ::selection {

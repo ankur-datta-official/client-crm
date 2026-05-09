@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/shared/page-header";
-import { createWorkspaceAction } from "@/app/(app)/onboarding/workspace/actions";
+import { createWorkspaceAction } from "@/lib/workspace/actions";
 
 const workspaceSchema = z.object({
   name: z.string().min(2, "Workspace name is required."),

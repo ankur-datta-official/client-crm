@@ -8,6 +8,7 @@ import type { NotificationRow } from "@/lib/notifications/notifications";
 import type { Profile } from "@/lib/auth/session";
 import type { WalletSummary } from "@/lib/scoring/types";
 import type { ProductTourState } from "@/lib/product-tour/types";
+import type { WorkspaceSummary } from "@/lib/workspace/types";
 
 export type AppShellProps = {
   children: React.ReactNode;
@@ -17,6 +18,8 @@ export type AppShellProps = {
   unreadNotificationCount: number;
   walletSummary: WalletSummary | null;
   initialProductTourState: ProductTourState;
+  workspaces: WorkspaceSummary[];
+  canCreateWorkspace: boolean;
 };
 
 export function AppShell({ 
@@ -27,6 +30,8 @@ export function AppShell({
   unreadNotificationCount,
   walletSummary,
   initialProductTourState,
+  workspaces,
+  canCreateWorkspace,
 }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -43,7 +48,7 @@ export function AppShell({
 
   return (
     <ProductTourProvider initialState={initialProductTourState}>
-      <div className="min-h-dvh bg-background md:flex md:h-screen md:overflow-hidden">
+      <div data-app-shell-root className="flex h-dvh min-h-dvh overflow-hidden bg-background">
         <AppSidebar
           open={sidebarOpen}
           onOpenChange={setSidebarOpen}
@@ -52,15 +57,17 @@ export function AppShell({
           organizationName={organizationName}
           profile={profile}
         />
-        <div className="flex min-w-0 flex-1 flex-col md:h-screen md:min-h-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <AppTopbar
             onMenuClick={() => setSidebarOpen(true)}
             profile={profile}
             notifications={notifications}
             unreadNotificationCount={unreadNotificationCount}
             walletSummary={walletSummary}
+            workspaces={workspaces}
+            canCreateWorkspace={canCreateWorkspace}
           />
-          <main className="mx-auto w-full max-w-[1500px] min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:py-6 md:overflow-y-auto md:px-6 lg:px-8">{children}</main>
+          <main className="mx-auto w-full max-w-[1500px] min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 sm:py-6 md:px-6 lg:px-8">{children}</main>
         </div>
       </div>
     </ProductTourProvider>

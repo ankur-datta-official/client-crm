@@ -1,147 +1,153 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createClient } from "@supabase/supabase-js";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
 
 const DEMO_TAG = "[dashboard-demo-v1]";
 const TARGET_EMAIL = process.argv[2] ?? "admin@gmail.com";
 
 loadLocalEnv();
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !serviceRoleKey) {
-  throw new Error("Missing Supabase URL or service role key in .env.local");
+if (!process.env.DATABASE_URL) {
+  throw new Error("Missing DATABASE_URL in .env.local");
 }
 
-const supabase = createClient(supabaseUrl, serviceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
+const prisma = new PrismaClient({
+  adapter: new PrismaPg(process.env.DATABASE_URL),
 });
 
-const profile = await getTargetProfile(TARGET_EMAIL);
-const stages = await getPipelineStages(profile.organization_id);
-const selectedStages = selectFunnelStages(stages);
-const categories = await getCategories(profile.organization_id);
-const industries = await ensureIndustries(profile.organization_id, profile.id);
-const existingDemoCount = await getExistingDemoCount(profile.organization_id);
+try {
+  const profile = await getTargetProfile(TARGET_EMAIL);
+  const stages = await getPipelineStages(profile.organization_id);
+  const selectedStages = selectFunnelStages(stages);
+  const categories = await getCategories(profile.organization_id);
+  const industries = await ensureIndustries(profile.organization_id, profile.id);
+  const existingDemoCount = await getExistingDemoCount(profile.organization_id);
 
-if (existingDemoCount > 0) {
-  console.log(`Demo data already exists for ${TARGET_EMAIL}. Found ${existingDemoCount} demo companies with tag ${DEMO_TAG}.`);
-  process.exit(0);
-}
-
-const companiesPayload = buildCompanyPayload({
-  organizationId: profile.organization_id,
-  userId: profile.id,
-  stageIds: selectedStages.map((stage) => stage.id),
-  categoryIds: categories,
-  industryIds: industries,
-});
-
-const insertedCompanies = await insertRows("companies", companiesPayload, "id, name, pipeline_stage_id");
-const companyIds = insertedCompanies.map((item) => item.id);
-
-const contactsPayload = buildContactsPayload({
-  organizationId: profile.organization_id,
-  userId: profile.id,
-  companies: insertedCompanies,
-});
-
-const insertedContacts = await insertRows("contact_persons", contactsPayload, "id, company_id, name, email");
-const contactByCompanyId = new Map(insertedContacts.map((contact) => [contact.company_id, contact]));
-
-const interactionsPayload = buildInteractionsPayload({
-  organizationId: profile.organization_id,
-  userId: profile.id,
-  companies: insertedCompanies,
-  contactByCompanyId,
-});
-
-const insertedInteractions = await insertRows("interactions", interactionsPayload, "id, company_id");
-const interactionByCompanyId = new Map(insertedInteractions.map((interaction) => [interaction.company_id, interaction]));
-
-const followupsPayload = buildFollowupsPayload({
-  organizationId: profile.organization_id,
-  userId: profile.id,
-  companies: insertedCompanies,
-  contactByCompanyId,
-  interactionByCompanyId,
-});
-
-const insertedFollowups = await insertRows("followups", followupsPayload, "id, company_id, title, status");
-const pendingFollowups = insertedFollowups.filter((item) => item.status === "pending");
-
-const helpRequestsPayload = buildHelpRequestsPayload({
-  organizationId: profile.organization_id,
-  userId: profile.id,
-  companies: insertedCompanies,
-  contactByCompanyId,
-  interactionByCompanyId,
-  pendingFollowups,
-});
-
-await insertRows("help_requests", helpRequestsPayload, "id");
-
-console.log(`Seeded demo dashboard data for ${TARGET_EMAIL}`);
-console.log(`Companies: ${insertedCompanies.length}`);
-console.log(`Contacts: ${insertedContacts.length}`);
-console.log(`Interactions: ${insertedInteractions.length}`);
-console.log(`Follow-ups: ${insertedFollowups.length}`);
-console.log(`Help requests: ${helpRequestsPayload.length}`);
-
-async function getTargetProfile(email) {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, organization_id, email, full_name")
-    .eq("email", email)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Unable to load profile: ${error.message}`);
+  if (existingDemoCount > 0) {
+    console.log(`Demo data already exists for ${TARGET_EMAIL}. Found ${existingDemoCount} demo companies with tag ${DEMO_TAG}.`);
+    process.exit(0);
   }
 
-  if (!data?.organization_id) {
+  const companiesPayload = buildCompanyPayload({
+    organizationId: profile.organization_id,
+    userId: profile.id,
+    stageIds: selectedStages.map((stage) => stage.id),
+    categoryIds: categories,
+    industryIds: industries,
+  });
+
+  const insertedCompanies = await insertRows("companies", companiesPayload, "id, name, pipeline_stage_id");
+  const contactsPayload = buildContactsPayload({
+    organizationId: profile.organization_id,
+    userId: profile.id,
+    companies: insertedCompanies,
+  });
+  const insertedContacts = await insertRows("contact_persons", contactsPayload, "id, company_id, name, email");
+  const contactByCompanyId = new Map(insertedContacts.map((contact) => [contact.company_id, contact]));
+
+  const interactionsPayload = buildInteractionsPayload({
+    organizationId: profile.organization_id,
+    userId: profile.id,
+    companies: insertedCompanies,
+    contactByCompanyId,
+  });
+  const insertedInteractions = await insertRows("interactions", interactionsPayload, "id, company_id");
+  const interactionByCompanyId = new Map(insertedInteractions.map((interaction) => [interaction.company_id, interaction]));
+
+  const followupsPayload = buildFollowupsPayload({
+    organizationId: profile.organization_id,
+    userId: profile.id,
+    companies: insertedCompanies,
+    contactByCompanyId,
+    interactionByCompanyId,
+  });
+  const insertedFollowups = await insertRows("followups", followupsPayload, "id, company_id, title, status");
+  const pendingFollowups = insertedFollowups.filter((item) => item.status === "pending");
+
+  const helpRequestsPayload = buildHelpRequestsPayload({
+    organizationId: profile.organization_id,
+    userId: profile.id,
+    companies: insertedCompanies,
+    contactByCompanyId,
+    interactionByCompanyId,
+    pendingFollowups,
+  });
+
+  await insertRows("help_requests", helpRequestsPayload, "id");
+
+  console.log(`Seeded demo dashboard data for ${TARGET_EMAIL}`);
+  console.log(`Companies: ${insertedCompanies.length}`);
+  console.log(`Contacts: ${insertedContacts.length}`);
+  console.log(`Interactions: ${insertedInteractions.length}`);
+  console.log(`Follow-ups: ${insertedFollowups.length}`);
+  console.log(`Help requests: ${helpRequestsPayload.length}`);
+} finally {
+  await prisma.$disconnect();
+}
+
+async function getTargetProfile(email) {
+  const rows = await prisma.$queryRawUnsafe(
+    `
+      select
+        id::text as id,
+        organization_id::text as organization_id,
+        email,
+        full_name
+      from public.profiles
+      where lower(email) = lower($1)
+      limit 1
+    `,
+    email,
+  );
+
+  const profile = rows[0] ?? null;
+  if (!profile?.organization_id) {
     throw new Error(`Profile ${email} was not found or does not belong to an organization yet.`);
   }
 
-  return data;
+  return profile;
 }
 
 async function getPipelineStages(organizationId) {
-  const { data, error } = await supabase
-    .from("pipeline_stages")
-    .select("id, name, slug, position, is_won, is_lost, color")
-    .eq("organization_id", organizationId)
-    .eq("is_active", true)
-    .order("position");
+  const rows = await prisma.$queryRawUnsafe(
+    `
+      select
+        id::text as id,
+        name,
+        slug,
+        position,
+        is_won,
+        is_lost,
+        color
+      from public.pipeline_stages
+      where organization_id = $1::uuid
+        and is_active = true
+      order by position asc
+    `,
+    organizationId,
+  );
 
-  if (error) {
-    throw new Error(`Unable to load pipeline stages: ${error.message}`);
-  }
-
-  if (!data?.length) {
+  if (!rows.length) {
     throw new Error("No active pipeline stages found for the target organization.");
   }
 
-  return data;
+  return rows;
 }
 
 async function getCategories(organizationId) {
-  const { data, error } = await supabase
-    .from("company_categories")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .neq("status", "archived")
-    .order("priority_level");
+  const rows = await prisma.$queryRawUnsafe(
+    `
+      select id::text as id
+      from public.company_categories
+      where organization_id = $1::uuid
+        and status <> 'archived'
+      order by priority_level asc
+    `,
+    organizationId,
+  );
 
-  if (error) {
-    throw new Error(`Unable to load categories: ${error.message}`);
-  }
-
-  return (data ?? []).map((item) => item.id);
+  return rows.map((item) => item.id);
 }
 
 async function ensureIndustries(organizationId, userId) {
@@ -161,49 +167,82 @@ async function ensureIndustries(organizationId, userId) {
     updated_by: userId,
   }));
 
-  const { error: upsertError } = await supabase
-    .from("industries")
-    .upsert(payload, { onConflict: "organization_id,name" });
-
-  if (upsertError) {
-    throw new Error(`Unable to ensure industries: ${upsertError.message}`);
+  for (const row of payload) {
+    await prisma.$executeRawUnsafe(
+      `
+        insert into public.industries (
+          organization_id,
+          name,
+          description,
+          created_by,
+          updated_by
+        )
+        values ($1::uuid, $2, $3, $4::uuid, $5::uuid)
+        on conflict (organization_id, name)
+        do update set
+          description = excluded.description,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+      `,
+      row.organization_id,
+      row.name,
+      row.description,
+      row.created_by,
+      row.updated_by,
+    );
   }
 
-  const { data, error } = await supabase
-    .from("industries")
-    .select("id, name")
-    .eq("organization_id", organizationId)
-    .in("name", industryNames);
+  const rows = await prisma.$queryRawUnsafe(
+    `
+      select id::text as id, name
+      from public.industries
+      where organization_id = $1::uuid
+        and name = any($2::text[])
+    `,
+    organizationId,
+    industryNames,
+  );
 
-  if (error) {
-    throw new Error(`Unable to load industries: ${error.message}`);
-  }
-
-  return (data ?? []).map((item) => item.id);
+  return rows.map((item) => item.id);
 }
 
 async function getExistingDemoCount(organizationId) {
-  const { count, error } = await supabase
-    .from("companies")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", organizationId)
-    .like("notes", `%${DEMO_TAG}%`);
+  const rows = await prisma.$queryRawUnsafe(
+    `
+      select count(*)::int as count
+      from public.companies
+      where organization_id = $1::uuid
+        and notes like $2
+    `,
+    organizationId,
+    `%${DEMO_TAG}%`,
+  );
 
-  if (error) {
-    throw new Error(`Unable to check existing demo data: ${error.message}`);
-  }
-
-  return count ?? 0;
+  return rows[0]?.count ?? 0;
 }
 
-async function insertRows(table, payload, select) {
-  const { data, error } = await supabase.from(table).insert(payload).select(select);
-
-  if (error) {
-    throw new Error(`Unable to insert into ${table}: ${error.message}`);
+async function insertRows(table, payload, returning) {
+  if (!payload.length) {
+    return [];
   }
 
-  return data ?? [];
+  const columns = Object.keys(payload[0]);
+  const values = [];
+  const rowPlaceholders = payload.map((row, rowIndex) => {
+    const placeholders = columns.map((column, columnIndex) => {
+      values.push(row[column] ?? null);
+      return `$${rowIndex * columns.length + columnIndex + 1}`;
+    });
+    return `(${placeholders.join(", ")})`;
+  });
+
+  const query = `
+    insert into public.${table} (${columns.join(", ")})
+    values ${rowPlaceholders.join(",\n")}
+    returning ${returning}
+  `;
+
+  return prisma.$queryRawUnsafe(query, ...values);
 }
 
 function buildCompanyPayload({
@@ -499,7 +538,8 @@ function loadLocalEnv() {
       continue;
     }
     const key = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
+    const rawValue = line.slice(separatorIndex + 1).trim();
+    const value = rawValue.replace(/^(['"])(.*)\1$/, "$2");
     if (!process.env[key]) {
       process.env[key] = value;
     }

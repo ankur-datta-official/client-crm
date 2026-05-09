@@ -1,8 +1,9 @@
 "use server";
 
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser, requireOrganization, requirePermission } from "@/lib/auth/session";
 import { resolveProfileAvatarUrl } from "@/lib/profile/profile-utils";
-import { createClient } from "@/lib/supabase/server";
+import { Prisma } from "@prisma/client";
 import type {
   ChallengeTemplate,
   LeadScoreRule,
@@ -21,7 +22,9 @@ async function resolveLeaderboardAvatarUrls(entries: LeaderboardEntry[]) {
   return Promise.all(
     entries.map(async (entry) => ({
       ...entry,
-      avatar_url: await resolveProfileAvatarUrl(entry.avatar_url),
+      avatar_url: await resolveProfileAvatarUrl(entry.avatar_url, 900, {
+        profileId: entry.user_id,
+      }),
     })),
   );
 }
@@ -74,270 +77,522 @@ function dedupeChallenges(challenges: ChallengeTemplate[]) {
   });
 }
 
+function asIsoString(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return (value instanceof Date ? value : new Date(value)).toISOString();
+}
+
+function mapWalletTransaction(row: any): WalletTransaction {
+  return {
+    ...row,
+    metadata: row.metadata ?? {},
+    created_at: asIsoString(row.created_at)!,
+  };
+}
+
+function mapReward(row: any): Reward {
+  return {
+    ...row,
+    metadata: row.metadata ?? {},
+    created_at: asIsoString(row.created_at)!,
+    updated_at: asIsoString(row.updated_at)!,
+  };
+}
+
+function mapChallenge(row: any): ChallengeTemplate {
+  return {
+    ...row,
+    config: row.config ?? {},
+    starts_at: asIsoString(row.starts_at),
+    ends_at: asIsoString(row.ends_at),
+    created_at: asIsoString(row.created_at)!,
+    updated_at: asIsoString(row.updated_at)!,
+  };
+}
+
+function mapUserBadge(row: any): UserBadge {
+  return {
+    ...row,
+    metadata: row.metadata ?? {},
+    awarded_at: asIsoString(row.awarded_at)!,
+  };
+}
+
+function mapScoringActivity(row: any): ScoringActivityLog {
+  return {
+    ...row,
+    metadata: row.metadata ?? {},
+    created_at: asIsoString(row.created_at)!,
+  };
+}
+
 export async function getCurrentUserWalletSummary() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_user_wallet_summary", {});
+  const user = await getCurrentUser();
 
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const rows = await prisma.$queryRaw<Array<{ payload: WalletSummary | null }>>`
+      select public.get_user_wallet_summary() as payload
+    `;
+    return rows[0]?.payload ?? null;
+  } catch (error) {
+    if (isWalletSummaryFunctionUnavailableError(error)) {
+      return getWalletSummaryFromTables(user?.id);
+    }
+
+    throw error;
   }
-
-  return (Array.isArray(data) ? data[0] : data) as WalletSummary | null;
 }
 
 export async function getWalletSummaryForUser(userId: string) {
   await requirePermission("scoring.view");
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_user_wallet_summary", {
-    p_user_id: userId,
-  });
+  try {
+    const rows = await prisma.$queryRaw<Array<{ payload: WalletSummary | null }>>`
+      select public.get_user_wallet_summary(${userId}::uuid) as payload
+    `;
 
-  if (error) {
-    throw new Error(error.message);
+    return rows[0]?.payload ?? null;
+  } catch (error) {
+    if (isWalletSummaryFunctionUnavailableError(error)) {
+      return getWalletSummaryFromTables(userId);
+    }
+
+    throw error;
+  }
+}
+
+function isWalletSummaryFunctionUnavailableError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2010" &&
+    error.message.includes("42883")
+  );
+}
+
+async function getWalletSummaryFromTables(userId?: string | null): Promise<WalletSummary | null> {
+  if (!userId) {
+    return null;
   }
 
-  return (Array.isArray(data) ? data[0] : data) as WalletSummary | null;
+  const profile = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      organization_id: true,
+      email: true,
+      name: true,
+      wallet_balance: true,
+      wallet_lifetime_earned: true,
+      userBadges: {
+        select: {
+          id: true,
+          organization_id: true,
+          user_id: true,
+          reward_id: true,
+          badge_key: true,
+          badge_name: true,
+          badge_description: true,
+          metadata: true,
+          awarded_at: true,
+          awarded_by: true,
+        },
+        orderBy: { awarded_at: "desc" },
+      },
+      userStreaks: {
+        select: {
+          id: true,
+          organization_id: true,
+          user_id: true,
+          streak_key: true,
+          current_streak: true,
+          best_streak: true,
+          last_activity_date: true,
+          updated_at: true,
+        },
+        orderBy: { updated_at: "desc" },
+      },
+    },
+  });
+
+  if (!profile?.organization_id) {
+    return null;
+  }
+
+  const [transactions, challengeProgress] = await Promise.all([
+    prisma.walletTransaction.findMany({
+      where: {
+        organization_id: profile.organization_id,
+        user_id: userId,
+      },
+      select: {
+        id: true,
+        transaction_type: true,
+        action_key: true,
+        points_delta: true,
+        balance_after: true,
+        company_id: true,
+        followup_id: true,
+        reward_id: true,
+        metadata: true,
+        created_at: true,
+      },
+      orderBy: { created_at: "desc" },
+      take: 25,
+    }),
+    prisma.userChallengeProgress.findMany({
+      where: {
+        organization_id: profile.organization_id,
+        user_id: userId,
+      },
+      select: {
+        id: true,
+        challenge_template_id: true,
+        progress_count: true,
+        target_count: true,
+        is_completed: true,
+        completed_at: true,
+        window_starts_at: true,
+        window_ends_at: true,
+        updated_at: true,
+        challengeTemplate: {
+          select: {
+            name: true,
+            description: true,
+            cadence: true,
+            target_metric: true,
+          },
+        },
+      },
+      orderBy: { window_starts_at: "desc" },
+      take: 25,
+    }),
+  ]);
+
+  return {
+    user_id: profile.id,
+    organization_id: profile.organization_id,
+    full_name: profile.name,
+    email: profile.email,
+    wallet_balance: profile.wallet_balance,
+    wallet_lifetime_earned: profile.wallet_lifetime_earned,
+    recent_transactions: transactions.map((record) => ({
+      id: record.id,
+      transaction_type: record.transaction_type as WalletSummary["recent_transactions"][number]["transaction_type"],
+      action_key: record.action_key,
+      points_delta: record.points_delta,
+      balance_after: record.balance_after,
+      company_id: record.company_id,
+      followup_id: record.followup_id,
+      reward_id: record.reward_id,
+      metadata: record.metadata ?? {},
+      created_at: asIsoString(record.created_at) as string,
+    })),
+    badges: profile.userBadges.map((record) => ({
+      id: record.id,
+      organization_id: record.organization_id,
+      user_id: record.user_id,
+      reward_id: record.reward_id,
+      badge_key: record.badge_key,
+      badge_name: record.badge_name,
+      badge_description: record.badge_description,
+      metadata: record.metadata ?? {},
+      awarded_at: asIsoString(record.awarded_at) as string,
+      awarded_by: record.awarded_by ?? null,
+    })),
+    streaks: profile.userStreaks.map((record) => ({
+      id: record.id,
+      streak_key: record.streak_key,
+      current_streak: record.current_streak,
+      best_streak: record.best_streak,
+      last_activity_date: asIsoString(record.last_activity_date),
+      updated_at: asIsoString(record.updated_at) as string,
+    })),
+    challenge_progress: challengeProgress.map((record) => ({
+      id: record.id,
+      challenge_template_id: record.challenge_template_id,
+      progress_count: record.progress_count,
+      target_count: record.target_count,
+      is_completed: record.is_completed,
+      completed_at: asIsoString(record.completed_at),
+      window_starts_at: asIsoString(record.window_starts_at) as string,
+      window_ends_at: asIsoString(record.window_ends_at) as string,
+      name: record.challengeTemplate?.name,
+      description: record.challengeTemplate?.description,
+      cadence: record.challengeTemplate?.cadence,
+      target_metric: record.challengeTemplate?.target_metric,
+    })),
+  };
 }
 
 export async function getUserWalletTransactions(userId?: string, limit = 50) {
   const organization = await requireOrganization();
   const currentUser = await getCurrentUser();
-  const supabase = await createClient();
-  let query = supabase
-    .from("wallet_transactions")
-    .select("*")
-    .eq("organization_id", organization.id)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const effectiveUserId = userId ?? currentUser?.id ?? "";
 
-  query = query.eq("user_id", userId ?? currentUser?.id ?? "");
+  const rows = await prisma.$queryRaw<any[]>`
+    select *
+    from public.wallet_transactions
+    where organization_id = ${organization.id}::uuid
+      and user_id = ${effectiveUserId}::uuid
+    order by created_at desc
+    limit ${limit}
+  `;
 
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as WalletTransaction[];
+  return rows.map(mapWalletTransaction);
 }
 
 export async function getCompanyScoringHistory(companyId: string, limit = 50) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("scoring_activity_logs")
-    .select("*")
-    .eq("organization_id", organization.id)
-    .eq("company_id", companyId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const rows = await prisma.$queryRaw<any[]>`
+    select *
+    from public.scoring_activity_logs
+    where organization_id = ${organization.id}::uuid
+      and company_id = ${companyId}::uuid
+    order by created_at desc
+    limit ${limit}
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as ScoringActivityLog[];
+  return rows.map(mapScoringActivity);
 }
 
 export async function getWalletLeaderboard(period: "all_time" | "weekly" | "daily" = "all_time", limit = 10) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_wallet_leaderboard", {
-    p_organization_id: organization.id,
-    p_period: period,
-    p_limit: limit,
-  });
+  const rows = await prisma.$queryRaw<any[]>`
+    select *
+    from public.get_wallet_leaderboard(
+      ${organization.id}::uuid,
+      ${period},
+      ${limit}
+    )
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  const mapped: LeaderboardEntry[] = rows.map((row) => ({
+    ...row,
+    wallet_balance: Number(row.wallet_balance),
+    wallet_lifetime_earned: Number(row.wallet_lifetime_earned),
+    period_points: Number(row.period_points),
+  }));
 
-  return resolveLeaderboardAvatarUrls((data ?? []) as LeaderboardEntry[]);
+  return resolveLeaderboardAvatarUrls(mapped);
 }
 
 export async function getActiveRewards() {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("rewards_catalog")
-    .select("*")
-    .eq("organization_id", organization.id)
-    .eq("is_active", true)
-    .order("cost_points")
-    .order("name");
+  const rows = await prisma.$queryRaw<any[]>`
+    select *
+    from public.rewards_catalog
+    where organization_id = ${organization.id}::uuid
+      and is_active = true
+    order by cost_points asc, name asc
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return dedupeRewards((data ?? []) as Reward[]);
+  return dedupeRewards(rows.map(mapReward));
 }
 
 export async function getRewardRedemptionHistory(limit = 50) {
   const organization = await requireOrganization();
   const currentUser = await getCurrentUser();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("reward_redemptions")
-    .select("*, rewards_catalog(id, name, reward_type, cost_points)")
-    .eq("organization_id", organization.id)
-    .eq("user_id", currentUser?.id ?? "")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const rows = await prisma.$queryRaw<any[]>`
+    select
+      rr.*,
+      jsonb_build_object(
+        'id', rc.id,
+        'name', rc.name,
+        'reward_type', rc.reward_type,
+        'cost_points', rc.cost_points
+      ) as rewards_catalog
+    from public.reward_redemptions rr
+    left join public.rewards_catalog rc
+      on rc.id = rr.reward_id
+    where rr.organization_id = ${organization.id}::uuid
+      and rr.user_id = ${currentUser?.id ?? ""}::uuid
+    order by rr.created_at desc
+    limit ${limit}
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as RewardRedemption[];
+  return rows.map((row) => ({
+    ...row,
+    metadata: row.metadata ?? {},
+    created_at: asIsoString(row.created_at)!,
+    updated_at: asIsoString(row.updated_at)!,
+    processed_at: asIsoString(row.processed_at),
+  })) as RewardRedemption[];
 }
 
 export async function getOrganizationRewardRedemptions(limit = 50) {
   await requirePermission("rewards.manage");
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("reward_redemptions")
-    .select("*, rewards_catalog(id, name, reward_type, cost_points)")
-    .eq("organization_id", organization.id)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const rows = await prisma.$queryRaw<any[]>`
+    select
+      rr.*,
+      jsonb_build_object(
+        'id', rc.id,
+        'name', rc.name,
+        'reward_type', rc.reward_type,
+        'cost_points', rc.cost_points
+      ) as rewards_catalog
+    from public.reward_redemptions rr
+    left join public.rewards_catalog rc
+      on rc.id = rr.reward_id
+    where rr.organization_id = ${organization.id}::uuid
+    order by rr.created_at desc
+    limit ${limit}
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as RewardRedemption[];
+  return rows.map((row) => ({
+    ...row,
+    metadata: row.metadata ?? {},
+    created_at: asIsoString(row.created_at)!,
+    updated_at: asIsoString(row.updated_at)!,
+    processed_at: asIsoString(row.processed_at),
+  })) as RewardRedemption[];
 }
 
 export async function getActiveChallenges() {
   const organization = await requireOrganization();
-  const supabase = await createClient();
+  const rows = await prisma.$queryRaw<any[]>`
+    select *
+    from public.challenge_templates
+    where organization_id = ${organization.id}::uuid
+      and is_active = true
+    order by cadence asc, name asc
+  `;
+
   const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from("challenge_templates")
-    .select("*")
-    .eq("organization_id", organization.id)
-    .eq("is_active", true)
-    .order("cadence")
-    .order("name");
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return dedupeChallenges(((data ?? []) as ChallengeTemplate[]).filter((challenge) => {
-    const startsAtOkay = !challenge.starts_at || challenge.starts_at <= now;
-    const endsAtOkay = !challenge.ends_at || challenge.ends_at >= now;
-    return startsAtOkay && endsAtOkay;
-  }));
+  return dedupeChallenges(
+    rows
+      .map(mapChallenge)
+      .filter((challenge) => {
+        const startsAtOkay = !challenge.starts_at || challenge.starts_at <= now;
+        const endsAtOkay = !challenge.ends_at || challenge.ends_at >= now;
+        return startsAtOkay && endsAtOkay;
+      }),
+  );
 }
 
 export async function getUserChallengeProgress(userId?: string, limit = 50) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  let query = supabase
-    .from("user_challenge_progress")
-    .select("*, challenge_templates(name, description, cadence, target_metric)")
-    .eq("organization_id", organization.id)
-    .order("updated_at", { ascending: false })
-    .limit(limit);
+  const rows = await prisma.$queryRaw<any[]>`
+    select
+      ucp.*,
+      ct.name,
+      ct.description,
+      ct.cadence,
+      ct.target_metric
+    from public.user_challenge_progress ucp
+    left join public.challenge_templates ct
+      on ct.id = ucp.challenge_template_id
+    where ucp.organization_id = ${organization.id}::uuid
+      and (${userId ?? null}::uuid is null or ucp.user_id = ${userId ?? null}::uuid)
+    order by ucp.updated_at desc
+    limit ${limit}
+  `;
 
-  if (userId) {
-    query = query.eq("user_id", userId);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return ((data ?? []) as Array<any>).map((row) => ({
+  return rows.map((row) => ({
     ...row,
-    name: row.challenge_templates?.name,
-    description: row.challenge_templates?.description,
-    cadence: row.challenge_templates?.cadence,
-    target_metric: row.challenge_templates?.target_metric,
+    completed_at: asIsoString(row.completed_at),
+    window_starts_at: asIsoString(row.window_starts_at)!,
+    window_ends_at: asIsoString(row.window_ends_at)!,
+    updated_at: asIsoString(row.updated_at)!,
   })) as UserChallengeProgress[];
 }
 
 export async function getUserBadges(userId?: string) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  let query = supabase
-    .from("user_badges")
-    .select("*")
-    .eq("organization_id", organization.id)
-    .order("awarded_at", { ascending: false });
+  const rows = await prisma.$queryRaw<any[]>`
+    select *
+    from public.user_badges
+    where organization_id = ${organization.id}::uuid
+      and (${userId ?? null}::uuid is null or user_id = ${userId ?? null}::uuid)
+    order by awarded_at desc
+  `;
 
-  if (userId) {
-    query = query.eq("user_id", userId);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as UserBadge[];
+  return rows.map(mapUserBadge);
 }
 
 export async function getScoringAdminDashboard() {
   await requirePermission("scoring.view");
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
   const [
-    rulesResult,
-    sourceRulesResult,
-    rewardsResult,
-    challengesResult,
-    topActionsResult,
-    leaderboardResult,
+    rulesRows,
+    sourceRuleRows,
+    rewardRows,
+    challengeRows,
+    topActionRows,
+    leaderboardRows,
   ] = await Promise.all([
-    supabase.from("lead_score_rules").select("*").eq("organization_id", organization.id).order("name"),
-    supabase.from("lead_source_score_rules").select("*").eq("organization_id", organization.id).order("source_name"),
-    supabase.from("rewards_catalog").select("*").eq("organization_id", organization.id).order("cost_points"),
-    supabase.from("challenge_templates").select("*").eq("organization_id", organization.id).order("name"),
-    supabase
-      .from("wallet_transactions")
-      .select("action_key, points_delta")
-      .eq("organization_id", organization.id)
-      .gt("points_delta", 0),
-    supabase.rpc("get_wallet_leaderboard", {
-      p_organization_id: organization.id,
-      p_period: "all_time",
-      p_limit: 10,
-    }),
+    prisma.$queryRaw<any[]>`
+      select *
+      from public.lead_score_rules
+      where organization_id = ${organization.id}::uuid
+      order by name asc
+    `,
+    prisma.$queryRaw<any[]>`
+      select *
+      from public.lead_source_score_rules
+      where organization_id = ${organization.id}::uuid
+      order by source_name asc
+    `,
+    prisma.$queryRaw<any[]>`
+      select *
+      from public.rewards_catalog
+      where organization_id = ${organization.id}::uuid
+      order by cost_points asc
+    `,
+    prisma.$queryRaw<any[]>`
+      select *
+      from public.challenge_templates
+      where organization_id = ${organization.id}::uuid
+      order by name asc
+    `,
+    prisma.$queryRaw<Array<{ action_key: string; points_delta: number }>>`
+      select action_key, points_delta
+      from public.wallet_transactions
+      where organization_id = ${organization.id}::uuid
+        and points_delta > 0
+    `,
+    prisma.$queryRaw<any[]>`
+      select *
+      from public.get_wallet_leaderboard(
+        ${organization.id}::uuid,
+        'all_time',
+        10
+      )
+    `,
   ]);
 
-  if (rulesResult.error) throw new Error(rulesResult.error.message);
-  if (sourceRulesResult.error) throw new Error(sourceRulesResult.error.message);
-  if (rewardsResult.error) throw new Error(rewardsResult.error.message);
-  if (challengesResult.error) throw new Error(challengesResult.error.message);
-  if (topActionsResult.error) throw new Error(topActionsResult.error.message);
-  if (leaderboardResult.error) throw new Error(leaderboardResult.error.message);
-
   const topEarnActions = Object.entries(
-    ((topActionsResult.data ?? []) as Array<{ action_key: string; points_delta: number }>).reduce<Record<string, number>>(
-      (acc, item) => {
-        acc[item.action_key] = (acc[item.action_key] ?? 0) + item.points_delta;
-        return acc;
-      },
-      {},
-    ),
+    topActionRows.reduce<Record<string, number>>((acc, item) => {
+      acc[item.action_key] = (acc[item.action_key] ?? 0) + Number(item.points_delta);
+      return acc;
+    }, {}),
   )
     .map(([actionKey, totalPoints]) => ({ actionKey, totalPoints }))
     .sort((a, b) => b.totalPoints - a.totalPoints);
 
+  const leaderboard: LeaderboardEntry[] = leaderboardRows.map((row) => ({
+    ...row,
+    wallet_balance: Number(row.wallet_balance),
+    wallet_lifetime_earned: Number(row.wallet_lifetime_earned),
+    period_points: Number(row.period_points),
+  }));
+
   return {
-    rules: (rulesResult.data ?? []) as LeadScoreRule[],
-    sourceRules: (sourceRulesResult.data ?? []) as LeadSourceScoreRule[],
-    rewards: dedupeRewards((rewardsResult.data ?? []) as Reward[]),
-    challenges: dedupeChallenges((challengesResult.data ?? []) as ChallengeTemplate[]),
+    rules: rulesRows.map((row) => ({
+      ...row,
+      rule_scope: row.rule_scope ?? {},
+      created_at: asIsoString(row.created_at)!,
+      updated_at: asIsoString(row.updated_at)!,
+    })) as LeadScoreRule[],
+    sourceRules: sourceRuleRows.map((row) => ({
+      ...row,
+      rule_scope: row.rule_scope ?? {},
+      created_at: asIsoString(row.created_at)!,
+      updated_at: asIsoString(row.updated_at)!,
+    })) as LeadSourceScoreRule[],
+    rewards: dedupeRewards(rewardRows.map(mapReward)),
+    challenges: dedupeChallenges(challengeRows.map(mapChallenge)),
     topEarnActions,
-    leaderboard: await resolveLeaderboardAvatarUrls((leaderboardResult.data ?? []) as LeaderboardEntry[]),
+    leaderboard: await resolveLeaderboardAvatarUrls(leaderboard),
   };
 }

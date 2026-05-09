@@ -65,7 +65,7 @@ export function ContactTable({ contacts, companies, totalCount }: { contacts: Co
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-full flex-col gap-4">
       <form action={applyFilters} className="crm-filter-surface grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <InputLike name="search" placeholder="Search contacts..." defaultValue={searchParams.get("search") ?? ""} />
         <SelectLike name="company" defaultValue={searchParams.get("company") ?? ""} label="Company" options={companies.map((company) => [company.id, company.name])} />
@@ -127,8 +127,8 @@ export function ContactTable({ contacts, companies, totalCount }: { contacts: Co
       )}
 
       {totalItems > 0 ? (
-        <div className="space-y-3">
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
+        <div className="flex flex-1 flex-col gap-3">
+          <div className="mt-auto flex flex-col gap-3 rounded-2xl border border-border/70 bg-white/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]">
             <p className="text-sm text-muted-foreground">
               Showing {rangeStart}-{rangeEnd} of {totalItems} contacts
             </p>

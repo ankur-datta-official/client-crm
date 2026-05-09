@@ -3,22 +3,31 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, hasPermission, requireOrganization } from "@/lib/auth/session";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { getAllPlans } from "./subscription-queries";
 
 async function insertActivityLog(action: string, entityId: string, metadata: Record<string, unknown>) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const user = await getCurrentUser();
 
-  await supabase.from("activity_logs").insert({
-    organization_id: organization.id,
-    actor_user_id: user?.id ?? null,
-    action,
-    entity_type: "organization_subscription",
-    entity_id: entityId,
-    metadata,
-  });
+  await prisma.$executeRaw`
+    insert into public.activity_logs (
+      organization_id,
+      actor_user_id,
+      action,
+      entity_type,
+      entity_id,
+      metadata
+    )
+    values (
+      ${organization.id}::uuid,
+      ${user?.id ?? null}::uuid,
+      ${action},
+      'organization_subscription',
+      ${entityId}::uuid,
+      ${JSON.stringify(metadata)}::jsonb
+    )
+  `;
 }
 
 export async function switchSubscriptionPlan(planId: string) {
@@ -28,7 +37,6 @@ export async function switchSubscriptionPlan(planId: string) {
   }
 
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const plans = await getAllPlans();
   const selectedPlan = plans.find((plan) => plan.id === planId);
 
@@ -36,31 +44,37 @@ export async function switchSubscriptionPlan(planId: string) {
     throw new Error("Selected plan was not found.");
   }
 
-  const { data: subscription, error: subscriptionError } = await supabase
-    .from("organization_subscriptions")
-    .select("id, plan_id")
-    .eq("organization_id", organization.id)
-    .single();
+  const subscription = await prisma.organizationSubscription.findUnique({
+    where: {
+      organization_id: organization.id,
+    },
+    select: {
+      id: true,
+      plan_id: true,
+    },
+  });
 
-  if (subscriptionError || !subscription) {
-    throw new Error(subscriptionError?.message ?? "Subscription record was not found.");
+  if (!subscription) {
+    throw new Error("Subscription record was not found.");
   }
 
   if (subscription.plan_id === planId) {
     return { success: true };
   }
 
-  const { error } = await supabase
-    .from("organization_subscriptions")
-    .update({
-      plan_id: planId,
-      status: "active",
-      current_period_starts_at: new Date().toISOString(),
-    })
-    .eq("id", subscription.id)
-    .eq("organization_id", organization.id);
-
-  if (error) {
+  try {
+    await prisma.organizationSubscription.update({
+      where: {
+        id: subscription.id,
+        organization_id: organization.id,
+      },
+      data: {
+        plan_id: planId,
+        status: "active",
+        current_period_starts_at: new Date(),
+      },
+    });
+  } catch (error) {
     logServerError("subscription.switch", error, { organizationId: organization.id, planId });
     throw new Error(getSafeErrorMessage(error, "Unable to change the subscription plan right now."));
   }

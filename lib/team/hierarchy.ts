@@ -2,7 +2,7 @@ import "server-only";
 
 import { getCurrentProfile, hasPermission, requireAuth, requireOrganization } from "@/lib/auth/session";
 import { createNotification } from "@/lib/notifications/notifications";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 
 type MinimalProfile = {
   id: string;
@@ -23,20 +23,18 @@ export async function canManageTeamMember(targetUserId: string) {
     return true;
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("id", targetUserId)
-    .eq("organization_id", organization.id)
-    .eq("manager_user_id", user.id)
-    .maybeSingle();
+  const targetProfile = await prisma.user.findFirst({
+    where: {
+      id: targetUserId,
+      organization_id: organization.id,
+      manager_user_id: user.id,
+    },
+    select: {
+      id: true,
+    },
+  });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return Boolean(data);
+  return Boolean(targetProfile);
 }
 
 export async function ensureCanManageTeamMember(targetUserId: string, message = "You do not have permission to manage this team member.") {
@@ -62,27 +60,25 @@ export async function ensureCanWorkWithCompany(companyId: string) {
     return;
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("companies")
-    .select("id, assigned_user_id")
-    .eq("id", companyId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const rows = await prisma.$queryRaw<Array<{ id: string; assigned_user_id: string | null }>>`
+    select id, assigned_user_id::text as assigned_user_id
+    from public.companies
+    where id = ${companyId}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  const company = rows[0] ?? null;
 
-  if (!data) {
+  if (!company) {
     throw new Error("Company was not found in your workspace.");
   }
 
-  if (!data.assigned_user_id || data.assigned_user_id === user.id) {
+  if (!company.assigned_user_id || company.assigned_user_id === user.id) {
     return;
   }
 
-  const canManageAssignedUser = await canManageTeamMember(data.assigned_user_id);
+  const canManageAssignedUser = await canManageTeamMember(company.assigned_user_id);
   if (!canManageAssignedUser) {
     throw new Error("Only the assigned team member, their senior, or an admin can update this company.");
   }
@@ -91,60 +87,90 @@ export async function ensureCanWorkWithCompany(companyId: string) {
 export async function getAssignableTeamMembers() {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
+  const isAdmin = await hasPermission("settings.manage");
 
-  let query = supabase
-    .from("profiles")
-    .select("id, full_name, email")
-    .eq("organization_id", organization.id)
-    .eq("is_active", true)
-    .order("full_name");
+  const members = await prisma.user.findMany({
+    where: {
+      organization_id: organization.id,
+      is_active: true,
+      ...(isAdmin
+        ? {}
+        : {
+            OR: [
+              { id: user.id },
+              { manager_user_id: user.id },
+            ],
+          }),
+    },
+    orderBy: [
+      {
+        name: "asc",
+      },
+      {
+        email: "asc",
+      },
+    ],
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  });
 
-  if (!(await hasPermission("settings.manage"))) {
-    query = query.or(`id.eq.${user.id},manager_user_id.eq.${user.id}`);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as Array<{ id: string; full_name: string | null; email: string }>;
+  return members.map((member) => ({
+    id: member.id,
+    full_name: member.name,
+    email: member.email,
+  }));
 }
 
 async function getDirectManagerProfile(userId: string, organizationId: string) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, email, manager_user_id")
-    .eq("id", userId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+  const actorProfile = await prisma.user.findFirst({
+    where: {
+      id: userId,
+      organization_id: organizationId,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      manager_user_id: true,
+    },
+  });
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  const normalizedActorProfile: MinimalProfile | null = actorProfile
+    ? {
+        id: actorProfile.id,
+        full_name: actorProfile.name,
+        email: actorProfile.email,
+        manager_user_id: actorProfile.manager_user_id,
+      }
+    : null;
 
-  const actorProfile = data as MinimalProfile | null;
-
-  if (!actorProfile?.manager_user_id) {
+  if (!normalizedActorProfile?.manager_user_id) {
     return null;
   }
 
-  const { data: manager, error: managerError } = await supabase
-    .from("profiles")
-    .select("id, full_name, email")
-    .eq("id", actorProfile.manager_user_id)
-    .eq("organization_id", organizationId)
-    .eq("is_active", true)
-    .maybeSingle();
+  const manager = await prisma.user.findFirst({
+    where: {
+      id: normalizedActorProfile.manager_user_id,
+      organization_id: organizationId,
+      is_active: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  });
 
-  if (managerError) {
-    throw new Error(managerError.message);
-  }
-
-  return manager as { id: string; full_name: string | null; email: string } | null;
+  return manager
+    ? {
+        id: manager.id,
+        full_name: manager.name,
+        email: manager.email,
+      }
+    : null;
 }
 
 export async function notifyDirectManagerOfActivity(input: {

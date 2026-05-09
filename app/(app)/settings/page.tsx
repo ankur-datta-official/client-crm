@@ -5,14 +5,12 @@ import {
   BriefcaseBusiness,
   Building2,
   CheckCircle2,
-  Circle,
   KanbanSquare,
   Sparkles,
   Trophy,
   UserRound,
 } from "lucide-react";
 import { CrmSettingsCard } from "@/components/crm/crm-settings-card";
-import { ThemePreferenceCard } from "@/components/settings/theme-preference-card";
 import { ProductTourStartButton } from "@/components/tour/product-tour-start-button";
 import { PageHeader } from "@/components/shared/page-header";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
@@ -22,14 +20,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { requireAnyPermission } from "@/lib/auth/session";
 import { getCurrentProfileSettings } from "@/lib/profile/profile-actions";
 import { getCompanyCategories, getIndustries, getPipelineStages } from "@/lib/crm/queries";
+import { getAccessibleWorkspaceCount } from "@/lib/workspace/queries";
 
 export default async function SettingsPage() {
   await requireAnyPermission(["settings.view", "settings.manage"]);
-  const [profile, industries, categories, pipelineStages] = await Promise.all([
+  const [profile, industries, categories, pipelineStages, workspaceCount] = await Promise.all([
     getCurrentProfileSettings(),
     getIndustries(),
     getCompanyCategories(),
     getPipelineStages(),
+    getAccessibleWorkspaceCount(),
   ]);
 
   const setupChecklist = [
@@ -165,6 +165,7 @@ export default async function SettingsPage() {
         <SettingsSection
           title="1. Your Account"
           description="Start here first. This section controls how you appear inside the CRM."
+          gridClassName="grid gap-4 md:grid-cols-2"
         >
           <CrmSettingsCard
             title="Profile Settings"
@@ -175,7 +176,15 @@ export default async function SettingsPage() {
             badge="Start here"
             meta="Your account details"
           />
-          <ThemePreferenceCard />
+          <CrmSettingsCard
+            title="Workspaces"
+            description="Create more workspaces or switch between the ones you already manage."
+            href="/settings/workspaces"
+            icon={BriefcaseBusiness}
+            ctaLabel="Open Workspaces"
+            badge="Admin"
+            meta={`${workspaceCount} workspace${workspaceCount === 1 ? "" : "s"} available`}
+          />
         </SettingsSection>
 
         <SettingsSection
@@ -234,10 +243,12 @@ function SettingsSection({
   title,
   description,
   children,
+  gridClassName,
 }: {
   title: string;
   description: string;
   children: ReactNode;
+  gridClassName?: string;
 }) {
   return (
     <section className="space-y-5">
@@ -245,7 +256,7 @@ function SettingsSection({
         <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
         <p className="max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">{description}</p>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={gridClassName ?? "grid gap-4 md:grid-cols-2"}>
         {children}
       </div>
     </section>

@@ -1,7 +1,7 @@
 "use server";
 
 import { getCurrentUser, getUserPermissions, requireOrganization } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import type { Permission, RoleRow, RoleWithPermissions, TeamInvitation, TeamMember } from "./types";
 
 type InvitationPreview = {
@@ -27,16 +27,111 @@ function normalizeInvitationStatus<T extends { status: TeamInvitation["status"];
   return invitation;
 }
 
+function mapRoleRow(role: {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  is_system: boolean;
+  organization_id: string;
+}): RoleRow {
+  return {
+    id: role.id,
+    name: role.name,
+    slug: role.slug,
+    description: role.description,
+    is_system: role.is_system,
+    organization_id: role.organization_id,
+  };
+}
+
 export async function getTeamMembers(): Promise<TeamMember[]> {
-  await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_team_members_for_current_organization");
+  const organization = await requireOrganization();
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  const members = await prisma.user.findMany({
+    where: {
+      organization_id: organization.id,
+    },
+    orderBy: [
+      {
+        name: "asc",
+      },
+      {
+        email: "asc",
+      },
+    ],
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      image: true,
+      job_title: true,
+      department: true,
+      phone: true,
+      organization_id: true,
+      created_at: true,
+      is_active: true,
+      manager_user_id: true,
+      manager: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
+      userRoles: {
+        where: {
+          organization_id: organization.id,
+        },
+        orderBy: {
+          assigned_at: "desc",
+        },
+        take: 1,
+        select: {
+          role_id: true,
+          role: {
+            select: {
+              name: true,
+              slug: true,
+            },
+          },
+        },
+      },
+      sessions: {
+        orderBy: {
+          updatedAt: "desc",
+        },
+        take: 1,
+        select: {
+          updatedAt: true,
+        },
+      },
+    },
+  });
 
-  return (data ?? []) as TeamMember[];
+  return members.map((member) => {
+    const roleAssignment = member.userRoles[0] ?? null;
+    const latestSession = member.sessions[0] ?? null;
+
+    return {
+      id: member.id,
+      email: member.email,
+      full_name: member.name,
+      avatar_url: member.image,
+      job_title: member.job_title,
+      department: member.department,
+      phone: member.phone,
+      organization_id: member.organization_id,
+      created_at: member.created_at.toISOString(),
+      is_active: member.is_active,
+      last_login_at: latestSession?.updatedAt.toISOString() ?? null,
+      role_id: roleAssignment?.role_id ?? null,
+      role_name: roleAssignment?.role.name ?? null,
+      role_slug: roleAssignment?.role.slug ?? null,
+      manager_user_id: member.manager_user_id,
+      manager_name: member.manager?.name ?? null,
+      manager_email: member.manager?.email ?? null,
+    };
+  });
 }
 
 export async function getTeamMemberById(userId: string): Promise<TeamMember | null> {
@@ -46,127 +141,157 @@ export async function getTeamMemberById(userId: string): Promise<TeamMember | nu
 
 export async function getTeamInvitations(): Promise<TeamInvitation[]> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
+  const invitations = await prisma.teamInvitation.findMany({
+    where: {
+      organization_id: organization.id,
+    },
+    orderBy: {
+      created_at: "desc",
+    },
+    select: {
+      id: true,
+      organization_id: true,
+      email: true,
+      role_id: true,
+      invited_by: true,
+      token: true,
+      full_name: true,
+      job_title: true,
+      department: true,
+      phone: true,
+      status: true,
+      expires_at: true,
+      accepted_at: true,
+      created_at: true,
+      role: {
+        select: {
+          name: true,
+          slug: true,
+        },
+      },
+      invitedBy: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
 
-  const { data, error } = await supabase
-    .from("team_invitations")
-    .select(`
-      id,
-      organization_id,
-      email,
-      role_id,
-      invited_by,
-      token,
-      full_name,
-      job_title,
-      department,
-      phone,
-      status,
-      expires_at,
-      accepted_at,
-      created_at,
-      roles(id, name, slug),
-      inviter:profiles!team_invitations_invited_by_fkey(full_name)
-    `)
-    .eq("organization_id", organization.id)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => {
-    const role = row.roles as { id: string; name: string; slug: string } | null;
-    const inviter = row.inviter as { full_name: string | null } | null;
-
+  return invitations.map((invitation) => {
     return normalizeInvitationStatus({
-      ...(row as unknown as TeamInvitation),
-      role_name: role?.name ?? null,
-      role_slug: role?.slug ?? null,
-      invited_by_name: inviter?.full_name ?? "Unknown",
-      invite_link: `/auth/accept-invite?token=${row.token as string}`,
+      id: invitation.id,
+      organization_id: invitation.organization_id,
+      email: invitation.email,
+      role_id: invitation.role_id,
+      invited_by: invitation.invited_by,
+      token: invitation.token,
+      full_name: invitation.full_name,
+      job_title: invitation.job_title,
+      department: invitation.department,
+      phone: invitation.phone,
+      status: invitation.status as TeamInvitation["status"],
+      expires_at: invitation.expires_at.toISOString(),
+      accepted_at: invitation.accepted_at?.toISOString() ?? null,
+      created_at: invitation.created_at.toISOString(),
+      role_name: invitation.role?.name ?? null,
+      role_slug: invitation.role?.slug ?? null,
+      invited_by_name: invitation.invitedBy?.name ?? "Unknown",
+      invite_link: `/auth/accept-invite?token=${invitation.token}`,
     });
   });
 }
 
 export async function getRoles(): Promise<RoleRow[]> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
+  const roles = await prisma.role.findMany({
+    where: {
+      organization_id: organization.id,
+    },
+    orderBy: [
+      {
+        is_system: "desc",
+      },
+      {
+        name: "asc",
+      },
+    ],
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      is_system: true,
+      organization_id: true,
+    },
+  });
 
-  const { data, error } = await supabase
-    .from("roles")
-    .select("id, name, slug, description, is_system, organization_id")
-    .eq("organization_id", organization.id)
-    .order("is_system", { ascending: false })
-    .order("name", { ascending: true });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as RoleRow[];
+  return roles.map(mapRoleRow);
 }
 
 export async function getRoleById(roleId: string): Promise<RoleWithPermissions | null> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
+  const role = await prisma.role.findFirst({
+    where: {
+      id: roleId,
+      organization_id: organization.id,
+    },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      is_system: true,
+      organization_id: true,
+    },
+  });
 
-  const { data, error } = await supabase
-    .from("roles")
-    .select("id, name, slug, description, is_system, organization_id")
-    .eq("id", roleId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!data) {
+  if (!role) {
     return null;
   }
 
   return {
-    ...(data as RoleRow),
+    ...mapRoleRow(role),
     permissions: await getRolePermissions(roleId),
   };
 }
 
 export async function getPermissions(): Promise<Permission[]> {
   await requireOrganization();
-  const supabase = await createClient();
+  const permissions = await prisma.permission.findMany({
+    orderBy: {
+      key: "asc",
+    },
+    select: {
+      id: true,
+      key: true,
+      name: true,
+      description: true,
+    },
+  });
 
-  const { data, error } = await supabase
-    .from("permissions")
-    .select("id, key, name, description")
-    .order("key", { ascending: true });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as Permission[];
+  return permissions;
 }
 
 export async function getRolePermissions(roleId: string): Promise<string[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("role_permissions")
-    .select("permissions(key)")
-    .eq("role_id", roleId);
+  const organization = await requireOrganization();
+  const rolePermissions = await prisma.rolePermission.findMany({
+    where: {
+      role_id: roleId,
+      role: {
+        organization_id: organization.id,
+      },
+    },
+    select: {
+      permission: {
+        select: {
+          key: true,
+        },
+      },
+    },
+  });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return ((data ?? []) as Array<{ permissions: { key: string }[] | { key: string } | null }>)
-    .map((row) => {
-      if (Array.isArray(row.permissions)) {
-        return row.permissions[0]?.key ?? null;
-      }
-
-      return row.permissions?.key ?? null;
-    })
+  return rolePermissions
+    .map((row) => row.permission.key)
     .filter((value): value is string => Boolean(value));
 }
 
@@ -190,51 +315,70 @@ export async function getCurrentUserId(): Promise<string | null> {
 }
 
 export async function getInvitationPreview(token: string): Promise<InvitationPreview | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_team_invitation_preview", {
-    invite_token: token,
+  const invitation = await prisma.teamInvitation.findUnique({
+    where: {
+      token,
+    },
+    select: {
+      id: true,
+      organization_id: true,
+      email: true,
+      full_name: true,
+      job_title: true,
+      department: true,
+      phone: true,
+      role_id: true,
+      status: true,
+      expires_at: true,
+      role: {
+        select: {
+          name: true,
+        },
+      },
+      organization: {
+        select: {
+          name: true,
+        },
+      },
+    },
   });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const invitation = Array.isArray(data) ? data[0] : data;
   if (!invitation) {
     return null;
   }
 
-  return normalizeInvitationStatus(invitation as InvitationPreview);
+  return normalizeInvitationStatus({
+    id: invitation.id,
+    organization_id: invitation.organization_id,
+    organization_name: invitation.organization.name,
+    email: invitation.email,
+    full_name: invitation.full_name,
+    job_title: invitation.job_title,
+    department: invitation.department,
+    phone: invitation.phone,
+    role_id: invitation.role_id,
+    role_name: invitation.role?.name ?? null,
+    status: invitation.status as TeamInvitation["status"],
+    expires_at: invitation.expires_at.toISOString(),
+  });
 }
 
 export async function getPendingInvitationsCount(): Promise<number> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("team_invitations")
-    .select("*", { count: "exact", head: true })
-    .eq("organization_id", organization.id)
-    .eq("status", "pending");
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return count ?? 0;
+  return prisma.teamInvitation.count({
+    where: {
+      organization_id: organization.id,
+      status: "pending",
+    },
+  });
 }
 
 export async function getActiveUsersCount(): Promise<number> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("profiles")
-    .select("*", { count: "exact", head: true })
-    .eq("organization_id", organization.id)
-    .eq("is_active", true);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return count ?? 0;
+  return prisma.user.count({
+    where: {
+      organization_id: organization.id,
+      is_active: true,
+    },
+  });
 }

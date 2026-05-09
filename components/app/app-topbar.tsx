@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChevronDown, LifeBuoy, Menu, Settings, User, Wallet2, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { NotificationCenter } from "@/components/notifications/notification-center";
 import { useProductTour } from "@/components/providers/product-tour-provider";
@@ -16,11 +17,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { WorkspaceSwitcherMenu } from "@/components/workspace/workspace-switcher-menu";
 import type { Profile } from "@/lib/auth/session";
+import { authClient } from "@/lib/auth-client";
 import type { NotificationRow } from "@/lib/notifications/notifications";
 import type { WalletSummary } from "@/lib/scoring/types";
+import type { WorkspaceSummary } from "@/lib/workspace/types";
+import { getClientAuthProvider } from "@/lib/auth/provider";
 import { getDisplayName } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 export type AppTopbarProps = {
@@ -29,6 +33,8 @@ export type AppTopbarProps = {
   notifications: NotificationRow[];
   unreadNotificationCount: number;
   walletSummary: WalletSummary | null;
+  workspaces: WorkspaceSummary[];
+  canCreateWorkspace: boolean;
 };
 
 export function AppTopbar({ 
@@ -36,17 +42,34 @@ export function AppTopbar({
   profile, 
   notifications, 
   unreadNotificationCount,
-  walletSummary
+  walletSummary,
+  workspaces,
+  canCreateWorkspace,
 }: AppTopbarProps) {
   const router = useRouter();
   const { startTour, isActive } = useProductTour();
   const displayName = getDisplayName(profile?.full_name, profile?.email, "Workspace user");
 
   async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    const provider = getClientAuthProvider();
+
+    if (provider === "betterauth") {
+      await authClient.signOut();
+      router.push("/auth/login");
+      router.refresh();
+      return;
+    }
+
+    if (provider === "nextauth") {
+      await signOut({
+        redirect: false,
+      });
+      router.push("/auth/login");
+      router.refresh();
+      return;
+    }
+
     router.push("/auth/login");
-    router.refresh();
   }
 
   return (
@@ -104,7 +127,7 @@ export function AppTopbar({
               <ChevronDown className="ml-1 size-4 text-slate-300 transition-colors group-hover:text-slate-500 dark:text-slate-600 dark:group-hover:text-slate-300" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={12} className="w-64 rounded-[24px] border-slate-200/60 bg-white/95 p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 dark:border-slate-800 dark:bg-slate-950/95">
+          <DropdownMenuContent align="end" sideOffset={12} className="w-80 rounded-[24px] border-slate-200/60 bg-white/95 p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 dark:border-slate-800 dark:bg-slate-950/95">
             <DropdownMenuLabel className="px-3 py-4">
               <div className="flex items-center gap-3">
                 <UserAvatar
@@ -121,6 +144,10 @@ export function AppTopbar({
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="mx-2 bg-slate-100/80 dark:bg-slate-800" />
             <div className="space-y-1 p-1.5">
+              <WorkspaceSwitcherMenu
+                workspaces={workspaces}
+                canCreateWorkspace={canCreateWorkspace}
+              />
               <DropdownMenuItem asChild className="rounded-xl focus:bg-primary/5 focus:text-primary cursor-pointer transition-colors group">
                 <Link href="/settings/profile" className="flex items-center gap-3 px-3 py-2.5">
                   <div className="flex size-8 items-center justify-center rounded-lg bg-slate-50 text-slate-500 transition-colors group-focus:bg-primary/10 group-focus:text-primary dark:bg-slate-900 dark:text-slate-400">

@@ -6,25 +6,42 @@ import { requireAuth, requireOrganization } from "@/lib/auth/session";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
 import { followupSchema } from "@/lib/crm/schemas";
 import { createNotification } from "@/lib/notifications/notifications";
+import { prisma } from "@/lib/prisma";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
-import { createClient } from "@/lib/supabase/server";
 import { ensureCanAssignUser, ensureCanWorkWithCompany, notifyDirectManagerOfActivity } from "@/lib/team/hierarchy";
 import type { CrmActionState } from "./actions";
 
-// Reuse activity log helper
+type FollowupLookup = {
+  id: string;
+  company_id: string;
+  title: string | null;
+  created_by: string | null;
+  assigned_user_id: string | null;
+  scheduled_at: string | null;
+};
+
 async function insertActivityLog(action: string, entityType: string, entityId: string, metadata: Record<string, any> = {}) {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
-  await supabase.from("activity_logs").insert({
-    organization_id: organization.id,
-    actor_user_id: user.id,
-    action,
-    entity_type: entityType,
-    entity_id: entityId,
-    metadata,
-  });
+  await prisma.$executeRaw`
+    insert into public.activity_logs (
+      organization_id,
+      actor_user_id,
+      action,
+      entity_type,
+      entity_id,
+      metadata
+    )
+    values (
+      ${organization.id}::uuid,
+      ${user.id}::uuid,
+      ${action},
+      ${entityType},
+      ${entityId}::uuid,
+      ${JSON.stringify(metadata)}::jsonb
+    )
+  `;
 }
 
 function getValidationFailure(error: z.ZodError): CrmActionState {
@@ -37,26 +54,31 @@ function getValidationFailure(error: z.ZodError): CrmActionState {
 
 async function validateFollowupOwnership(followupId: string) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
+  const rows = await prisma.$queryRaw<FollowupLookup[]>`
+    select
+      id::text as id,
+      company_id::text as company_id,
+      title,
+      created_by::text as created_by,
+      assigned_user_id::text as assigned_user_id,
+      scheduled_at::text as scheduled_at
+    from public.followups
+    where id = ${followupId}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
 
-  const { data, error } = await supabase
-    .from("followups")
-    .select("id, company_id, title, created_by, assigned_user_id")
-    .eq("id", followupId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
-
-  if (error || !data) {
+  const followup = rows[0] ?? null;
+  if (!followup) {
     throw new Error("Follow-up not found or access denied.");
   }
 
-  return { organization, followup: data };
+  return { organization, followup };
 }
 
 export async function createFollowup(formData: FormData): Promise<CrmActionState> {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
   const rawValues = Object.fromEntries(formData.entries());
   const validated = followupSchema.safeParse(rawValues);
@@ -74,50 +96,83 @@ export async function createFollowup(formData: FormData): Promise<CrmActionState
     }
   }
 
-  const { data, error } = await supabase
-    .from("followups")
-    .insert({
-      ...validated.data,
-      organization_id: organization.id,
-      created_by: user.id,
-      updated_by: user.id,
-    })
-    .select("id, title, assigned_user_id, created_by")
-    .single();
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: string; title: string; assigned_user_id: string | null; created_by: string | null }>>`
+      insert into public.followups (
+        organization_id,
+        company_id,
+        contact_person_id,
+        interaction_id,
+        assigned_user_id,
+        followup_type,
+        title,
+        description,
+        scheduled_at,
+        reminder_before_minutes,
+        status,
+        priority,
+        created_by,
+        updated_by
+      )
+      values (
+        ${organization.id}::uuid,
+        ${validated.data.company_id}::uuid,
+        ${validated.data.contact_person_id}::uuid,
+        ${validated.data.interaction_id}::uuid,
+        ${validated.data.assigned_user_id}::uuid,
+        ${validated.data.followup_type},
+        ${validated.data.title},
+        ${validated.data.description},
+        ${validated.data.scheduled_at}::timestamptz,
+        ${validated.data.reminder_before_minutes},
+        ${validated.data.status},
+        ${validated.data.priority},
+        ${user.id}::uuid,
+        ${user.id}::uuid
+      )
+      returning
+        id::text as id,
+        title,
+        assigned_user_id::text as assigned_user_id,
+        created_by::text as created_by
+    `;
 
-  if (error) {
+    const data = rows[0];
+    if (!data) {
+      return { ok: false, error: "Unable to create the follow-up right now." };
+    }
+
+    await insertActivityLog("created", "followup", data.id, { title: data.title });
+    await notifyDirectManagerOfActivity({
+      actorUserId: user.id,
+      title: "Junior created a follow-up",
+      message: `"${data.title}" was created by one of your direct team members.`,
+      link: `/followups/${data.id}`,
+    });
+
+    if (data.assigned_user_id && data.assigned_user_id !== user.id) {
+      await createNotification({
+        userId: data.assigned_user_id,
+        type: "followup.assigned",
+        title: "New follow-up assigned",
+        message: `You were assigned the follow-up "${data.title}".`,
+        link: `/followups/${data.id}`,
+      });
+    }
+
+    revalidatePath("/followups");
+    revalidatePath(`/companies/${validated.data.company_id}`);
+
+    return { ok: true, id: data.id };
+  } catch (error) {
     logServerError("followup.create", error, { organizationId: organization.id, companyId: validated.data.company_id });
     return { ok: false, error: getSafeErrorMessage(error, "Unable to create the follow-up right now.") };
   }
-
-  await insertActivityLog("created", "followup", data.id, { title: data.title });
-  await notifyDirectManagerOfActivity({
-    actorUserId: user.id,
-    title: "Junior created a follow-up",
-    message: `"${data.title}" was created by one of your direct team members.`,
-    link: `/followups/${data.id}`,
-  });
-
-  if (data.assigned_user_id && data.assigned_user_id !== user.id) {
-    await createNotification({
-      userId: data.assigned_user_id,
-      type: "followup.assigned",
-      title: "New follow-up assigned",
-      message: `You were assigned the follow-up "${data.title}".`,
-      link: `/followups/${data.id}`,
-    });
-  }
-
-  revalidatePath("/followups");
-  revalidatePath(`/companies/${validated.data.company_id}`);
-
-  return { ok: true, id: data.id };
 }
 
 export async function updateFollowup(followupId: string, formData: FormData): Promise<CrmActionState> {
   const user = await requireAuth();
   const { organization } = await validateFollowupOwnership(followupId);
-  const supabase = await createClient();
 
   const rawValues = Object.fromEntries(formData.entries());
   const validated = followupSchema.safeParse(rawValues);
@@ -135,192 +190,191 @@ export async function updateFollowup(followupId: string, formData: FormData): Pr
     }
   }
 
-  const { error } = await supabase
-    .from("followups")
-    .update({
-      ...validated.data,
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", followupId)
-    .eq("organization_id", organization.id);
+  try {
+    await prisma.$executeRaw`
+      update public.followups
+      set
+        company_id = ${validated.data.company_id}::uuid,
+        contact_person_id = ${validated.data.contact_person_id}::uuid,
+        interaction_id = ${validated.data.interaction_id}::uuid,
+        assigned_user_id = ${validated.data.assigned_user_id}::uuid,
+        followup_type = ${validated.data.followup_type},
+        title = ${validated.data.title},
+        description = ${validated.data.description},
+        scheduled_at = ${validated.data.scheduled_at}::timestamptz,
+        reminder_before_minutes = ${validated.data.reminder_before_minutes},
+        status = ${validated.data.status},
+        priority = ${validated.data.priority},
+        updated_by = ${user.id}::uuid,
+        updated_at = now()
+      where id = ${followupId}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
-  if (error) {
-    return { ok: false, error: error.message };
+    await insertActivityLog("updated", "followup", followupId, { title: validated.data.title });
+    await notifyDirectManagerOfActivity({
+      actorUserId: user.id,
+      title: "Junior updated a follow-up",
+      message: `"${validated.data.title}" was updated by one of your direct team members.`,
+      link: `/followups/${followupId}`,
+    });
+
+    revalidatePath("/followups");
+    revalidatePath(`/followups/${followupId}`);
+    revalidatePath(`/companies/${validated.data.company_id}`);
+
+    return { ok: true, id: followupId };
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to update the follow-up right now.") };
   }
-
-  await insertActivityLog("updated", "followup", followupId, { title: validated.data.title });
-  await notifyDirectManagerOfActivity({
-    actorUserId: user.id,
-    title: "Junior updated a follow-up",
-    message: `"${validated.data.title}" was updated by one of your direct team members.`,
-    link: `/followups/${followupId}`,
-  });
-
-  revalidatePath("/followups");
-  revalidatePath(`/followups/${followupId}`);
-  revalidatePath(`/companies/${validated.data.company_id}`);
-
-  return { ok: true, id: followupId };
 }
 
 export async function completeFollowup(followupId: string): Promise<CrmActionState> {
   const user = await requireAuth();
   const { organization, followup } = await validateFollowupOwnership(followupId);
-  const supabase = await createClient();
   await ensureCanWorkWithCompany(followup.company_id);
 
-  const { error } = await supabase
-    .from("followups")
-    .update({
-      status: "completed",
-      completed_at: new Date().toISOString(),
-      completed_by: user.id,
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", followupId)
-    .eq("organization_id", organization.id);
+  try {
+    await prisma.$executeRaw`
+      update public.followups
+      set
+        status = 'completed',
+        completed_at = now(),
+        completed_by = ${user.id}::uuid,
+        updated_by = ${user.id}::uuid,
+        updated_at = now()
+      where id = ${followupId}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
-  if (error) {
-    return { ok: false, error: error.message };
-  }
-
-  await insertActivityLog("completed", "followup", followupId);
-  await notifyDirectManagerOfActivity({
-    actorUserId: user.id,
-    title: "Junior completed a follow-up",
-    message: `"${followup.title ?? "Untitled follow-up"}" was marked complete by one of your direct team members.`,
-    link: `/followups/${followupId}`,
-  });
-
-  await applyScoringEvent({
-    organizationId: organization.id,
-    userId: user.id,
-    actionKey: "followup_completed",
-    companyId: followup.company_id,
-    followupId,
-    sourceRecordId: followupId,
-    sourceRecordType: "followup",
-    metadata: {
-      followup_title: followup.title,
-      company_id: followup.company_id,
-    },
-    actorUserId: user.id,
-    addToLeadScore: true,
-    idempotencyKey: buildScoreIdempotencyKey(["followup_completed", followupId]),
-  });
-
-  if (followup.created_by && followup.created_by !== user.id) {
-    await createNotification({
-      userId: followup.created_by,
-      type: "followup.completed",
-      title: "Follow-up completed",
-      message: `The follow-up "${followup.title ?? "Untitled follow-up"}" was marked complete.`,
+    await insertActivityLog("completed", "followup", followupId);
+    await notifyDirectManagerOfActivity({
+      actorUserId: user.id,
+      title: "Junior completed a follow-up",
+      message: `"${followup.title ?? "Untitled follow-up"}" was marked complete by one of your direct team members.`,
       link: `/followups/${followupId}`,
     });
+
+    await applyScoringEvent({
+      organizationId: organization.id,
+      userId: user.id,
+      actionKey: "followup_completed",
+      companyId: followup.company_id,
+      followupId,
+      sourceRecordId: followupId,
+      sourceRecordType: "followup",
+      metadata: {
+        followup_title: followup.title,
+        company_id: followup.company_id,
+      },
+      actorUserId: user.id,
+      addToLeadScore: true,
+      idempotencyKey: buildScoreIdempotencyKey(["followup_completed", followupId]),
+    });
+
+    if (followup.created_by && followup.created_by !== user.id) {
+      await createNotification({
+        userId: followup.created_by,
+        type: "followup.completed",
+        title: "Follow-up completed",
+        message: `The follow-up "${followup.title ?? "Untitled follow-up"}" was marked complete.`,
+        link: `/followups/${followupId}`,
+      });
+    }
+
+    revalidatePath("/followups");
+    revalidatePath(`/companies/${followup.company_id}`);
+
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to complete the follow-up right now.") };
   }
-
-  revalidatePath("/followups");
-  revalidatePath(`/companies/${followup.company_id}`);
-
-  return { ok: true };
 }
 
 export async function rescheduleFollowup(followupId: string, newDate: string): Promise<CrmActionState> {
   const user = await requireAuth();
   const { organization, followup } = await validateFollowupOwnership(followupId);
-  const supabase = await createClient();
   await ensureCanWorkWithCompany(followup.company_id);
 
-  // Get current scheduled_at for rescheduled_from
-  const { data: currentFollowup } = await supabase
-    .from("followups")
-    .select("scheduled_at")
-    .eq("id", followupId)
-    .single();
+  try {
+    await prisma.$executeRaw`
+      update public.followups
+      set
+        scheduled_at = ${newDate}::timestamptz,
+        rescheduled_from = ${followup.scheduled_at}::timestamptz,
+        status = 'rescheduled',
+        updated_by = ${user.id}::uuid,
+        updated_at = now()
+      where id = ${followupId}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
-  const { error } = await supabase
-    .from("followups")
-    .update({
-      scheduled_at: newDate,
-      rescheduled_from: currentFollowup?.scheduled_at,
-      status: "rescheduled",
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", followupId)
-    .eq("organization_id", organization.id);
+    await insertActivityLog("rescheduled", "followup", followupId, { new_date: newDate });
+    await notifyDirectManagerOfActivity({
+      actorUserId: user.id,
+      title: "Junior rescheduled a follow-up",
+      message: `"${followup.title ?? "Untitled follow-up"}" was rescheduled by one of your direct team members.`,
+      link: `/followups/${followupId}`,
+    });
 
-  if (error) {
-    return { ok: false, error: error.message };
+    revalidatePath("/followups");
+    revalidatePath(`/companies/${followup.company_id}`);
+
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to reschedule the follow-up right now.") };
   }
-
-  await insertActivityLog("rescheduled", "followup", followupId, { new_date: newDate });
-  await notifyDirectManagerOfActivity({
-    actorUserId: user.id,
-    title: "Junior rescheduled a follow-up",
-    message: `"${followup.title ?? "Untitled follow-up"}" was rescheduled by one of your direct team members.`,
-    link: `/followups/${followupId}`,
-  });
-
-  revalidatePath("/followups");
-  revalidatePath(`/companies/${followup.company_id}`);
-
-  return { ok: true };
 }
 
 export async function cancelFollowup(followupId: string, reason?: string): Promise<CrmActionState> {
   const user = await requireAuth();
   const { organization, followup } = await validateFollowupOwnership(followupId);
-  const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("followups")
-    .update({
-      status: "cancelled",
-      cancelled_reason: reason,
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", followupId)
-    .eq("organization_id", organization.id);
+  try {
+    await prisma.$executeRaw`
+      update public.followups
+      set
+        status = 'cancelled',
+        cancelled_reason = ${reason ?? null},
+        updated_by = ${user.id}::uuid,
+        updated_at = now()
+      where id = ${followupId}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
-  if (error) {
-    return { ok: false, error: error.message };
+    await insertActivityLog("cancelled", "followup", followupId, { reason });
+
+    revalidatePath("/followups");
+    revalidatePath(`/companies/${followup.company_id}`);
+
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to cancel the follow-up right now.") };
   }
-
-  await insertActivityLog("cancelled", "followup", followupId, { reason });
-
-  revalidatePath("/followups");
-  revalidatePath(`/companies/${followup.company_id}`);
-
-  return { ok: true };
 }
 
 export async function archiveFollowup(followupId: string): Promise<CrmActionState> {
   const user = await requireAuth();
   const { organization, followup } = await validateFollowupOwnership(followupId);
-  const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("followups")
-    .update({
-      status: "archived",
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", followupId)
-    .eq("organization_id", organization.id);
+  try {
+    await prisma.$executeRaw`
+      update public.followups
+      set
+        status = 'archived',
+        updated_by = ${user.id}::uuid,
+        updated_at = now()
+      where id = ${followupId}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
-  if (error) {
-    return { ok: false, error: error.message };
+    await insertActivityLog("archived", "followup", followupId);
+
+    revalidatePath("/followups");
+    revalidatePath(`/companies/${followup.company_id}`);
+
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to archive the follow-up right now.") };
   }
-
-  await insertActivityLog("archived", "followup", followupId);
-
-  revalidatePath("/followups");
-  revalidatePath(`/companies/${followup.company_id}`);
-
-  return { ok: true };
 }

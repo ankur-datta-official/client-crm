@@ -1,5 +1,5 @@
 import { requireOrganization } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import type {
   OrganizationSubscription,
   OrganizationUsage,
@@ -8,6 +8,58 @@ import type {
   SubscriptionLimitType,
   SubscriptionPlan,
 } from "./types";
+
+function serializePlan(plan: {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  monthly_price: { toString(): string };
+  max_users: number | null;
+  max_organizations: number;
+  max_companies: number | null;
+  storage_limit_mb: number | null;
+  file_size_limit_mb: number | null;
+  custom_pipeline: boolean;
+  pdf_export: boolean;
+  csv_import: boolean;
+  advanced_reports: boolean;
+  audit_log: boolean;
+  is_active: boolean;
+}): SubscriptionPlan {
+  return {
+    ...plan,
+    monthly_price: Number(plan.monthly_price.toString()),
+  };
+}
+
+function serializeSubscription(row: {
+  id: string;
+  organization_id: string;
+  plan_id: string;
+  status: string;
+  trial_starts_at: Date;
+  trial_ends_at: Date;
+  current_period_starts_at: Date | null;
+  current_period_ends_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+  plan: Parameters<typeof serializePlan>[0] | null;
+}): OrganizationSubscription {
+  return {
+    id: row.id,
+    organization_id: row.organization_id,
+    plan_id: row.plan_id,
+    status: row.status as OrganizationSubscription["status"],
+    trial_starts_at: row.trial_starts_at.toISOString(),
+    trial_ends_at: row.trial_ends_at.toISOString(),
+    current_period_starts_at: row.current_period_starts_at?.toISOString() ?? null,
+    current_period_ends_at: row.current_period_ends_at?.toISOString() ?? null,
+    created_at: row.created_at.toISOString(),
+    updated_at: row.updated_at.toISOString(),
+    plan: row.plan ? serializePlan(row.plan) : null,
+  };
+}
 
 function formatUnlimitedLabel(value: number | null, unit: string) {
   return value === null ? `Unlimited ${unit}` : `${value.toLocaleString()} ${unit}`;
@@ -42,47 +94,16 @@ export function getUpgradeMessage(limitType: SubscriptionLimitType, planName?: s
 
 export async function getCurrentSubscription(): Promise<OrganizationSubscription | null> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("organization_subscriptions")
-    .select(`
-      id,
-      organization_id,
-      plan_id,
-      status,
-      trial_starts_at,
-      trial_ends_at,
-      current_period_starts_at,
-      current_period_ends_at,
-      created_at,
-      updated_at,
-      plan:subscription_plans(
-        id,
-        name,
-        slug,
-        description,
-        monthly_price,
-        max_users,
-        max_organizations,
-        max_companies,
-        storage_limit_mb,
-        file_size_limit_mb,
-        custom_pipeline,
-        pdf_export,
-        csv_import,
-        advanced_reports,
-        audit_log,
-        is_active
-      )
-    `)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const row = await prisma.organizationSubscription.findUnique({
+    where: {
+      organization_id: organization.id,
+    },
+    include: {
+      plan: true,
+    },
+  });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data as OrganizationSubscription | null) ?? null;
+  return row ? serializeSubscription(row) : null;
 }
 
 export async function getCurrentPlan(): Promise<SubscriptionPlan | null> {
@@ -92,33 +113,14 @@ export async function getCurrentPlan(): Promise<SubscriptionPlan | null> {
 
 export async function getAllPlans(): Promise<SubscriptionPlan[]> {
   await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("subscription_plans")
-    .select(`
-      id,
-      name,
-      slug,
-      description,
-      monthly_price,
-      max_users,
-      max_organizations,
-      max_companies,
-      storage_limit_mb,
-      file_size_limit_mb,
-      custom_pipeline,
-      pdf_export,
-      csv_import,
-      advanced_reports,
-      audit_log,
-      is_active
-    `)
-    .eq("is_active", true)
-    .order("monthly_price", { ascending: true });
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  const data = await prisma.subscriptionPlan.findMany({
+    where: {
+      is_active: true,
+    },
+    orderBy: {
+      monthly_price: "asc",
+    },
+  });
 
   const planOrder = new Map([
     ["starter", 0],
@@ -127,55 +129,56 @@ export async function getAllPlans(): Promise<SubscriptionPlan[]> {
     ["enterprise", 3],
   ]);
 
-  return ((data ?? []) as SubscriptionPlan[]).sort((left, right) => {
+  return data.map(serializePlan).sort((left, right) => {
     return (planOrder.get(left.slug) ?? Number.MAX_SAFE_INTEGER) - (planOrder.get(right.slug) ?? Number.MAX_SAFE_INTEGER);
   });
 }
 
 export async function getOrganizationUsage(): Promise<OrganizationUsage> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-
-  const [usersResult, invitationsResult, companiesResult, documentsResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .eq("is_active", true),
-    supabase
-      .from("team_invitations")
-      .select("*", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .eq("status", "pending")
-      .gt("expires_at", new Date().toISOString()),
-    supabase
-      .from("companies")
-      .select("*", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .neq("status", "archived"),
-    supabase
-      .from("documents")
-      .select("file_size_mb")
-      .eq("organization_id", organization.id),
+  const [activeUsers, pendingInvitations, companies, documents] = await Promise.all([
+    prisma.user.count({
+      where: {
+        organization_id: organization.id,
+        is_active: true,
+      },
+    }),
+    prisma.teamInvitation.count({
+      where: {
+        organization_id: organization.id,
+        status: "pending",
+        expires_at: {
+          gt: new Date(),
+        },
+      },
+    }),
+    prisma.company.count({
+      where: {
+        organization_id: organization.id,
+        status: {
+          not: "archived",
+        },
+      },
+    }),
+    prisma.document.findMany({
+      where: {
+        organization_id: organization.id,
+      },
+      select: {
+        file_size_mb: true,
+      },
+    }),
   ]);
 
-  if (usersResult.error) throw new Error(usersResult.error.message);
-  if (invitationsResult.error) throw new Error(invitationsResult.error.message);
-  if (companiesResult.error) throw new Error(companiesResult.error.message);
-  if (documentsResult.error) throw new Error(documentsResult.error.message);
-
-  const storageUsedMb = (documentsResult.data ?? []).reduce((total, document) => {
-    return total + Number(document.file_size_mb ?? 0);
+  const storageUsedMb = documents.reduce((total, document) => {
+    return total + Number(document.file_size_mb?.toString() ?? 0);
   }, 0);
-
-  const activeUsers = usersResult.count ?? 0;
-  const pendingInvitations = invitationsResult.count ?? 0;
 
   return {
     activeUsers,
     pendingInvitations,
     reservedSeats: activeUsers + pendingInvitations,
-    companies: companiesResult.count ?? 0,
+    companies,
     storageUsedMb: Number(storageUsedMb.toFixed(2)),
   };
 }
@@ -217,39 +220,31 @@ export async function checkCompanyLimitForOrganization(
   organizationId: string,
   extraCompanies = 1,
 ): Promise<SubscriptionLimitCheck> {
-  const supabase = await createClient();
-  const { data: subscription, error: subError } = await supabase
-    .from("organization_subscriptions")
-    .select(
-      `
-      plan:subscription_plans(
-        name,
-        max_companies
-      )
-    `,
-    )
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+  const subscription = await prisma.organizationSubscription.findUnique({
+    where: {
+      organization_id: organizationId,
+    },
+    include: {
+      plan: {
+        select: {
+          name: true,
+          max_companies: true,
+        },
+      },
+    },
+  });
 
-  if (subError) {
-    throw new Error(subError.message);
-  }
-
-  const rawPlan = subscription?.plan as { name: string | null; max_companies: number | null } | { name: string | null; max_companies: number | null }[] | null | undefined;
-  const plan = Array.isArray(rawPlan) ? rawPlan[0] : rawPlan;
+  const plan = subscription?.plan ?? null;
   const max = plan?.max_companies ?? null;
 
-  const { count, error: countError } = await supabase
-    .from("companies")
-    .select("*", { count: "exact", head: true })
-    .eq("organization_id", organizationId)
-    .neq("status", "archived");
-
-  if (countError) {
-    throw new Error(countError.message);
-  }
-
-  const current = count ?? 0;
+  const current = await prisma.company.count({
+    where: {
+      organization_id: organizationId,
+      status: {
+        not: "archived",
+      },
+    },
+  });
   const projected = current + extraCompanies;
   const allowed = max === null || projected <= max;
 
@@ -308,26 +303,28 @@ export async function hasPlanFeatureForOrganization(
   organizationId: string,
   featureCode: SubscriptionFeatureCode,
 ): Promise<boolean> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("organization_subscriptions")
-    .select(
-      `
-      plan:subscription_plans(
-        ${featureCode}
-      )
-    `,
-    )
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+  const data = await prisma.organizationSubscription.findUnique({
+    where: {
+      organization_id: organizationId,
+    },
+    include: {
+      plan: {
+        select: {
+          custom_pipeline: true,
+          pdf_export: true,
+          csv_import: true,
+          advanced_reports: true,
+          audit_log: true,
+        },
+      },
+    },
+  });
 
-  if (error || !data) {
+  if (!data?.plan) {
     return false;
   }
 
-  const raw = data.plan as Record<string, boolean> | Record<string, boolean>[] | null | undefined;
-  const plan = Array.isArray(raw) ? raw[0] : raw;
-  return Boolean(plan?.[featureCode]);
+  return Boolean(data.plan[featureCode]);
 }
 
 export async function requireFeature(featureCode: SubscriptionFeatureCode): Promise<void> {

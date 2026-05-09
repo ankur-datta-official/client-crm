@@ -156,7 +156,7 @@ export default async function SubscriptionPage() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/90 bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-teal-700 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/95 dark:text-teal-200 dark:shadow-[0_12px_24px_-18px_rgba(15,23,42,0.95)]">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/90 bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-teal-700 shadow-sm dark:border-teal-400/35 dark:bg-teal-950/75 dark:text-teal-100 dark:shadow-[0_12px_24px_-18px_rgba(15,23,42,0.95)]">
                     <Sparkles className="h-3.5 w-3.5" />
                     Premium workspace control
                   </div>
@@ -244,7 +244,7 @@ export default async function SubscriptionPage() {
       <section className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-teal-700 dark:border-teal-500/20 dark:bg-teal-500/12 dark:text-teal-200">
+            <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-teal-700 dark:border-teal-400/40 dark:bg-teal-950/80 dark:text-teal-100">
               <Sparkles className="h-3.5 w-3.5" />
               Plan comparison
             </div>
@@ -281,7 +281,7 @@ export default async function SubscriptionPage() {
                 <CardTitle className="text-xl">Current plan highlights</CardTitle>
                 <CardDescription>Important workspace numbers at a glance.</CardDescription>
               </div>
-              <Badge variant="outline" className="rounded-full border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 dark:border-teal-500/20 dark:bg-teal-500/12 dark:text-teal-200">
+              <Badge variant="outline" className="rounded-full border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 dark:border-teal-400/40 dark:bg-teal-950/80 dark:text-teal-100">
                 Live usage
               </Badge>
             </div>

@@ -15,8 +15,8 @@ import {
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
 import { slugify } from "@/lib/crm/utils";
 import { createNotification } from "@/lib/notifications/notifications";
+import { prisma } from "@/lib/prisma";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
-import { createClient } from "@/lib/supabase/server";
 import { checkCompanyLimit, requireFeature } from "@/lib/subscription/subscription-queries";
 import { ensureCanAssignUser, ensureCanWorkWithCompany, notifyDirectManagerOfActivity } from "@/lib/team/hierarchy";
 
@@ -25,6 +25,44 @@ export type CrmActionState = {
   error?: string;
   fieldErrors?: Record<string, string>;
   id?: string;
+};
+
+type CompanyLookup = {
+  id: string;
+  name: string;
+  pipeline_stage_id: string | null;
+};
+
+type PipelineStageLookup = {
+  id: string;
+  name: string;
+  color: string;
+  probability: number;
+  position: number;
+  is_won: boolean;
+  is_lost: boolean;
+  is_active: boolean;
+};
+
+type ContactLookup = {
+  id: string;
+  company_id: string;
+  is_primary: boolean;
+  name: string;
+};
+
+type InteractionLookup = {
+  id: string;
+  company_id: string;
+  success_rating: number | null;
+  lead_temperature: string | null;
+};
+
+type ExistingCompanyStage = {
+  pipeline_stage_id: string | null;
+  previous_position: number | null;
+  previous_is_won: boolean | null;
+  previous_is_lost: boolean | null;
 };
 
 function getFirstError(error: z.ZodError) {
@@ -58,40 +96,57 @@ function makeShortCode(value: string) {
   return code || `CAT-${Date.now().toString().slice(-4)}`;
 }
 
+function normalizeCountResult(value: bigint | number | null | undefined) {
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+
+  return value == null ? 0 : Number(value);
+}
+
 async function insertActivityLog(action: string, entityType: string, entityId: string, metadata: Record<string, unknown> = {}) {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
-  await supabase.from("activity_logs").insert({
-    organization_id: organization.id,
-    actor_user_id: user.id,
-    action,
-    entity_type: entityType,
-    entity_id: entityId,
-    metadata,
-  });
+  await prisma.$executeRaw`
+    insert into public.activity_logs (
+      organization_id,
+      actor_user_id,
+      action,
+      entity_type,
+      entity_id,
+      metadata
+    )
+    values (
+      ${organization.id}::uuid,
+      ${user.id}::uuid,
+      ${action},
+      ${entityType},
+      ${entityId}::uuid,
+      ${JSON.stringify(metadata)}::jsonb
+    )
+  `;
 }
 
 async function requireCompanyInOrganization(companyId: string) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("companies")
-    .select("id, name")
-    .eq("id", companyId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const rows = await prisma.$queryRaw<CompanyLookup[]>`
+    select
+      id::text as id,
+      name,
+      pipeline_stage_id::text as pipeline_stage_id
+    from public.companies
+    where id = ${companyId}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!data) {
+  const company = rows[0] ?? null;
+  if (!company) {
     throw new Error("Company was not found in your workspace.");
   }
 
-  return { organization, company: data };
+  return { organization, company };
 }
 
 async function validateCompanyRelations(
@@ -104,60 +159,63 @@ async function validateCompanyRelations(
     referred_by_user_id?: string | null;
   },
 ): Promise<Record<string, string>> {
-  const supabase = await createClient();
   const fieldErrors: Record<string, string> = {};
 
   if (values.industry_id) {
-    const { data: industry } = await supabase
-      .from("industries")
-      .select("id")
-      .eq("id", values.industry_id)
-      .eq("organization_id", organizationId)
-      .neq("status", "archived")
-      .maybeSingle();
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      select id::text as id
+      from public.industries
+      where id = ${values.industry_id}::uuid
+        and organization_id = ${organizationId}::uuid
+        and status <> 'archived'
+      limit 1
+    `;
 
-    if (!industry) {
+    if (!rows[0]) {
       fieldErrors.industry_id = "Selected industry is not available in this workspace.";
     }
   }
 
   if (values.category_id) {
-    const { data: category } = await supabase
-      .from("company_categories")
-      .select("id")
-      .eq("id", values.category_id)
-      .eq("organization_id", organizationId)
-      .neq("status", "archived")
-      .maybeSingle();
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      select id::text as id
+      from public.company_categories
+      where id = ${values.category_id}::uuid
+        and organization_id = ${organizationId}::uuid
+        and status <> 'archived'
+      limit 1
+    `;
 
-    if (!category) {
+    if (!rows[0]) {
       fieldErrors.category_id = "Selected category is not available in this workspace.";
     }
   }
 
   if (values.pipeline_stage_id) {
-    const { data: stage } = await supabase
-      .from("pipeline_stages")
-      .select("id")
-      .eq("id", values.pipeline_stage_id)
-      .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .maybeSingle();
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      select id::text as id
+      from public.pipeline_stages
+      where id = ${values.pipeline_stage_id}::uuid
+        and organization_id = ${organizationId}::uuid
+        and is_active = true
+      limit 1
+    `;
 
-    if (!stage) {
+    if (!rows[0]) {
       fieldErrors.pipeline_stage_id = "Selected pipeline stage is not available in this workspace.";
     }
   }
 
   if (values.assigned_user_id) {
-    const { data: assignedUser } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", values.assigned_user_id)
-      .eq("organization_id", organizationId)
-      .maybeSingle();
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      select id::text as id
+      from public.profiles
+      where id = ${values.assigned_user_id}::uuid
+        and organization_id = ${organizationId}::uuid
+      limit 1
+    `;
 
-    if (!assignedUser) {
+    if (!rows[0]) {
       fieldErrors.assigned_user_id = "Selected assigned user is not part of this workspace.";
     } else {
       try {
@@ -169,15 +227,16 @@ async function validateCompanyRelations(
   }
 
   if (values.referred_by_user_id) {
-    const { data: referredByUser } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", values.referred_by_user_id)
-      .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .maybeSingle();
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      select id::text as id
+      from public.profiles
+      where id = ${values.referred_by_user_id}::uuid
+        and organization_id = ${organizationId}::uuid
+        and is_active = true
+      limit 1
+    `;
 
-    if (!referredByUser) {
+    if (!rows[0]) {
       fieldErrors.referred_by_user_id = "Selected referral user is not part of this workspace.";
     }
   }
@@ -187,82 +246,97 @@ async function validateCompanyRelations(
 
 async function getPipelineStageInOrganization(stageId: string) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("pipeline_stages")
-    .select("id, name, color, probability, position, is_won, is_lost, is_active")
-    .eq("id", stageId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const rows = await prisma.$queryRaw<PipelineStageLookup[]>`
+    select
+      id::text as id,
+      name,
+      color,
+      probability,
+      position,
+      is_won,
+      is_lost,
+      is_active
+    from public.pipeline_stages
+    where id = ${stageId}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!data || !data.is_active) {
+  const stage = rows[0] ?? null;
+  if (!stage || !stage.is_active) {
     throw new Error("Selected pipeline stage is not available in this workspace.");
   }
 
-  return data;
+  return stage;
 }
 
 async function requireContactInOrganization(contactId: string) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("contact_persons")
-    .select("id, company_id, is_primary, name")
-    .eq("id", contactId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const rows = await prisma.$queryRaw<ContactLookup[]>`
+    select
+      id::text as id,
+      company_id::text as company_id,
+      is_primary,
+      name
+    from public.contact_persons
+    where id = ${contactId}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!data) {
+  const contact = rows[0] ?? null;
+  if (!contact) {
     throw new Error("Contact was not found in your workspace.");
   }
 
-  return { organization, contact: data };
+  return { organization, contact };
 }
 
 async function validateInteractionRelations(
   organizationId: string,
   values: { company_id: string; contact_person_id: string | null; assigned_user_id: string | null },
 ) {
-  const supabase = await createClient();
   const fieldErrors: Record<string, string> = {};
-  const { data: company } = await supabase
-    .from("companies")
-    .select("id")
-    .eq("id", values.company_id)
-    .eq("organization_id", organizationId)
-    .neq("status", "archived")
-    .maybeSingle();
 
-  if (!company) fieldErrors.company_id = "Selected company is not available in this workspace.";
+  const companyRows = await prisma.$queryRaw<Array<{ id: string }>>`
+    select id::text as id
+    from public.companies
+    where id = ${values.company_id}::uuid
+      and organization_id = ${organizationId}::uuid
+      and status <> 'archived'
+    limit 1
+  `;
+
+  if (!companyRows[0]) {
+    fieldErrors.company_id = "Selected company is not available in this workspace.";
+  }
 
   if (values.contact_person_id) {
-    const { data: contact } = await supabase
-      .from("contact_persons")
-      .select("id")
-      .eq("id", values.contact_person_id)
-      .eq("company_id", values.company_id)
-      .eq("organization_id", organizationId)
-      .neq("status", "archived")
-      .maybeSingle();
-    if (!contact) fieldErrors.contact_person_id = "Selected contact does not belong to this company.";
+    const contactRows = await prisma.$queryRaw<Array<{ id: string }>>`
+      select id::text as id
+      from public.contact_persons
+      where id = ${values.contact_person_id}::uuid
+        and company_id = ${values.company_id}::uuid
+        and organization_id = ${organizationId}::uuid
+        and status <> 'archived'
+      limit 1
+    `;
+
+    if (!contactRows[0]) {
+      fieldErrors.contact_person_id = "Selected contact does not belong to this company.";
+    }
   }
 
   if (values.assigned_user_id) {
-    const { data: assigned } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", values.assigned_user_id)
-      .eq("organization_id", organizationId)
-      .maybeSingle();
-    if (!assigned) {
+    const assignedRows = await prisma.$queryRaw<Array<{ id: string }>>`
+      select id::text as id
+      from public.profiles
+      where id = ${values.assigned_user_id}::uuid
+        and organization_id = ${organizationId}::uuid
+      limit 1
+    `;
+
+    if (!assignedRows[0]) {
       fieldErrors.assigned_user_id = "Selected assigned user is not part of this workspace.";
     } else {
       try {
@@ -278,32 +352,76 @@ async function validateInteractionRelations(
 
 async function requireInteractionInOrganization(interactionId: string) {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("interactions")
-    .select("id, company_id, success_rating, lead_temperature")
-    .eq("id", interactionId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Meeting was not found in your workspace.");
-  return { organization, interaction: data };
+  const rows = await prisma.$queryRaw<InteractionLookup[]>`
+    select
+      id::text as id,
+      company_id::text as company_id,
+      success_rating,
+      lead_temperature
+    from public.interactions
+    where id = ${interactionId}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
+
+  const interaction = rows[0] ?? null;
+  if (!interaction) {
+    throw new Error("Meeting was not found in your workspace.");
+  }
+
+  return { organization, interaction };
 }
 
 async function updateCompanyRatingFromInteraction(companyId: string, rating: number | null, temperature: string | null) {
   if (!rating) return;
+
   const organization = await requireOrganization();
   const resolvedTemperature = temperature ?? temperatureFromRating(rating);
-  const supabase = await createClient();
-  await supabase
-    .from("companies")
-    .update({ success_rating: rating, lead_temperature: resolvedTemperature })
-    .eq("id", companyId)
-    .eq("organization_id", organization.id);
+
+  await prisma.$executeRaw`
+    update public.companies
+    set success_rating = ${rating},
+        lead_temperature = ${resolvedTemperature}
+    where id = ${companyId}::uuid
+      and organization_id = ${organization.id}::uuid
+  `;
+
   await insertActivityLog("company.rating_updated_from_meeting", "company", companyId, {
     success_rating: rating,
     lead_temperature: resolvedTemperature,
   });
+}
+
+async function getExistingCompanyStage(companyId: string, organizationId: string) {
+  const rows = await prisma.$queryRaw<ExistingCompanyStage[]>`
+    select
+      c.pipeline_stage_id::text as pipeline_stage_id,
+      ps.position as previous_position,
+      ps.is_won as previous_is_won,
+      ps.is_lost as previous_is_lost
+    from public.companies c
+    left join public.pipeline_stages ps on ps.id = c.pipeline_stage_id
+    where c.id = ${companyId}::uuid
+      and c.organization_id = ${organizationId}::uuid
+    limit 1
+  `;
+
+  return rows[0] ?? null;
+}
+
+async function getCompanyByIdForMove(companyId: string, organizationId: string) {
+  const rows = await prisma.$queryRaw<CompanyLookup[]>`
+    select
+      id::text as id,
+      name,
+      pipeline_stage_id::text as pipeline_stage_id
+    from public.companies
+    where id = ${companyId}::uuid
+      and organization_id = ${organizationId}::uuid
+    limit 1
+  `;
+
+  return rows[0] ?? null;
 }
 
 export async function createIndustryAction(values: unknown): Promise<CrmActionState> {
@@ -313,15 +431,28 @@ export async function createIndustryAction(values: unknown): Promise<CrmActionSt
 
   if (!parsed.success) return getValidationState(parsed.error);
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("industries").insert({
-    ...parsed.data,
-    organization_id: organization.id,
-    created_by: user.id,
-    updated_by: user.id,
-  });
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      insert into public.industries (
+        organization_id,
+        name,
+        description,
+        status,
+        created_by,
+        updated_by
+      )
+      values (
+        ${organization.id}::uuid,
+        ${parsed.data.name},
+        ${parsed.data.description},
+        ${parsed.data.status},
+        ${user.id}::uuid,
+        ${user.id}::uuid
+      )
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to create the industry right now.") };
+  }
 
   revalidatePath("/settings");
   revalidatePath("/settings/industries");
@@ -334,14 +465,19 @@ export async function updateIndustryAction(id: string, values: unknown): Promise
 
   if (!parsed.success) return getValidationState(parsed.error);
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("industries")
-    .update(parsed.data)
-    .eq("id", id)
-    .eq("organization_id", organization.id);
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      update public.industries
+      set
+        name = ${parsed.data.name},
+        description = ${parsed.data.description},
+        status = ${parsed.data.status}
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to update the industry right now.") };
+  }
 
   revalidatePath("/settings/industries");
   return { ok: true };
@@ -349,14 +485,17 @@ export async function updateIndustryAction(id: string, values: unknown): Promise
 
 export async function archiveIndustryAction(id: string): Promise<CrmActionState> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("industries")
-    .update({ status: "archived" })
-    .eq("id", id)
-    .eq("organization_id", organization.id);
 
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      update public.industries
+      set status = 'archived'
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to archive the industry right now.") };
+  }
 
   revalidatePath("/settings/industries");
   return { ok: true };
@@ -369,16 +508,32 @@ export async function createCompanyCategoryAction(values: unknown): Promise<CrmA
 
   if (!parsed.success) return getValidationState(parsed.error);
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("company_categories").insert({
-    ...parsed.data,
-    code: makeShortCode(parsed.data.code ?? parsed.data.name),
-    organization_id: organization.id,
-    created_by: user.id,
-    updated_by: user.id,
-  });
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      insert into public.company_categories (
+        organization_id,
+        name,
+        code,
+        description,
+        priority_level,
+        status,
+        created_by,
+        updated_by
+      )
+      values (
+        ${organization.id}::uuid,
+        ${parsed.data.name},
+        ${makeShortCode(parsed.data.code ?? parsed.data.name)},
+        ${parsed.data.description},
+        ${parsed.data.priority_level},
+        ${parsed.data.status},
+        ${user.id}::uuid,
+        ${user.id}::uuid
+      )
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to create the category right now.") };
+  }
 
   revalidatePath("/settings/company-categories");
   return { ok: true };
@@ -390,14 +545,21 @@ export async function updateCompanyCategoryAction(id: string, values: unknown): 
 
   if (!parsed.success) return getValidationState(parsed.error);
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("company_categories")
-    .update({ ...parsed.data, code: makeShortCode(parsed.data.code ?? parsed.data.name) })
-    .eq("id", id)
-    .eq("organization_id", organization.id);
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      update public.company_categories
+      set
+        name = ${parsed.data.name},
+        code = ${makeShortCode(parsed.data.code ?? parsed.data.name)},
+        description = ${parsed.data.description},
+        priority_level = ${parsed.data.priority_level},
+        status = ${parsed.data.status}
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to update the category right now.") };
+  }
 
   revalidatePath("/settings/company-categories");
   return { ok: true };
@@ -405,14 +567,17 @@ export async function updateCompanyCategoryAction(id: string, values: unknown): 
 
 export async function archiveCompanyCategoryAction(id: string): Promise<CrmActionState> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("company_categories")
-    .update({ status: "archived" })
-    .eq("id", id)
-    .eq("organization_id", organization.id);
 
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      update public.company_categories
+      set status = 'archived'
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to archive the category right now.") };
+  }
 
   revalidatePath("/settings/company-categories");
   return { ok: true };
@@ -433,14 +598,34 @@ export async function createPipelineStageAction(values: unknown): Promise<CrmAct
     return { ok: false, error: error instanceof Error ? error.message : "Upgrade required to customize pipeline stages." };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("pipeline_stages").insert({
-    ...parsed.data,
-    slug: `${slugify(parsed.data.name)}-${Date.now()}`,
-    organization_id: organization.id,
-  });
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      insert into public.pipeline_stages (
+        organization_id,
+        name,
+        slug,
+        color,
+        probability,
+        position,
+        is_won,
+        is_lost,
+        is_active
+      )
+      values (
+        ${organization.id}::uuid,
+        ${parsed.data.name},
+        ${`${slugify(parsed.data.name)}-${Date.now()}`},
+        ${parsed.data.color},
+        ${parsed.data.probability},
+        ${parsed.data.position},
+        ${parsed.data.is_won},
+        ${parsed.data.is_lost},
+        ${parsed.data.is_active}
+      )
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to create the pipeline stage right now.") };
+  }
 
   revalidatePath("/settings/pipeline");
   return { ok: true };
@@ -461,14 +646,23 @@ export async function updatePipelineStageAction(id: string, values: unknown): Pr
     return { ok: false, error: error instanceof Error ? error.message : "Upgrade required to customize pipeline stages." };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("pipeline_stages")
-    .update(parsed.data)
-    .eq("id", id)
-    .eq("organization_id", organization.id);
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      update public.pipeline_stages
+      set
+        name = ${parsed.data.name},
+        color = ${parsed.data.color},
+        probability = ${parsed.data.probability},
+        position = ${parsed.data.position},
+        is_won = ${parsed.data.is_won},
+        is_lost = ${parsed.data.is_lost},
+        is_active = ${parsed.data.is_active}
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to update the pipeline stage right now.") };
+  }
 
   revalidatePath("/settings/pipeline");
   revalidatePath("/companies");
@@ -477,6 +671,7 @@ export async function updatePipelineStageAction(id: string, values: unknown): Pr
 
 export async function archivePipelineStageAction(id: string): Promise<CrmActionState> {
   const organization = await requireOrganization();
+
   try {
     await requireFeature("custom_pipeline");
   } catch (error) {
@@ -486,14 +681,16 @@ export async function archivePipelineStageAction(id: string): Promise<CrmActionS
     return { ok: false, error: error instanceof Error ? error.message : "Upgrade required to customize pipeline stages." };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("pipeline_stages")
-    .update({ is_active: false })
-    .eq("id", id)
-    .eq("organization_id", organization.id);
-
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      update public.pipeline_stages
+      set is_active = false
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to archive the pipeline stage right now.") };
+  }
 
   revalidatePath("/settings/pipeline");
   return { ok: true };
@@ -526,48 +723,76 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
     };
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("companies")
-    .insert({
-      ...parsed.data,
-      organization_id: organization.id,
-      created_by: user.id,
-      updated_by: user.id,
-    })
-    .select("id")
-    .single();
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      insert into public.companies (
+        organization_id,
+        name,
+        industry_id,
+        category_id,
+        lead_source,
+        referred_by_user_id,
+        priority,
+        assigned_user_id,
+        pipeline_stage_id,
+        status,
+        phone,
+        whatsapp,
+        email,
+        website,
+        address,
+        city,
+        country,
+        success_rating,
+        lead_temperature,
+        estimated_value,
+        expected_closing_date,
+        notes,
+        created_by,
+        updated_by
+      )
+      values (
+        ${organization.id}::uuid,
+        ${parsed.data.name},
+        ${parsed.data.industry_id}::uuid,
+        ${parsed.data.category_id}::uuid,
+        ${parsed.data.lead_source},
+        ${parsed.data.referred_by_user_id}::uuid,
+        ${parsed.data.priority},
+        ${parsed.data.assigned_user_id}::uuid,
+        ${parsed.data.pipeline_stage_id}::uuid,
+        ${parsed.data.status},
+        ${parsed.data.phone},
+        ${parsed.data.whatsapp},
+        ${parsed.data.email},
+        ${parsed.data.website},
+        ${parsed.data.address},
+        ${parsed.data.city},
+        ${parsed.data.country},
+        ${parsed.data.success_rating},
+        ${parsed.data.lead_temperature},
+        ${parsed.data.estimated_value},
+        ${parsed.data.expected_closing_date}::date,
+        ${parsed.data.notes},
+        ${user.id}::uuid,
+        ${user.id}::uuid
+      )
+      returning id::text as id
+    `;
 
-  if (error) {
-    logServerError("company.create", error, { organizationId: organization.id, name: parsed.data.name });
-    return { ok: false, error: getSafeErrorMessage(error, "Unable to create the company right now.") };
-  }
+    const companyId = rows[0]?.id;
+    if (!companyId) {
+      return { ok: false, error: "Unable to create the company right now." };
+    }
 
-  await insertActivityLog("company.created", "company", data.id, { name: parsed.data.name });
+    await insertActivityLog("company.created", "company", companyId, { name: parsed.data.name });
 
-  await applyScoringEvent({
-    organizationId: organization.id,
-    userId: user.id,
-    actionKey: "lead_created",
-    companyId: data.id,
-    sourceRecordId: data.id,
-    sourceRecordType: "company",
-    metadata: {
-      company_name: parsed.data.name,
-      lead_source: parsed.data.lead_source,
-    },
-    actorUserId: user.id,
-    addToLeadScore: true,
-    idempotencyKey: buildScoreIdempotencyKey(["lead_created", data.id]),
-  });
-
-  if (parsed.data.lead_source) {
     await applyScoringEvent({
       organizationId: organization.id,
       userId: user.id,
-      actionKey: "lead_source_bonus",
-      companyId: data.id,
-      sourceRecordId: data.id,
+      actionKey: "lead_created",
+      companyId,
+      sourceRecordId: companyId,
       sourceRecordType: "company",
       metadata: {
         company_name: parsed.data.name,
@@ -575,31 +800,52 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
       },
       actorUserId: user.id,
       addToLeadScore: true,
-      idempotencyKey: buildScoreIdempotencyKey(["lead_source_bonus", data.id, parsed.data.lead_source]),
+      idempotencyKey: buildScoreIdempotencyKey(["lead_created", companyId]),
     });
-  }
 
-  if (parsed.data.referred_by_user_id && parsed.data.referred_by_user_id !== user.id) {
-    await applyScoringEvent({
-      organizationId: organization.id,
-      userId: parsed.data.referred_by_user_id,
-      actionKey: "lead_referral",
-      companyId: data.id,
-      sourceRecordId: data.id,
-      sourceRecordType: "company",
-      metadata: {
-        company_name: parsed.data.name,
-        referred_user_id: parsed.data.referred_by_user_id,
-        created_by_user_id: user.id,
-      },
-      actorUserId: user.id,
-      addToLeadScore: true,
-      idempotencyKey: buildScoreIdempotencyKey(["lead_referral", data.id, parsed.data.referred_by_user_id]),
-    });
-  }
+    if (parsed.data.lead_source) {
+      await applyScoringEvent({
+        organizationId: organization.id,
+        userId: user.id,
+        actionKey: "lead_source_bonus",
+        companyId,
+        sourceRecordId: companyId,
+        sourceRecordType: "company",
+        metadata: {
+          company_name: parsed.data.name,
+          lead_source: parsed.data.lead_source,
+        },
+        actorUserId: user.id,
+        addToLeadScore: true,
+        idempotencyKey: buildScoreIdempotencyKey(["lead_source_bonus", companyId, parsed.data.lead_source]),
+      });
+    }
 
-  revalidatePath("/companies");
-  return { ok: true, id: data.id };
+    if (parsed.data.referred_by_user_id && parsed.data.referred_by_user_id !== user.id) {
+      await applyScoringEvent({
+        organizationId: organization.id,
+        userId: parsed.data.referred_by_user_id,
+        actionKey: "lead_referral",
+        companyId,
+        sourceRecordId: companyId,
+        sourceRecordType: "company",
+        metadata: {
+          company_name: parsed.data.name,
+          referred_user_id: parsed.data.referred_by_user_id,
+          created_by_user_id: user.id,
+        },
+        actorUserId: user.id,
+        addToLeadScore: true,
+        idempotencyKey: buildScoreIdempotencyKey(["lead_referral", companyId, parsed.data.referred_by_user_id]),
+      });
+    }
+
+    revalidatePath("/companies");
+    return { ok: true, id: companyId };
+  } catch (error) {
+    logServerError("company.create", error, { organizationId: organization.id, name: parsed.data.name });
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to create the company right now.") };
+  }
 }
 
 export async function updateCompanyAction(id: string, values: unknown): Promise<CrmActionState> {
@@ -619,102 +865,118 @@ export async function updateCompanyAction(id: string, values: unknown): Promise<
     };
   }
 
-  const supabase = await createClient();
-  const { data: existing, error: existingError } = await supabase
-    .from("companies")
-    .select("pipeline_stage_id, pipeline_stages(position, is_won, is_lost)")
-    .eq("id", id)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  try {
+    const existing = await getExistingCompanyStage(id, organization.id);
 
-  if (existingError) return { ok: false, error: existingError.message };
+    await prisma.$executeRaw`
+      update public.companies
+      set
+        name = ${parsed.data.name},
+        industry_id = ${parsed.data.industry_id}::uuid,
+        category_id = ${parsed.data.category_id}::uuid,
+        lead_source = ${parsed.data.lead_source},
+        referred_by_user_id = ${parsed.data.referred_by_user_id}::uuid,
+        priority = ${parsed.data.priority},
+        assigned_user_id = ${parsed.data.assigned_user_id}::uuid,
+        pipeline_stage_id = ${parsed.data.pipeline_stage_id}::uuid,
+        status = ${parsed.data.status},
+        phone = ${parsed.data.phone},
+        whatsapp = ${parsed.data.whatsapp},
+        email = ${parsed.data.email},
+        website = ${parsed.data.website},
+        address = ${parsed.data.address},
+        city = ${parsed.data.city},
+        country = ${parsed.data.country},
+        success_rating = ${parsed.data.success_rating},
+        lead_temperature = ${parsed.data.lead_temperature},
+        estimated_value = ${parsed.data.estimated_value},
+        expected_closing_date = ${parsed.data.expected_closing_date}::date,
+        notes = ${parsed.data.notes}
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
-  const { error } = await supabase
-    .from("companies")
-    .update(parsed.data)
-    .eq("id", id)
-    .eq("organization_id", organization.id);
-
-  if (error) return { ok: false, error: error.message };
-
-  await insertActivityLog("company.updated", "company", id);
-  await notifyDirectManagerOfActivity({
-    actorUserId: user.id,
-    title: "Junior updated a company",
-    message: `${parsed.data.name} was updated by one of your assigned team members.`,
-    link: `/companies/${id}`,
-  });
-
-  if (existing?.pipeline_stage_id !== parsed.data.pipeline_stage_id) {
-    await insertActivityLog("company.pipeline_stage_changed", "company", id, {
-      from: existing?.pipeline_stage_id,
-      to: parsed.data.pipeline_stage_id,
+    await insertActivityLog("company.updated", "company", id);
+    await notifyDirectManagerOfActivity({
+      actorUserId: user.id,
+      title: "Junior updated a company",
+      message: `${parsed.data.name} was updated by one of your assigned team members.`,
+      link: `/companies/${id}`,
     });
 
-    const nextStage = await getPipelineStageInOrganization(parsed.data.pipeline_stage_id);
-    const previousStage = Array.isArray(existing?.pipeline_stages)
-      ? existing?.pipeline_stages[0]
-      : existing?.pipeline_stages;
-    const movedForward =
-      typeof previousStage?.position === "number"
-        ? nextStage.position > previousStage.position
-        : false;
-
-    if (movedForward && !nextStage.is_won && !nextStage.is_lost) {
-      await applyScoringEvent({
-        organizationId: organization.id,
-        userId: user.id,
-        actionKey: "lead_qualified",
-        companyId: id,
-        sourceRecordId: parsed.data.pipeline_stage_id,
-        sourceRecordType: "pipeline_stage",
-        metadata: {
-          from_stage_id: existing?.pipeline_stage_id,
-          to_stage_id: parsed.data.pipeline_stage_id,
-          to_stage_name: nextStage.name,
-        },
-        actorUserId: user.id,
-        addToLeadScore: true,
-        idempotencyKey: buildScoreIdempotencyKey(["lead_qualified", id, parsed.data.pipeline_stage_id]),
+    if (existing?.pipeline_stage_id !== parsed.data.pipeline_stage_id) {
+      await insertActivityLog("company.pipeline_stage_changed", "company", id, {
+        from: existing?.pipeline_stage_id,
+        to: parsed.data.pipeline_stage_id,
       });
+
+      const nextStage = await getPipelineStageInOrganization(parsed.data.pipeline_stage_id);
+      const movedForward =
+        typeof existing?.previous_position === "number"
+          ? nextStage.position > existing.previous_position
+          : false;
+
+      if (movedForward && !nextStage.is_won && !nextStage.is_lost) {
+        await applyScoringEvent({
+          organizationId: organization.id,
+          userId: user.id,
+          actionKey: "lead_qualified",
+          companyId: id,
+          sourceRecordId: parsed.data.pipeline_stage_id,
+          sourceRecordType: "pipeline_stage",
+          metadata: {
+            from_stage_id: existing?.pipeline_stage_id,
+            to_stage_id: parsed.data.pipeline_stage_id,
+            to_stage_name: nextStage.name,
+          },
+          actorUserId: user.id,
+          addToLeadScore: true,
+          idempotencyKey: buildScoreIdempotencyKey(["lead_qualified", id, parsed.data.pipeline_stage_id]),
+        });
+      }
+
+      const wasWon = Boolean(existing?.previous_is_won);
+      if (!wasWon && nextStage.is_won) {
+        await applyScoringEvent({
+          organizationId: organization.id,
+          userId: user.id,
+          actionKey: "lead_converted_won",
+          companyId: id,
+          sourceRecordId: id,
+          sourceRecordType: "company",
+          metadata: {
+            from_stage_id: existing?.pipeline_stage_id,
+            to_stage_id: parsed.data.pipeline_stage_id,
+            to_stage_name: nextStage.name,
+          },
+          actorUserId: user.id,
+          addToLeadScore: true,
+          idempotencyKey: buildScoreIdempotencyKey(["lead_converted_won", id]),
+        });
+      }
     }
 
-    const wasWon = Boolean(previousStage?.is_won);
-    if (!wasWon && nextStage.is_won) {
-      await applyScoringEvent({
-        organizationId: organization.id,
-        userId: user.id,
-        actionKey: "lead_converted_won",
-        companyId: id,
-        sourceRecordId: id,
-        sourceRecordType: "company",
-        metadata: {
-          from_stage_id: existing?.pipeline_stage_id,
-          to_stage_id: parsed.data.pipeline_stage_id,
-          to_stage_name: nextStage.name,
-        },
-        actorUserId: user.id,
-        addToLeadScore: true,
-        idempotencyKey: buildScoreIdempotencyKey(["lead_converted_won", id]),
-      });
-    }
+    revalidatePath("/companies");
+    revalidatePath(`/companies/${id}`);
+    return { ok: true, id };
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to update the company right now.") };
   }
-
-  revalidatePath("/companies");
-  revalidatePath(`/companies/${id}`);
-  return { ok: true, id };
 }
 
 export async function archiveCompanyAction(id: string): Promise<CrmActionState> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("companies")
-    .update({ status: "archived" })
-    .eq("id", id)
-    .eq("organization_id", organization.id);
 
-  if (error) return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      update public.companies
+      set status = 'archived'
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to archive the company right now.") };
+  }
 
   await insertActivityLog("company.archived", "company", id);
   revalidatePath("/companies");
@@ -729,39 +991,70 @@ export async function createContactAction(values: unknown): Promise<CrmActionSta
 
   try {
     const { organization } = await requireCompanyInOrganization(parsed.data.company_id);
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("contact_persons")
-      .insert({
-        ...parsed.data,
-        organization_id: organization.id,
-        created_by: user.id,
-        updated_by: user.id,
-      })
-      .select("id")
-      .single();
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      insert into public.contact_persons (
+        organization_id,
+        company_id,
+        name,
+        designation,
+        department,
+        mobile,
+        whatsapp,
+        email,
+        linkedin,
+        decision_role,
+        relationship_level,
+        preferred_contact_method,
+        remarks,
+        is_primary,
+        status,
+        created_by,
+        updated_by
+      )
+      values (
+        ${organization.id}::uuid,
+        ${parsed.data.company_id}::uuid,
+        ${parsed.data.name},
+        ${parsed.data.designation},
+        ${parsed.data.department},
+        ${parsed.data.mobile},
+        ${parsed.data.whatsapp},
+        ${parsed.data.email},
+        ${parsed.data.linkedin},
+        ${parsed.data.decision_role},
+        ${parsed.data.relationship_level},
+        ${parsed.data.preferred_contact_method},
+        ${parsed.data.remarks},
+        ${parsed.data.is_primary},
+        ${parsed.data.status},
+        ${user.id}::uuid,
+        ${user.id}::uuid
+      )
+      returning id::text as id
+    `;
 
-    if (error) {
-      logServerError("contact.create", error, { companyId: parsed.data.company_id, name: parsed.data.name });
-      return { ok: false, error: getSafeErrorMessage(error, "Unable to create the contact right now.") };
+    const contactId = rows[0]?.id;
+    if (!contactId) {
+      return { ok: false, error: "Unable to create the contact right now." };
     }
 
-    await insertActivityLog("contact.created", "contact_person", data.id, {
+    await insertActivityLog("contact.created", "contact_person", contactId, {
       company_id: parsed.data.company_id,
       name: parsed.data.name,
     });
 
     if (parsed.data.is_primary) {
-      await insertActivityLog("contact.primary_changed", "contact_person", data.id, {
+      await insertActivityLog("contact.primary_changed", "contact_person", contactId, {
         company_id: parsed.data.company_id,
       });
     }
 
     revalidatePath("/contacts");
     revalidatePath(`/companies/${parsed.data.company_id}`);
-    return { ok: true, id: data.id };
+    return { ok: true, id: contactId };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to create contact." };
+    logServerError("contact.create", error, { companyId: parsed.data.company_id, name: parsed.data.name });
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to create the contact right now.") };
   }
 }
 
@@ -773,14 +1066,27 @@ export async function updateContactAction(id: string, values: unknown): Promise<
   try {
     const { organization, contact } = await requireContactInOrganization(id);
     await requireCompanyInOrganization(parsed.data.company_id);
-    const supabase = await createClient();
-    const { error } = await supabase
-      .from("contact_persons")
-      .update(parsed.data)
-      .eq("id", id)
-      .eq("organization_id", organization.id);
 
-    if (error) return { ok: false, error: error.message };
+    await prisma.$executeRaw`
+      update public.contact_persons
+      set
+        company_id = ${parsed.data.company_id}::uuid,
+        name = ${parsed.data.name},
+        designation = ${parsed.data.designation},
+        department = ${parsed.data.department},
+        mobile = ${parsed.data.mobile},
+        whatsapp = ${parsed.data.whatsapp},
+        email = ${parsed.data.email},
+        linkedin = ${parsed.data.linkedin},
+        decision_role = ${parsed.data.decision_role},
+        relationship_level = ${parsed.data.relationship_level},
+        preferred_contact_method = ${parsed.data.preferred_contact_method},
+        remarks = ${parsed.data.remarks},
+        is_primary = ${parsed.data.is_primary},
+        status = ${parsed.data.status}
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
     await insertActivityLog("contact.updated", "contact_person", id, {
       company_id: parsed.data.company_id,
@@ -805,14 +1111,14 @@ export async function updateContactAction(id: string, values: unknown): Promise<
 export async function archiveContactAction(id: string): Promise<CrmActionState> {
   try {
     const { organization, contact } = await requireContactInOrganization(id);
-    const supabase = await createClient();
-    const { error } = await supabase
-      .from("contact_persons")
-      .update({ status: "archived", is_primary: false })
-      .eq("id", id)
-      .eq("organization_id", organization.id);
 
-    if (error) return { ok: false, error: error.message };
+    await prisma.$executeRaw`
+      update public.contact_persons
+      set status = 'archived',
+          is_primary = false
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
     await insertActivityLog("contact.archived", "contact_person", id, {
       company_id: contact.company_id,
@@ -830,53 +1136,112 @@ export async function createInteractionAction(values: unknown): Promise<CrmActio
   const user = await requireAuth();
   const organization = await requireOrganization();
   const parsed = interactionSchema.safeParse(values);
+
   if (!parsed.success) return getValidationState(parsed.error);
   await ensureCanWorkWithCompany(parsed.data.company_id);
 
   const relationErrors = await validateInteractionRelations(organization.id, parsed.data);
-  if (Object.keys(relationErrors).length > 0) return { ok: false, error: Object.values(relationErrors)[0], fieldErrors: relationErrors };
+  if (Object.keys(relationErrors).length > 0) {
+    return { ok: false, error: Object.values(relationErrors)[0], fieldErrors: relationErrors };
+  }
 
   const meetingDatetime = parsed.data.meeting_datetime ?? new Date().toISOString();
   const leadTemperature = parsed.data.lead_temperature ?? temperatureFromRating(parsed.data.success_rating);
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("interactions")
-    .insert({
-      ...parsed.data,
-      meeting_datetime: meetingDatetime,
-      lead_temperature: leadTemperature,
-      organization_id: organization.id,
-      created_by: user.id,
-      updated_by: user.id,
-    })
-    .select("id")
-    .single();
 
-  if (error) {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      insert into public.interactions (
+        organization_id,
+        company_id,
+        contact_person_id,
+        assigned_user_id,
+        interaction_type,
+        meeting_datetime,
+        location,
+        online_meeting_link,
+        discussion_details,
+        client_requirement,
+        pain_point,
+        proposed_solution,
+        budget_discussion,
+        competitor_mentioned,
+        decision_timeline,
+        success_rating,
+        lead_temperature,
+        next_action,
+        next_followup_at,
+        need_help,
+        internal_note,
+        status,
+        created_by,
+        updated_by
+      )
+      values (
+        ${organization.id}::uuid,
+        ${parsed.data.company_id}::uuid,
+        ${parsed.data.contact_person_id}::uuid,
+        ${parsed.data.assigned_user_id}::uuid,
+        ${parsed.data.interaction_type},
+        ${meetingDatetime}::timestamptz,
+        ${parsed.data.location},
+        ${parsed.data.online_meeting_link},
+        ${parsed.data.discussion_details},
+        ${parsed.data.client_requirement},
+        ${parsed.data.pain_point},
+        ${parsed.data.proposed_solution},
+        ${parsed.data.budget_discussion},
+        ${parsed.data.competitor_mentioned},
+        ${parsed.data.decision_timeline},
+        ${parsed.data.success_rating},
+        ${leadTemperature},
+        ${parsed.data.next_action},
+        ${parsed.data.next_followup_at}::timestamptz,
+        ${parsed.data.need_help},
+        ${parsed.data.internal_note},
+        ${parsed.data.status},
+        ${user.id}::uuid,
+        ${user.id}::uuid
+      )
+      returning id::text as id
+    `;
+
+    const interactionId = rows[0]?.id;
+    if (!interactionId) {
+      return { ok: false, error: "Unable to create the meeting right now." };
+    }
+
+    await insertActivityLog("meeting.created", "interaction", interactionId, { company_id: parsed.data.company_id });
+    await notifyDirectManagerOfActivity({
+      actorUserId: user.id,
+      title: "Junior logged a meeting",
+      message: "A direct junior team member logged a company meeting or interaction.",
+      link: `/meetings/${interactionId}`,
+    });
+
+    if (parsed.data.next_followup_at) {
+      await insertActivityLog("meeting.next_followup_added", "interaction", interactionId, {
+        next_followup_at: parsed.data.next_followup_at,
+      });
+    }
+
+    if (parsed.data.assigned_user_id && parsed.data.assigned_user_id !== user.id) {
+      await createNotification({
+        userId: parsed.data.assigned_user_id,
+        type: "meeting.assigned",
+        title: "New meeting assigned",
+        message: "A new meeting or interaction has been assigned to you.",
+        link: `/meetings/${interactionId}`,
+      });
+    }
+
+    await updateCompanyRatingFromInteraction(parsed.data.company_id, parsed.data.success_rating, leadTemperature);
+    revalidatePath("/meetings");
+    revalidatePath(`/companies/${parsed.data.company_id}`);
+    return { ok: true, id: interactionId };
+  } catch (error) {
     logServerError("meeting.create", error, { organizationId: organization.id, companyId: parsed.data.company_id });
     return { ok: false, error: getSafeErrorMessage(error, "Unable to create the meeting right now.") };
   }
-  await insertActivityLog("meeting.created", "interaction", data.id, { company_id: parsed.data.company_id });
-  await notifyDirectManagerOfActivity({
-    actorUserId: user.id,
-    title: "Junior logged a meeting",
-    message: "A direct junior team member logged a company meeting or interaction.",
-    link: `/meetings/${data.id}`,
-  });
-  if (parsed.data.next_followup_at) await insertActivityLog("meeting.next_followup_added", "interaction", data.id, { next_followup_at: parsed.data.next_followup_at });
-  if (parsed.data.assigned_user_id && parsed.data.assigned_user_id !== user.id) {
-    await createNotification({
-      userId: parsed.data.assigned_user_id,
-      type: "meeting.assigned",
-      title: "New meeting assigned",
-      message: "A new meeting or interaction has been assigned to you.",
-      link: `/meetings/${data.id}`,
-    });
-  }
-  await updateCompanyRatingFromInteraction(parsed.data.company_id, parsed.data.success_rating, leadTemperature);
-  revalidatePath("/meetings");
-  revalidatePath(`/companies/${parsed.data.company_id}`);
-  return { ok: true, id: data.id };
 }
 
 export async function updateInteractionAction(id: string, values: unknown): Promise<CrmActionState> {
@@ -887,18 +1252,42 @@ export async function updateInteractionAction(id: string, values: unknown): Prom
     const user = await requireAuth();
     const { organization, interaction } = await requireInteractionInOrganization(id);
     await ensureCanWorkWithCompany(interaction.company_id);
+
     const relationErrors = await validateInteractionRelations(organization.id, parsed.data);
-    if (Object.keys(relationErrors).length > 0) return { ok: false, error: Object.values(relationErrors)[0], fieldErrors: relationErrors };
+    if (Object.keys(relationErrors).length > 0) {
+      return { ok: false, error: Object.values(relationErrors)[0], fieldErrors: relationErrors };
+    }
 
     const leadTemperature = parsed.data.lead_temperature ?? temperatureFromRating(parsed.data.success_rating);
-    const supabase = await createClient();
-    const { error } = await supabase
-      .from("interactions")
-      .update({ ...parsed.data, lead_temperature: leadTemperature, meeting_datetime: parsed.data.meeting_datetime ?? new Date().toISOString() })
-      .eq("id", id)
-      .eq("organization_id", organization.id);
 
-    if (error) return { ok: false, error: error.message };
+    await prisma.$executeRaw`
+      update public.interactions
+      set
+        company_id = ${parsed.data.company_id}::uuid,
+        contact_person_id = ${parsed.data.contact_person_id}::uuid,
+        assigned_user_id = ${parsed.data.assigned_user_id}::uuid,
+        interaction_type = ${parsed.data.interaction_type},
+        meeting_datetime = ${(parsed.data.meeting_datetime ?? new Date().toISOString())}::timestamptz,
+        location = ${parsed.data.location},
+        online_meeting_link = ${parsed.data.online_meeting_link},
+        discussion_details = ${parsed.data.discussion_details},
+        client_requirement = ${parsed.data.client_requirement},
+        pain_point = ${parsed.data.pain_point},
+        proposed_solution = ${parsed.data.proposed_solution},
+        budget_discussion = ${parsed.data.budget_discussion},
+        competitor_mentioned = ${parsed.data.competitor_mentioned},
+        decision_timeline = ${parsed.data.decision_timeline},
+        success_rating = ${parsed.data.success_rating},
+        lead_temperature = ${leadTemperature},
+        next_action = ${parsed.data.next_action},
+        next_followup_at = ${parsed.data.next_followup_at}::timestamptz,
+        need_help = ${parsed.data.need_help},
+        internal_note = ${parsed.data.internal_note},
+        status = ${parsed.data.status}
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+
     await insertActivityLog("meeting.updated", "interaction", id, { company_id: parsed.data.company_id });
     await notifyDirectManagerOfActivity({
       actorUserId: user.id,
@@ -906,7 +1295,13 @@ export async function updateInteractionAction(id: string, values: unknown): Prom
       message: "A direct junior team member updated a company meeting or interaction.",
       link: `/meetings/${id}`,
     });
-    if (parsed.data.next_followup_at) await insertActivityLog("meeting.next_followup_added", "interaction", id, { next_followup_at: parsed.data.next_followup_at });
+
+    if (parsed.data.next_followup_at) {
+      await insertActivityLog("meeting.next_followup_added", "interaction", id, {
+        next_followup_at: parsed.data.next_followup_at,
+      });
+    }
+
     await updateCompanyRatingFromInteraction(parsed.data.company_id, parsed.data.success_rating, leadTemperature);
     revalidatePath("/meetings");
     revalidatePath(`/meetings/${id}`);
@@ -921,13 +1316,14 @@ export async function updateInteractionAction(id: string, values: unknown): Prom
 export async function archiveInteractionAction(id: string): Promise<CrmActionState> {
   try {
     const { organization, interaction } = await requireInteractionInOrganization(id);
-    const supabase = await createClient();
-    const { error } = await supabase
-      .from("interactions")
-      .update({ status: "archived" })
-      .eq("id", id)
-      .eq("organization_id", organization.id);
-    if (error) return { ok: false, error: error.message };
+
+    await prisma.$executeRaw`
+      update public.interactions
+      set status = 'archived'
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+
     await insertActivityLog("meeting.archived", "interaction", id, { company_id: interaction.company_id });
     revalidatePath("/meetings");
     revalidatePath(`/companies/${interaction.company_id}`);
@@ -940,14 +1336,13 @@ export async function archiveInteractionAction(id: string): Promise<CrmActionSta
 export async function setPrimaryContactAction(id: string): Promise<CrmActionState> {
   try {
     const { organization, contact } = await requireContactInOrganization(id);
-    const supabase = await createClient();
-    const { error } = await supabase
-      .from("contact_persons")
-      .update({ is_primary: true })
-      .eq("id", id)
-      .eq("organization_id", organization.id);
 
-    if (error) return { ok: false, error: error.message };
+    await prisma.$executeRaw`
+      update public.contact_persons
+      set is_primary = true
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
     await insertActivityLog("contact.primary_changed", "contact_person", id, {
       company_id: contact.company_id,
@@ -965,62 +1360,45 @@ export async function setPrimaryContactAction(id: string): Promise<CrmActionStat
 export async function moveCompanyToPipelineStage(companyId: string, stageId: string): Promise<CrmActionState> {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
   try {
     await ensureCanWorkWithCompany(companyId);
-    const [stage, existingCompanyResult] = await Promise.all([
+
+    const [stage, existingCompany] = await Promise.all([
       getPipelineStageInOrganization(stageId),
-      supabase
-        .from("companies")
-        .select("id, name, pipeline_stage_id")
-        .eq("id", companyId)
-        .eq("organization_id", organization.id)
-        .maybeSingle(),
+      getCompanyByIdForMove(companyId, organization.id),
     ]);
 
-    if (existingCompanyResult.error) {
-      throw existingCompanyResult.error;
-    }
-
-    if (!existingCompanyResult.data) {
+    if (!existingCompany) {
       return { ok: false, error: "Company was not found in your workspace." };
     }
 
-    if (existingCompanyResult.data.pipeline_stage_id === stage.id) {
+    if (existingCompany.pipeline_stage_id === stage.id) {
       return { ok: true, id: companyId };
     }
 
-    const { error } = await supabase
-      .from("companies")
-      .update({
-        pipeline_stage_id: stage.id,
-        updated_by: user.id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", companyId)
-      .eq("organization_id", organization.id);
-
-    if (error) {
-      logServerError("company.pipeline_stage_move", error, {
-        organizationId: organization.id,
-        companyId,
-        targetStageId: stage.id,
-      });
-      return { ok: false, error: getSafeErrorMessage(error, "Unable to move the company in the pipeline right now.") };
-    }
+    await prisma.$executeRaw`
+      update public.companies
+      set
+        pipeline_stage_id = ${stage.id}::uuid,
+        updated_by = ${user.id}::uuid,
+        updated_at = now()
+      where id = ${companyId}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
 
     await insertActivityLog("company.pipeline_stage_changed", "company", companyId, {
-      from: existingCompanyResult.data.pipeline_stage_id,
+      from: existingCompany.pipeline_stage_id,
       to: stage.id,
       to_stage_name: stage.name,
       is_won: stage.is_won,
       is_lost: stage.is_lost,
     });
+
     await notifyDirectManagerOfActivity({
       actorUserId: user.id,
       title: "Junior moved a lead stage",
-      message: `${existingCompanyResult.data.name} moved to ${stage.name}.`,
+      message: `${existingCompany.name} moved to ${stage.name}.`,
       link: `/companies/${companyId}`,
     });
 
@@ -1044,48 +1422,50 @@ export async function moveCompanyToPipelineStage(companyId: string, stageId: str
 
 export async function markCompanyWon(companyId: string): Promise<CrmActionState> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("pipeline_stages")
-    .select("id")
-    .eq("organization_id", organization.id)
-    .eq("is_active", true)
-    .eq("is_won", true)
-    .order("position")
-    .limit(1)
-    .maybeSingle();
 
-  if (error) {
-    return { ok: false, error: error.message };
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      select id::text as id
+      from public.pipeline_stages
+      where organization_id = ${organization.id}::uuid
+        and is_active = true
+        and is_won = true
+      order by position asc
+      limit 1
+    `;
+
+    const stage = rows[0] ?? null;
+    if (!stage) {
+      return { ok: false, error: "No active Won stage is configured for this workspace." };
+    }
+
+    return moveCompanyToPipelineStage(companyId, stage.id);
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to move the company right now.") };
   }
-
-  if (!data) {
-    return { ok: false, error: "No active Won stage is configured for this workspace." };
-  }
-
-  return moveCompanyToPipelineStage(companyId, data.id);
 }
 
 export async function markCompanyLost(companyId: string): Promise<CrmActionState> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("pipeline_stages")
-    .select("id")
-    .eq("organization_id", organization.id)
-    .eq("is_active", true)
-    .eq("is_lost", true)
-    .order("position")
-    .limit(1)
-    .maybeSingle();
 
-  if (error) {
-    return { ok: false, error: error.message };
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      select id::text as id
+      from public.pipeline_stages
+      where organization_id = ${organization.id}::uuid
+        and is_active = true
+        and is_lost = true
+      order by position asc
+      limit 1
+    `;
+
+    const stage = rows[0] ?? null;
+    if (!stage) {
+      return { ok: false, error: "No active Lost stage is configured for this workspace." };
+    }
+
+    return moveCompanyToPipelineStage(companyId, stage.id);
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to move the company right now.") };
   }
-
-  if (!data) {
-    return { ok: false, error: "No active Lost stage is configured for this workspace." };
-  }
-
-  return moveCompanyToPipelineStage(companyId, data.id);
 }

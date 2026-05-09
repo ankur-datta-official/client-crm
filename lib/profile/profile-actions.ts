@@ -4,11 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser, requireAuth, requireOrganization } from "@/lib/auth/session";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
+import { removePrivateUpload, savePrivateUpload, validateUploadMetadata, validateUploadSize } from "@/lib/storage/local";
 import {
   buildProfileAvatarPath,
   isStoredProfileAvatarPath,
-  PROFILE_AVATAR_BUCKET,
   resolveProfileAvatarUrl,
   sanitizeAvatarFileName,
 } from "./profile-utils";
@@ -93,64 +93,91 @@ function getProfileAvatarStorageErrorMessage(error: { message?: string; statusCo
 async function insertActivityLog(action: string, entityId: string, metadata: Record<string, unknown> = {}) {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
-  await supabase.from("activity_logs").insert({
-    organization_id: organization.id,
-    actor_user_id: user.id,
-    action,
-    entity_type: "profile",
-    entity_id: entityId,
-    metadata,
-  });
+  await prisma.$executeRaw`
+    insert into public.activity_logs (
+      organization_id,
+      actor_user_id,
+      action,
+      entity_type,
+      entity_id,
+      metadata
+    )
+    values (
+      ${organization.id}::uuid,
+      ${user.id}::uuid,
+      ${action},
+      'profile',
+      ${entityId}::uuid,
+      ${JSON.stringify(metadata)}::jsonb
+    )
+  `;
 }
 
 async function getRawCurrentProfile() {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, organization_id, email, full_name, avatar_url, job_title, department, phone, is_active, is_super_admin")
-    .eq("id", user.id)
-    .eq("organization_id", organization.id)
-    .single();
+  const rows = await prisma.$queryRaw<RawProfileRow[]>`
+    select
+      id::text as id,
+      organization_id::text as organization_id,
+      email,
+      full_name,
+      avatar_url,
+      job_title,
+      department,
+      phone,
+      is_active,
+      is_super_admin
+    from public.profiles
+    where id = ${user.id}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
 
-  if (error || !data) {
+  const profile = rows[0] ?? null;
+  if (!profile) {
     throw new Error("Profile not found.");
   }
 
-  return { organization, profile: data as RawProfileRow };
+  return { organization, profile };
 }
 
 async function getCurrentRoleInfo(userId: string, organizationId: string) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("roles(name, slug)")
-    .eq("user_id", userId)
-    .eq("organization_id", organizationId)
-    .limit(1)
-    .maybeSingle();
+  try {
+    const userRole = await prisma.userRole.findFirst({
+      where: {
+        user_id: userId,
+        organization_id: organizationId,
+      },
+      select: {
+        role: {
+          select: {
+            name: true,
+            slug: true,
+          },
+        },
+      },
+      orderBy: {
+        assigned_at: "asc",
+      },
+    });
 
-  if (error) {
+    return {
+      roleName: userRole?.role?.name ?? null,
+      roleSlug: userRole?.role?.slug ?? null,
+    };
+  } catch (error) {
     logServerError("profile.role.lookup", error, { userId, organizationId });
     return { roleName: null, roleSlug: null };
   }
-
-  const role = Array.isArray(data?.roles) ? data.roles[0] : data?.roles;
-  return {
-    roleName: role?.name ?? null,
-    roleSlug: role?.slug ?? null,
-  };
 }
 
 async function cleanupUploadedAvatar(filePath: string) {
-  const supabase = await createClient();
-  const { error } = await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([filePath]);
-
-  if (error) {
+  try {
+    await removePrivateUpload(filePath);
+  } catch (error) {
     logServerError("profile.avatar.cleanup_failed", error, { filePath });
   }
 }
@@ -166,7 +193,10 @@ export async function getCurrentProfileSettings(): Promise<CurrentProfileSetting
   const user = await requireAuth();
   const { organization, profile } = await getRawCurrentProfile();
   const roleInfo = await getCurrentRoleInfo(user.id, organization.id);
-  const avatarUrl = await resolveProfileAvatarUrl(profile.avatar_url);
+  const avatarUrl = await resolveProfileAvatarUrl(profile.avatar_url, 900, {
+    profileId: profile.id,
+    organizationId: organization.id,
+  });
 
   return {
     id: profile.id,
@@ -199,20 +229,19 @@ export async function updateCurrentProfile(input: {
     return getValidationFailure(parsed.error);
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      full_name: parsed.data.fullName,
-      phone: parsed.data.phone || null,
-      job_title: parsed.data.jobTitle || null,
-      department: parsed.data.department || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", profile.id)
-    .eq("organization_id", organization.id);
-
-  if (error) {
+  try {
+    await prisma.$executeRaw`
+      update public.profiles
+      set
+        full_name = ${parsed.data.fullName},
+        phone = ${parsed.data.phone || null},
+        job_title = ${parsed.data.jobTitle || null},
+        department = ${parsed.data.department || null},
+        updated_at = now()
+      where id = ${profile.id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
     logServerError("profile.update", error, { userId: profile.id, organizationId: organization.id });
     return { ok: false, error: getSafeErrorMessage(error, "Unable to update your profile right now.") };
   }
@@ -229,7 +258,6 @@ export async function updateCurrentProfile(input: {
 
 export async function uploadProfileAvatar(formData: FormData): Promise<ProfileActionState> {
   const { organization, profile } = await getRawCurrentProfile();
-  const supabase = await createClient();
   const maybeFile = formData.get("file");
   const file = maybeFile instanceof File ? maybeFile : null;
 
@@ -238,10 +266,19 @@ export async function uploadProfileAvatar(formData: FormData): Promise<ProfileAc
   }
 
   const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
-  const fileExtension = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() ?? "" : "";
+  const avatarValidation = validateUploadMetadata(
+    file,
+    ["jpg", "jpeg", "png", "webp"],
+    allowedMimeTypes,
+  );
 
-  if (!allowedMimeTypes.includes(file.type) || !["jpg", "jpeg", "png", "webp"].includes(fileExtension)) {
+  if (!avatarValidation.ok) {
     return { ok: false, error: "Please upload JPG, PNG, or WEBP image." };
+  }
+
+  const hardSizeValidation = validateUploadSize(file.size);
+  if (!hardSizeValidation.ok) {
+    return { ok: false, error: hardSizeValidation.message };
   }
 
   if (file.size > 2 * 1024 * 1024) {
@@ -251,12 +288,9 @@ export async function uploadProfileAvatar(formData: FormData): Promise<ProfileAc
   const avatarFileName = `avatar-${Date.now()}-${sanitizeAvatarFileName(file.name)}`;
   const filePath = buildProfileAvatarPath(organization.id, profile.id, avatarFileName);
 
-  const { error: uploadError } = await supabase.storage.from(PROFILE_AVATAR_BUCKET).upload(filePath, file, {
-    upsert: false,
-    contentType: file.type || undefined,
-  });
-
-  if (uploadError) {
+  try {
+    await savePrivateUpload(filePath, file);
+  } catch (uploadError) {
     logServerError("profile.avatar.upload", uploadError, {
       userId: profile.id,
       organizationId: organization.id,
@@ -264,19 +298,19 @@ export async function uploadProfileAvatar(formData: FormData): Promise<ProfileAc
       fileName: file.name,
       fileSize: file.size,
     });
-    return { ok: false, error: getProfileAvatarStorageErrorMessage(uploadError) };
+    return { ok: false, error: getProfileAvatarStorageErrorMessage(null) };
   }
 
-  const { error: updateError } = await supabase
-    .from("profiles")
-    .update({
-      avatar_url: filePath,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", profile.id)
-    .eq("organization_id", organization.id);
-
-  if (updateError) {
+  try {
+    await prisma.$executeRaw`
+      update public.profiles
+      set
+        avatar_url = ${filePath},
+        updated_at = now()
+      where id = ${profile.id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (updateError) {
     await cleanupUploadedAvatar(filePath);
     logServerError("profile.avatar.record", updateError, {
       userId: profile.id,
@@ -290,7 +324,10 @@ export async function uploadProfileAvatar(formData: FormData): Promise<ProfileAc
     await cleanupUploadedAvatar(profile.avatar_url);
   }
 
-  const avatarUrl = await resolveProfileAvatarUrl(filePath);
+  const avatarUrl = await resolveProfileAvatarUrl(filePath, 900, {
+    profileId: profile.id,
+    organizationId: organization.id,
+  });
   await insertActivityLog("profile.avatar_updated", profile.id, {
     file_name: avatarFileName,
   });
@@ -306,18 +343,17 @@ export async function uploadProfileAvatar(formData: FormData): Promise<ProfileAc
 
 export async function removeProfileAvatar(): Promise<ProfileActionState> {
   const { organization, profile } = await getRawCurrentProfile();
-  const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      avatar_url: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", profile.id)
-    .eq("organization_id", organization.id);
-
-  if (error) {
+  try {
+    await prisma.$executeRaw`
+      update public.profiles
+      set
+        avatar_url = null,
+        updated_at = now()
+      where id = ${profile.id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
     logServerError("profile.avatar.remove", error, { userId: profile.id, organizationId: organization.id });
     return { ok: false, error: getSafeErrorMessage(error, "Unable to remove your profile photo right now.") };
   }

@@ -2,26 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAuth, requireOrganization } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { PRODUCT_TOUR_VERSION } from "@/lib/product-tour/types";
 
 async function updateProductTourState(values: Record<string, string | null>) {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
+  await prisma.user.updateMany({
+    data: {
       ...values,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", user.id)
-    .eq("organization_id", organization.id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+      updated_at: new Date(),
+    },
+    where: {
+      id: user.id,
+      organization_id: organization.id,
+    },
+  });
 
   revalidatePath("/", "layout");
   revalidatePath("/dashboard");

@@ -12,8 +12,8 @@ import {
 } from "@/lib/auth/session";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
 import { createNotification } from "@/lib/notifications/notifications";
+import { prisma } from "@/lib/prisma";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
-import { createClient } from "@/lib/supabase/server";
 import { checkUserLimit } from "@/lib/subscription/subscription-queries";
 import { sendTeamInviteEmail } from "./invite-email";
 import { getPermissions, getRoleById, getRoles } from "./team-queries";
@@ -53,17 +53,27 @@ async function logActivity(
   entityId: string | null,
   metadata: Record<string, unknown> = {},
 ) {
-  const supabase = await createClient();
   const user = await getCurrentUser();
+  const metadataJson = JSON.stringify(metadata);
 
-  await supabase.from("activity_logs").insert({
-    organization_id: organizationId,
-    actor_user_id: user?.id ?? null,
-    action,
-    entity_type: entityType,
-    entity_id: entityId,
-    metadata,
-  });
+  await prisma.$executeRaw`
+    insert into public.activity_logs (
+      organization_id,
+      actor_user_id,
+      action,
+      entity_type,
+      entity_id,
+      metadata
+    )
+    values (
+      ${organizationId}::uuid,
+      ${user?.id ?? null}::uuid,
+      ${action},
+      ${entityType},
+      ${entityId}::uuid,
+      ${metadataJson}::jsonb
+    )
+  `;
 }
 
 function normalizeEmail(email: string) {
@@ -97,11 +107,12 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
   await requirePermission("team.invite");
   const organization = await requireOrganization();
   const user = await requireAuth();
-  const supabase = await createClient();
   const parsedInputResult = inviteTeamMemberSchema.safeParse(input);
+
   if (!parsedInputResult.success) {
     throw new Error(parsedInputResult.error.errors[0]?.message ?? "Please check the invite form and try again.");
   }
+
   const parsedInput = parsedInputResult.data;
   const email = normalizeEmail(parsedInput.email);
   const userLimit = await checkUserLimit(1);
@@ -116,25 +127,33 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
     throw new Error(userLimit.message ?? "Your current plan has no room for more team members.");
   }
 
-  await getRoleOrThrow(parsedInput.roleId, organization.id);
+  const role = await getRoleOrThrow(parsedInput.roleId, organization.id);
 
-  const { data: existingInvitation } = await supabase
-    .from("team_invitations")
-    .select("id")
-    .eq("organization_id", organization.id)
-    .eq("email", email)
-    .eq("status", "pending")
-    .maybeSingle();
+  const [existingInvitation, existingProfile] = await Promise.all([
+    prisma.teamInvitation.findFirst({
+      where: {
+        organization_id: organization.id,
+        email,
+        status: "pending",
+      },
+      select: {
+        id: true,
+      },
+    }),
+    prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+        organization_id: true,
+      },
+    }),
+  ]);
 
   if (existingInvitation) {
     throw new Error("A pending invitation already exists for this email.");
   }
-
-  const { data: existingProfile } = await supabase
-    .from("profiles")
-    .select("id, organization_id")
-    .eq("email", email)
-    .maybeSingle();
 
   if (existingProfile?.organization_id === organization.id) {
     throw new Error("This user is already a member of your organization.");
@@ -144,24 +163,31 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
     throw new Error("This user already belongs to another organization.");
   }
 
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const token = crypto.randomUUID();
-  const { data, error } = await supabase
-    .from("team_invitations")
-    .insert({
-      organization_id: organization.id,
-      email,
-      role_id: parsedInput.roleId,
-      invited_by: user.id,
-      token,
-      full_name: parsedInput.fullName || null,
-      job_title: parsedInput.jobTitle || null,
-      department: parsedInput.department || null,
-      phone: parsedInput.phone || null,
-    })
-    .select("id, token")
-    .single();
+  let invitationRecord: { id: string; token: string };
 
-  if (error) {
+  try {
+    invitationRecord = await prisma.teamInvitation.create({
+      data: {
+        organization_id: organization.id,
+        email,
+        role_id: parsedInput.roleId,
+        invited_by: user.id,
+        token,
+        full_name: parsedInput.fullName || null,
+        job_title: parsedInput.jobTitle || null,
+        department: parsedInput.department || null,
+        phone: parsedInput.phone || null,
+        expires_at: expiresAt,
+        updated_at: new Date(),
+      },
+      select: {
+        id: true,
+        token: true,
+      },
+    });
+  } catch (error) {
     logServerError("team.invite", error, { organizationId: organization.id, email });
     throw new Error(getSafeErrorMessage(error, "Unable to create the invitation right now."));
   }
@@ -171,8 +197,11 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
   try {
     emailDelivery = await sendTeamInviteEmail({
       email,
-      token: data.token,
+      token: invitationRecord.token,
       fullName: parsedInput.fullName || null,
+      organizationName: organization.name,
+      roleName: role.name,
+      expiresAt,
     });
   } catch (deliveryError) {
     logServerError("team.invite.email", deliveryError, { organizationId: organization.id, email });
@@ -182,7 +211,7 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
     };
   }
 
-  await logActivity(organization.id, "team.member.invited", "team_invitation", data.id, {
+  await logActivity(organization.id, "team.member.invited", "team_invitation", invitationRecord.id, {
     email,
     role_id: parsedInput.roleId,
     email_delivery_method: emailDelivery.ok ? emailDelivery.method : "manual_fallback",
@@ -200,7 +229,7 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
 
   revalidatePath("/team");
   return {
-    ...data,
+    ...invitationRecord,
     emailDelivery,
   };
 }
@@ -208,16 +237,20 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
 export async function cancelTeamInvitation(invitationId: string) {
   await requirePermission("team.invite");
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
-  const { data: invitation, error: fetchError } = await supabase
-    .from("team_invitations")
-    .select("id, email, status")
-    .eq("id", invitationId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const invitation = await prisma.teamInvitation.findFirst({
+    where: {
+      id: invitationId,
+      organization_id: organization.id,
+    },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+    },
+  });
 
-  if (fetchError || !invitation) {
+  if (!invitation) {
     throw new Error("Invitation not found.");
   }
 
@@ -225,15 +258,15 @@ export async function cancelTeamInvitation(invitationId: string) {
     throw new Error("Only pending invitations can be cancelled.");
   }
 
-  const { error } = await supabase
-    .from("team_invitations")
-    .update({ status: "cancelled" })
-    .eq("id", invitationId)
-    .eq("organization_id", organization.id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  await prisma.teamInvitation.update({
+    where: {
+      id: invitationId,
+    },
+    data: {
+      status: "cancelled",
+      updated_at: new Date(),
+    },
+  });
 
   await logActivity(organization.id, "team.invitation.cancelled", "team_invitation", invitationId, {
     email: invitation.email,
@@ -246,16 +279,26 @@ export async function cancelTeamInvitation(invitationId: string) {
 export async function resendTeamInvitation(invitationId: string) {
   await requirePermission("team.invite");
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
-  const { data: invitation, error: fetchError } = await supabase
-    .from("team_invitations")
-    .select("id, email, status")
-    .eq("id", invitationId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const invitation = await prisma.teamInvitation.findFirst({
+    where: {
+      id: invitationId,
+      organization_id: organization.id,
+    },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+      full_name: true,
+      role: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
 
-  if (fetchError || !invitation) {
+  if (!invitation) {
     throw new Error("Invitation not found.");
   }
 
@@ -264,34 +307,29 @@ export async function resendTeamInvitation(invitationId: string) {
   }
 
   const token = crypto.randomUUID();
-  const { error } = await supabase
-    .from("team_invitations")
-    .update({
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  await prisma.teamInvitation.update({
+    where: {
+      id: invitationId,
+    },
+    data: {
       token,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", invitationId)
-    .eq("organization_id", organization.id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const { data: invitationDetails } = await supabase
-    .from("team_invitations")
-    .select("email, full_name")
-    .eq("id", invitationId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+      expires_at: expiresAt,
+      updated_at: new Date(),
+    },
+  });
 
   let emailDelivery: Awaited<ReturnType<typeof sendTeamInviteEmail>>;
 
   try {
     emailDelivery = await sendTeamInviteEmail({
-      email: invitationDetails?.email ?? invitation.email,
+      email: invitation.email,
       token,
-      fullName: invitationDetails?.full_name ?? null,
+      fullName: invitation.full_name ?? null,
+      organizationName: organization.name,
+      roleName: invitation.role?.name ?? null,
+      expiresAt,
     });
   } catch (deliveryError) {
     logServerError("team.invite.resend_email", deliveryError, { organizationId: organization.id, email: invitation.email });
@@ -312,14 +350,25 @@ export async function resendTeamInvitation(invitationId: string) {
 
 export async function acceptTeamInvitation(token: string) {
   const user = await requireAuth();
-  const supabase = await createClient();
   const profile = await getCurrentProfile();
-
-  const { data: invitationRecord } = await supabase
-    .from("team_invitations")
-    .select("id, email, organization_id, status, expires_at")
-    .eq("token", token)
-    .maybeSingle();
+  const invitationRecord = await prisma.teamInvitation.findUnique({
+    where: {
+      token,
+    },
+    select: {
+      id: true,
+      email: true,
+      organization_id: true,
+      role_id: true,
+      invited_by: true,
+      status: true,
+      expires_at: true,
+      full_name: true,
+      job_title: true,
+      department: true,
+      phone: true,
+    },
+  });
 
   if (!invitationRecord || invitationRecord.status !== "pending" || new Date(invitationRecord.expires_at).getTime() <= Date.now()) {
     throw new Error("This invitation is invalid or has expired.");
@@ -333,45 +382,101 @@ export async function acceptTeamInvitation(token: string) {
     throw new Error("This account already belongs to an active organization.");
   }
 
-  const { data, error } = await supabase.rpc("accept_team_invitation", {
-    invite_token: token,
+  const result = await prisma.$transaction(async (tx) => {
+    const currentUserProfile = await tx.user.findUnique({
+      where: {
+        id: user.id,
+      },
+      select: {
+        id: true,
+        organization_id: true,
+        name: true,
+        job_title: true,
+        department: true,
+        phone: true,
+      },
+    });
+
+    if (!currentUserProfile) {
+      throw new Error("Your profile could not be found.");
+    }
+
+    if (
+      currentUserProfile.organization_id
+      && currentUserProfile.organization_id !== invitationRecord.organization_id
+    ) {
+      throw new Error("This account already belongs to another organization.");
+    }
+
+    await tx.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        organization_id: invitationRecord.organization_id,
+        is_active: true,
+        name: currentUserProfile.name ?? invitationRecord.full_name ?? undefined,
+        job_title: currentUserProfile.job_title ?? invitationRecord.job_title ?? undefined,
+        department: currentUserProfile.department ?? invitationRecord.department ?? undefined,
+        phone: currentUserProfile.phone ?? invitationRecord.phone ?? undefined,
+      },
+    });
+
+    await tx.userRole.deleteMany({
+      where: {
+        organization_id: invitationRecord.organization_id,
+        user_id: user.id,
+      },
+    });
+
+    await tx.userRole.create({
+      data: {
+        organization_id: invitationRecord.organization_id,
+        user_id: user.id,
+        role_id: invitationRecord.role_id,
+        assigned_by: invitationRecord.invited_by,
+      },
+    });
+
+    await tx.teamInvitation.update({
+      where: {
+        id: invitationRecord.id,
+      },
+      data: {
+        status: "accepted",
+        accepted_at: new Date(),
+        updated_at: new Date(),
+      },
+    });
+
+    return {
+      organization_id: invitationRecord.organization_id,
+      invitation_id: invitationRecord.id,
+      role_id: invitationRecord.role_id,
+      invited_by: invitationRecord.invited_by,
+      invited_email: invitationRecord.email,
+    };
   });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const result = Array.isArray(data) ? data[0] : data;
-  if (!result?.organization_id) {
-    throw new Error("This invitation is invalid or has expired.");
-  }
 
   await logActivity(result.organization_id as string, "team.invitation.accepted", "team_invitation", result.invitation_id as string, {
     accepted_user_id: user.id,
     role_id: result.role_id,
   });
 
-  const { data: invitation } = await supabase
-    .from("team_invitations")
-    .select("id, email, invited_by")
-    .eq("id", result.invitation_id as string)
-    .eq("organization_id", result.organization_id as string)
-    .maybeSingle();
-
-  if (invitation?.invited_by && invitation.invited_by !== user.id) {
+  if (result.invited_by && result.invited_by !== user.id) {
     await applyScoringEvent({
       organizationId: result.organization_id as string,
-      userId: invitation.invited_by,
+      userId: result.invited_by,
       actionKey: "team_invite_accepted",
-      sourceRecordId: invitation.id,
+      sourceRecordId: result.invitation_id,
       sourceRecordType: "team_invitation",
       metadata: {
         accepted_user_id: user.id,
-        invited_email: invitation.email,
+        invited_email: result.invited_email,
       },
       actorUserId: user.id,
       addToLeadScore: false,
-      idempotencyKey: buildScoreIdempotencyKey(["team_invite_accepted", invitation.id]),
+      idempotencyKey: buildScoreIdempotencyKey(["team_invite_accepted", result.invitation_id]),
     });
   }
 
@@ -384,40 +489,45 @@ export async function updateTeamMemberRole(userId: string, roleId: string) {
   await requirePermission("team.update_role");
   const organization = await requireOrganization();
   const user = await requireAuth();
-  const supabase = await createClient();
   const role = await getRoleOrThrow(roleId, organization.id);
 
   if (userId === user.id) {
     throw new Error("You cannot change your own role.");
   }
 
-  const { data: targetProfile, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, email, organization_id, is_active")
-    .eq("id", userId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const targetProfile = await prisma.user.findFirst({
+    where: {
+      id: userId,
+      organization_id: organization.id,
+    },
+    select: {
+      id: true,
+      email: true,
+      organization_id: true,
+      is_active: true,
+    },
+  });
 
-  if (profileError || !targetProfile) {
+  if (!targetProfile) {
     throw new Error("Team member not found.");
   }
 
-  await supabase
-    .from("user_roles")
-    .delete()
-    .eq("organization_id", organization.id)
-    .eq("user_id", userId);
-
-  const { error } = await supabase.from("user_roles").insert({
-    organization_id: organization.id,
-    user_id: userId,
-    role_id: roleId,
-    assigned_by: user.id,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  await prisma.$transaction([
+    prisma.userRole.deleteMany({
+      where: {
+        organization_id: organization.id,
+        user_id: userId,
+      },
+    }),
+    prisma.userRole.create({
+      data: {
+        organization_id: organization.id,
+        user_id: userId,
+        role_id: roleId,
+        assigned_by: user.id,
+      },
+    }),
+  ]);
 
   await logActivity(organization.id, "team.member.role_changed", "profile", userId, {
     email: targetProfile.email,
@@ -433,49 +543,53 @@ export async function updateTeamMemberManager(userId: string, managerUserId: str
   await ensureRoleManagementAccess();
   const organization = await requireOrganization();
   const user = await requireAuth();
-  const supabase = await createClient();
 
   if (userId === user.id && managerUserId) {
     throw new Error("You cannot report to yourself.");
   }
 
-  const { data: targetProfile, error: targetError } = await supabase
-    .from("profiles")
-    .select("id, email, organization_id")
-    .eq("id", userId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const targetProfile = await prisma.user.findFirst({
+    where: {
+      id: userId,
+      organization_id: organization.id,
+    },
+    select: {
+      id: true,
+      email: true,
+      organization_id: true,
+    },
+  });
 
-  if (targetError || !targetProfile) {
+  if (!targetProfile) {
     throw new Error("Team member not found.");
   }
 
   if (managerUserId) {
-    const { data: managerProfile, error: managerError } = await supabase
-      .from("profiles")
-      .select("id, email")
-      .eq("id", managerUserId)
-      .eq("organization_id", organization.id)
-      .eq("is_active", true)
-      .maybeSingle();
+    const managerProfile = await prisma.user.findFirst({
+      where: {
+        id: managerUserId,
+        organization_id: organization.id,
+        is_active: true,
+      },
+      select: {
+        id: true,
+        email: true,
+      },
+    });
 
-    if (managerError || !managerProfile) {
+    if (!managerProfile) {
       throw new Error("Selected senior team member was not found.");
     }
   }
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
+  await prisma.user.update({
+    where: {
+      id: userId,
+    },
+    data: {
       manager_user_id: managerUserId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userId)
-    .eq("organization_id", organization.id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+    },
+  });
 
   await logActivity(organization.id, "team.member.manager_changed", "profile", userId, {
     email: targetProfile.email,
@@ -493,20 +607,25 @@ export async function deactivateTeamMember(userId: string) {
   await requirePermission("team.deactivate");
   const organization = await requireOrganization();
   const user = await requireAuth();
-  const supabase = await createClient();
 
   if (userId === user.id) {
     throw new Error("You cannot deactivate your own account.");
   }
 
-  const { data: targetProfile, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, email, organization_id, is_active")
-    .eq("id", userId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const targetProfile = await prisma.user.findFirst({
+    where: {
+      id: userId,
+      organization_id: organization.id,
+    },
+    select: {
+      id: true,
+      email: true,
+      organization_id: true,
+      is_active: true,
+    },
+  });
 
-  if (profileError || !targetProfile) {
+  if (!targetProfile) {
     throw new Error("Team member not found.");
   }
 
@@ -514,15 +633,14 @@ export async function deactivateTeamMember(userId: string) {
     throw new Error("This team member is already inactive.");
   }
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({ is_active: false })
-    .eq("id", userId)
-    .eq("organization_id", organization.id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  await prisma.user.update({
+    where: {
+      id: userId,
+    },
+    data: {
+      is_active: false,
+    },
+  });
 
   await logActivity(organization.id, "team.member.deactivated", "profile", userId, {
     email: targetProfile.email,
@@ -536,16 +654,21 @@ export async function reactivateTeamMember(userId: string, roleId?: string) {
   await requirePermission("team.deactivate");
   const organization = await requireOrganization();
   const user = await requireAuth();
-  const supabase = await createClient();
 
-  const { data: targetProfile, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, email, organization_id, is_active")
-    .eq("id", userId)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const targetProfile = await prisma.user.findFirst({
+    where: {
+      id: userId,
+      organization_id: organization.id,
+    },
+    select: {
+      id: true,
+      email: true,
+      organization_id: true,
+      is_active: true,
+    },
+  });
 
-  if (profileError || !targetProfile) {
+  if (!targetProfile) {
     throw new Error("Team member not found.");
   }
 
@@ -554,39 +677,41 @@ export async function reactivateTeamMember(userId: string, roleId?: string) {
   }
 
   const selectedRoleId = roleId ?? (await getDefaultRoleId());
+
   if (!selectedRoleId) {
     throw new Error("No role is available for reactivation.");
   }
 
   const role = await getRoleOrThrow(selectedRoleId, organization.id);
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({ is_active: true })
-    .eq("id", userId)
-    .eq("organization_id", organization.id);
+  await prisma.user.update({
+    where: {
+      id: userId,
+    },
+    data: {
+      is_active: true,
+    },
+  });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const { data: currentRoles } = await supabase
-    .from("user_roles")
-    .select("id")
-    .eq("organization_id", organization.id)
-    .eq("user_id", userId);
-
-  if ((currentRoles ?? []).length === 0) {
-    const { error: roleError } = await supabase.from("user_roles").insert({
+  const currentRoles = await prisma.userRole.findMany({
+    where: {
       organization_id: organization.id,
       user_id: userId,
-      role_id: selectedRoleId,
-      assigned_by: user.id,
-    });
+    },
+    select: {
+      id: true,
+    },
+  });
 
-    if (roleError) {
-      throw new Error(roleError.message);
-    }
+  if (currentRoles.length === 0) {
+    await prisma.userRole.create({
+      data: {
+        organization_id: organization.id,
+        user_id: userId,
+        role_id: selectedRoleId,
+        assigned_by: user.id,
+      },
+    });
   }
 
   await logActivity(organization.id, "team.member.reactivated", "profile", userId, {
@@ -602,29 +727,29 @@ export async function reactivateTeamMember(userId: string, roleId?: string) {
 export async function createRole(input: RoleInput) {
   await ensureRoleManagementAccess();
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const parsedInputResult = roleInputSchema.safeParse(input);
+
   if (!parsedInputResult.success) {
     throw new Error(parsedInputResult.error.errors[0]?.message ?? "Please check the role form and try again.");
   }
+
   const parsedInput = parsedInputResult.data;
   const slug = parsedInput.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-  const { data, error } = await supabase
-    .from("roles")
-    .insert({
+  const data = await prisma.role.create({
+    data: {
       organization_id: organization.id,
       name: parsedInput.name,
       slug: `${slug}-${Date.now()}`,
       description: parsedInput.description || null,
       is_system: false,
-    })
-    .select("id, name")
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
+      updated_at: new Date(),
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
 
   await logActivity(organization.id, "team.role.created", "role", data.id, {
     name: data.name,
@@ -637,30 +762,29 @@ export async function createRole(input: RoleInput) {
 export async function updateRole(roleId: string, input: RoleInput) {
   await ensureRoleManagementAccess();
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const role = await getRoleOrThrow(roleId, organization.id);
   const parsedInputResult = roleInputSchema.safeParse(input);
+
   if (!parsedInputResult.success) {
     throw new Error(parsedInputResult.error.errors[0]?.message ?? "Please check the role form and try again.");
   }
+
   const parsedInput = parsedInputResult.data;
 
   if (role.is_system) {
     throw new Error("System role names cannot be edited.");
   }
 
-  const { error } = await supabase
-    .from("roles")
-    .update({
+  await prisma.role.update({
+    where: {
+      id: roleId,
+    },
+    data: {
       name: parsedInput.name,
       description: parsedInput.description || null,
-    })
-    .eq("id", roleId)
-    .eq("organization_id", organization.id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+      updated_at: new Date(),
+    },
+  });
 
   await logActivity(organization.id, "team.role.updated", "role", roleId, {
     name: parsedInput.name,
@@ -673,36 +797,28 @@ export async function updateRole(roleId: string, input: RoleInput) {
 export async function archiveRole(roleId: string) {
   await ensureRoleManagementAccess();
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const role = await getRoleOrThrow(roleId, organization.id);
 
   if (role.is_system) {
     throw new Error("System roles cannot be archived.");
   }
 
-  const { count, error: countError } = await supabase
-    .from("user_roles")
-    .select("*", { count: "exact", head: true })
-    .eq("organization_id", organization.id)
-    .eq("role_id", roleId);
+  const count = await prisma.userRole.count({
+    where: {
+      organization_id: organization.id,
+      role_id: roleId,
+    },
+  });
 
-  if (countError) {
-    throw new Error(countError.message);
-  }
-
-  if ((count ?? 0) > 0) {
+  if (count > 0) {
     throw new Error("Reassign team members before archiving this role.");
   }
 
-  const { error } = await supabase
-    .from("roles")
-    .delete()
-    .eq("id", roleId)
-    .eq("organization_id", organization.id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  await prisma.role.delete({
+    where: {
+      id: roleId,
+    },
+  });
 
   await logActivity(organization.id, "team.role.archived", "role", roleId, {
     name: role.name,
@@ -715,7 +831,6 @@ export async function archiveRole(roleId: string) {
 export async function updateRolePermissions(roleId: string, permissionIds: string[]) {
   await ensureRoleManagementAccess();
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const role = await getRoleOrThrow(roleId, organization.id);
   const permissions = await getPermissions();
 
@@ -724,22 +839,20 @@ export async function updateRolePermissions(roleId: string, permissionIds: strin
   const finalPermissionIds =
     role.slug === "organization-admin" ? permissions.map((permission) => permission.id) : validPermissionIds;
 
-  const { error: deleteError } = await supabase.from("role_permissions").delete().eq("role_id", roleId);
-  if (deleteError) {
-    throw new Error(deleteError.message);
-  }
+  await prisma.rolePermission.deleteMany({
+    where: {
+      role_id: roleId,
+    },
+  });
 
   if (finalPermissionIds.length > 0) {
-    const { error: insertError } = await supabase.from("role_permissions").insert(
-      finalPermissionIds.map((permissionId) => ({
+    await prisma.rolePermission.createMany({
+      data: finalPermissionIds.map((permissionId) => ({
         role_id: roleId,
         permission_id: permissionId,
       })),
-    );
-
-    if (insertError) {
-      throw new Error(insertError.message);
-    }
+      skipDuplicates: true,
+    });
   }
 
   await logActivity(organization.id, "team.role.permissions_updated", "role", roleId, {

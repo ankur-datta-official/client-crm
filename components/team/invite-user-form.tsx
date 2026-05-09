@@ -30,7 +30,7 @@ type InviteUserFormProps = {
 };
 
 type InviteDeliveryState =
-  | { ok: true; method: "invite" | "magic_link" }
+  | { ok: true; method: "smtp_invite" }
   | { ok: false; reason: string };
 
 const initialState = {
@@ -119,9 +119,7 @@ export function InviteUserForm({ roles, disabled = false }: InviteUserFormProps)
             </div>
             {delivery?.ok ? (
               <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
-                {delivery.method === "invite"
-                  ? "New users will be guided through account setup from the email before entering your CRM."
-                  : "Existing users will receive a secure sign-in link and can accept the invitation directly from their email."}
+                Team members will receive a secure invitation link by email and can sign in before accepting access to the workspace.
               </div>
             ) : null}
             <div className="space-y-2">

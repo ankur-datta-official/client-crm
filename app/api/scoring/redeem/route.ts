@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth/session";
 import { logServerError } from "@/lib/errors";
 import { redeemRewardAction } from "@/lib/scoring/actions";
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth();
     const body = await request.json();
     const rewardId = typeof body?.rewardId === "string" ? body.rewardId : "";
 

@@ -1,8 +1,24 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import type { User } from "@supabase/supabase-js";
+import { getServerSession } from "next-auth";
+import { auth } from "@/lib/auth";
+import { authOptions } from "@/lib/auth/options";
+import { getAuthProvider } from "@/lib/auth/provider";
+import {
+  type AppPermissionKey,
+  hasPermission as hasPermissionKey,
+} from "@/lib/permissions";
+import { prisma } from "@/lib/prisma";
 import { resolveProfileAvatarUrl } from "@/lib/profile/profile-utils";
-import { createClient } from "@/lib/supabase/server";
+import { resolveActiveWorkspaceIdForUser } from "@/lib/workspace/service";
+
+export type AuthUser = {
+  id: string;
+  email: string | null;
+  name?: string | null;
+  image?: string | null;
+};
 
 export type Profile = {
   id: string;
@@ -26,32 +42,179 @@ export type Organization = {
   owner_user_id: string;
 };
 
-type UserRoleRow = {
-  role_id: string;
-  roles: {
-    id: string;
-    name: string;
-    slug: string;
-    is_system: boolean;
-  } | null;
-};
+async function getCurrentAuthSession() {
+  if (getAuthProvider() === "nextauth") {
+    const session = await getServerSession(authOptions);
 
-type RolePermissionRow = {
-  permissions: {
-    key: string;
-  } | null;
-};
+    if (!session?.user?.id) {
+      return null;
+    }
 
-export const getCurrentUser = cache(async (): Promise<User | null> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    return {
+      user: {
+        id: session.user.id,
+        email: session.user.email ?? null,
+        name: session.user.name ?? null,
+        image: session.user.image ?? null,
+      },
+    };
+  }
 
-  return user;
+  return auth.api.getSession({
+    headers: await headers(),
+  });
+}
+
+async function getPrismaProfileByUserId(userId: string): Promise<Profile | null> {
+  await resolveActiveWorkspaceIdForUser(userId);
+
+  const data = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      id: true,
+      organization_id: true,
+      email: true,
+      name: true,
+      image: true,
+      job_title: true,
+      department: true,
+      phone: true,
+      manager_user_id: true,
+      is_active: true,
+      is_super_admin: true,
+    },
+  });
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    id: data.id,
+    organization_id: data.organization_id,
+    email: data.email,
+    full_name: data.name,
+    avatar_url: await resolveProfileAvatarUrl(data.image, 900, {
+      profileId: data.id,
+      organizationId: data.organization_id,
+    }),
+    job_title: data.job_title,
+    department: data.department,
+    phone: data.phone,
+    manager_user_id: data.manager_user_id,
+    is_active: data.is_active,
+    is_super_admin: data.is_super_admin,
+  };
+}
+
+async function getPrismaOrganizationById(organizationId: string): Promise<Organization | null> {
+  return prisma.organization.findUnique({
+    where: {
+      id: organizationId,
+    },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      company_size: true,
+      owner_user_id: true,
+    },
+  });
+}
+
+async function getPrismaUserPermissionsByUserId(userId: string): Promise<string[]> {
+  const profile = await getPrismaProfileByUserId(userId);
+
+  if (!profile?.organization_id || !profile.is_active) {
+    return [];
+  }
+
+  if (profile.is_super_admin) {
+    return ["*"];
+  }
+
+  try {
+    const userRoles = await prisma.userRole.findMany({
+      where: {
+        user_id: userId,
+        organization_id: profile.organization_id,
+      },
+      select: {
+        role_id: true,
+        role: {
+          select: {
+            name: true,
+            slug: true,
+          },
+        },
+      },
+    });
+
+    const roleIds = userRoles
+      .filter((record) => record.role)
+      .map((record) => record.role_id)
+      .filter(Boolean);
+
+    const hasOrganizationAdminRole = userRoles.some(
+      (record) =>
+        record.role?.slug === "organization-admin"
+        || record.role?.name?.toLowerCase().includes("admin"),
+    );
+
+    if (hasOrganizationAdminRole) {
+      return ["*"];
+    }
+
+    if (roleIds.length === 0) {
+      return [];
+    }
+
+    const rolePermissions = await prisma.rolePermission.findMany({
+      where: {
+        role_id: {
+          in: roleIds,
+        },
+      },
+      select: {
+        permission: {
+          select: {
+            key: true,
+          },
+        },
+      },
+    });
+
+    return Array.from(
+      new Set(
+        rolePermissions
+          .map((record) => record.permission.key)
+          .filter((key): key is string => Boolean(key)),
+      ),
+    );
+  } catch (error) {
+    console.error("Permission check error:", error);
+    return [];
+  }
+}
+
+export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
+  const session = await getCurrentAuthSession();
+
+  if (!session?.user?.id) {
+    return null;
+  }
+
+  return {
+    id: session.user.id,
+    email: session.user.email ?? null,
+    name: session.user.name ?? null,
+    image: session.user.image ?? null,
+  };
 });
 
-export async function requireAuth(): Promise<User> {
+export async function requireAuth(): Promise<AuthUser> {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -63,30 +226,7 @@ export async function requireAuth(): Promise<User> {
 
 export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const user = await getCurrentUser();
-
-  if (!user) {
-    return null;
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, organization_id, email, full_name, avatar_url, job_title, department, phone, manager_user_id, is_active, is_super_admin")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!data) {
-    return null;
-  }
-
-  return {
-    ...data,
-    avatar_url: await resolveProfileAvatarUrl(data.avatar_url),
-  };
+  return user ? getPrismaProfileByUserId(user.id) : null;
 });
 
 export const getCurrentOrganization = cache(async (): Promise<Organization | null> => {
@@ -96,18 +236,7 @@ export const getCurrentOrganization = cache(async (): Promise<Organization | nul
     return null;
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("organizations")
-    .select("id, name, slug, company_size, owner_user_id")
-    .eq("id", profile.organization_id)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
+  return getPrismaOrganizationById(profile.organization_id);
 });
 
 export const getCurrentAppContext = cache(async () => {
@@ -137,78 +266,17 @@ export async function requireOrganization(): Promise<Organization> {
   return organization;
 }
 
-export async function getUserPermissions(): Promise<string[]> {
+export const getUserPermissions = cache(async (): Promise<string[]> => {
   const user = await getCurrentUser();
-  const profile = await getCurrentProfile();
+  return user ? getPrismaUserPermissionsByUserId(user.id) : [];
+});
 
-  if (!user || !profile?.organization_id || !profile.is_active) {
-    return [];
-  }
-
-  if (profile.is_super_admin) {
-    return ["*"];
-  }
-
-  try {
-    const supabase = await createClient();
-
-    const { data: userRoles, error: rolesError } = await supabase
-      .from("user_roles")
-      .select("role_id, roles(id, name, slug, is_system)")
-      .eq("user_id", user.id)
-      .eq("organization_id", profile.organization_id);
-
-    if (rolesError) {
-      console.error("Error fetching user roles:", rolesError);
-      return [];
-    }
-
-    const rolesData = userRoles as unknown as UserRoleRow[];
-    const permissions = new Set<string>();
-    const roleList = rolesData?.filter((record) => record.roles) ?? [];
-    const isAdmin = roleList.some(
-      (record) => record.roles?.slug === "organization-admin" || record.roles?.name?.toLowerCase().includes("admin"),
-    );
-
-    if (isAdmin) {
-      return ["*"];
-    }
-
-    const roleIds = roleList.map((record) => record.role_id).filter(Boolean);
-    if (roleIds.length === 0) {
-      return [];
-    }
-
-    const { data: rolePerms, error: rolePermsError } = await supabase
-      .from("role_permissions")
-      .select("permissions(key)")
-      .in("role_id", roleIds);
-
-    if (rolePermsError) {
-      console.error("Error fetching role permissions:", rolePermsError);
-      return [];
-    }
-
-    const permissionRows = rolePerms as unknown as RolePermissionRow[];
-    for (const row of permissionRows ?? []) {
-      if (row.permissions?.key) {
-        permissions.add(row.permissions.key);
-      }
-    }
-
-    return [...permissions];
-  } catch (error) {
-    console.error("Permission check error:", error);
-    return [];
-  }
-}
-
-export async function hasPermission(permission: string): Promise<boolean> {
+export async function hasPermission(permission: AppPermissionKey | string): Promise<boolean> {
   const permissions = await getUserPermissions();
-  return permissions.includes("*") || permissions.includes(permission);
+  return hasPermissionKey(permissions, permission as AppPermissionKey);
 }
 
-export async function requirePermission(permission: string): Promise<void> {
+export async function requirePermission(permission: AppPermissionKey | string): Promise<void> {
   const allowed = await hasPermission(permission);
 
   if (!allowed) {
@@ -217,10 +285,14 @@ export async function requirePermission(permission: string): Promise<void> {
 }
 
 export async function requireAnyPermission(permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    if (await hasPermission(permission)) {
-      return;
-    }
+  const availablePermissions = await getUserPermissions();
+
+  if (availablePermissions.includes("*")) {
+    return;
+  }
+
+  if (permissions.some((permission) => availablePermissions.includes(permission))) {
+    return;
   }
 
   redirect("/unauthorized");

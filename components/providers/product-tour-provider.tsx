@@ -27,6 +27,7 @@ type ProductTourContextValue = {
 const ProductTourContext = createContext<ProductTourContextValue | null>(null);
 
 const SESSION_STORAGE_KEY = "crm-product-tour-session";
+const AUTO_SEEN_STORAGE_PREFIX = "crm-product-tour-auto-seen";
 
 const accentStyles: Record<TourStep["accent"], string> = {
   teal: "from-teal-500 to-emerald-500",
@@ -49,6 +50,10 @@ function readStoredSession(version: string) {
     if (parsed.version !== version || parsed.index < 0 || parsed.index >= PRODUCT_TOUR_STEPS.length) {
       return null;
     }
+    if (parsed.mode === "auto") {
+      writeStoredSession(null);
+      return null;
+    }
     return parsed;
   } catch {
     return null;
@@ -68,6 +73,26 @@ function writeStoredSession(session: ProductTourSession | null) {
   window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
+function getAutoSeenStorageKey(version: string) {
+  return `${AUTO_SEEN_STORAGE_PREFIX}:${version}`;
+}
+
+function hasSeenAutoTour(version: string) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(getAutoSeenStorageKey(version)) === "true";
+}
+
+function markAutoTourSeen(version: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(getAutoSeenStorageKey(version), "true");
+}
+
 export function ProductTourProvider({
   children,
   initialState,
@@ -82,6 +107,7 @@ export function ProductTourProvider({
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [hasStarted, setHasStarted] = useState(false);
+  const [autoStartSuppressed, setAutoStartSuppressed] = useState(false);
   const isHydrated = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -95,14 +121,20 @@ export function ProductTourProvider({
   }, []);
 
   const beginTour = useCallback((nextMode: "auto" | "manual" = "manual", index = 0) => {
+    setAutoStartSuppressed(false);
     setMode(nextMode);
     setCurrentIndex(index);
     setOpen(true);
-    writeStoredSession({
-      version: initialState.version,
-      index,
-      mode: nextMode,
-    });
+    if (nextMode === "manual") {
+      writeStoredSession({
+        version: initialState.version,
+        index,
+        mode: nextMode,
+      });
+    } else {
+      writeStoredSession(null);
+      markAutoTourSeen(initialState.version);
+    }
 
     if (!hasStarted) {
       setHasStarted(true);
@@ -117,27 +149,39 @@ export function ProductTourProvider({
     setHasStarted(false);
   }, [clearSession]);
 
+  const handleDismiss = useCallback(() => {
+    setAutoStartSuppressed(true);
+    markAutoTourSeen(initialState.version);
+    closeTour();
+  }, [closeTour, initialState.version]);
+
   const handleSkip = useCallback(() => {
+    setAutoStartSuppressed(true);
+    markAutoTourSeen(initialState.version);
     closeTour();
     void skipProductTour().catch(() => undefined);
-  }, [closeTour]);
+  }, [closeTour, initialState.version]);
 
   const handleComplete = useCallback(() => {
+    setAutoStartSuppressed(true);
+    markAutoTourSeen(initialState.version);
     closeTour();
     void completeProductTour()
       .then(() => {
         toast.success("Tutorial completed. You can restart it anytime from your profile menu or Settings.");
       })
       .catch(() => undefined);
-  }, [closeTour]);
+  }, [closeTour, initialState.version]);
 
   const goToIndex = useCallback((nextIndex: number) => {
     setCurrentIndex(nextIndex);
-    writeStoredSession({
-      version: initialState.version,
-      index: nextIndex,
-      mode,
-    });
+    if (mode === "manual") {
+      writeStoredSession({
+        version: initialState.version,
+        index: nextIndex,
+        mode,
+      });
+    }
   }, [initialState.version, mode]);
 
   const handleNext = useCallback(() => {
@@ -156,7 +200,7 @@ export function ProductTourProvider({
   }, [currentIndex, goToIndex]);
 
   useEffect(() => {
-    if (!isHydrated || open || hasStarted) {
+    if (!isHydrated || open || hasStarted || autoStartSuppressed) {
       return;
     }
 
@@ -169,10 +213,13 @@ export function ProductTourProvider({
     if (!initialState.shouldAutoStart) {
       return;
     }
+    if (hasSeenAutoTour(initialState.version)) {
+      return;
+    }
 
     const frameId = window.requestAnimationFrame(() => beginTour("auto", 0));
     return () => window.cancelAnimationFrame(frameId);
-  }, [beginTour, hasStarted, initialState.shouldAutoStart, initialState.version, isHydrated, open]);
+  }, [autoStartSuppressed, beginTour, hasStarted, initialState.shouldAutoStart, initialState.version, isHydrated, open]);
 
   useEffect(() => {
     if (!open || !step) {
@@ -313,9 +360,9 @@ export function ProductTourProvider({
                 </div>
                 <button
                   type="button"
-                  onClick={handleSkip}
+                  onClick={handleDismiss}
                   className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-900 dark:hover:text-slate-200"
-                  aria-label="Skip tutorial"
+                  aria-label="Close tutorial"
                 >
                   <X className="size-4" />
                 </button>

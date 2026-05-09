@@ -2,9 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireAuth, requireOrganization } from "@/lib/auth/session";
+import { requireAuth, requireOrganization, requirePermission } from "@/lib/auth/session";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
-import { createClient } from "@/lib/supabase/server";
+import {
+  buildStorageRouteUrl,
+  buildDocumentStoredPath,
+  isLocalStoredFilePath,
+  removePrivateUpload,
+  savePrivateUpload,
+  validateUploadMetadata,
+  validateUploadSize,
+} from "@/lib/storage/local";
+import { prisma } from "@/lib/prisma";
 import { checkFileSizeLimit, checkStorageLimit } from "@/lib/subscription/subscription-queries";
 import { documentSchema } from "@/lib/crm/schemas";
 import { createNotification } from "@/lib/notifications/notifications";
@@ -12,16 +21,25 @@ import { createNotification } from "@/lib/notifications/notifications";
 async function insertActivityLog(action: string, entityType: string, entityId: string, metadata: Record<string, any> = {}) {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
-  await supabase.from("activity_logs").insert({
-    organization_id: organization.id,
-    actor_user_id: user.id,
-    action,
-    entity_type: entityType,
-    entity_id: entityId,
-    metadata,
-  });
+  await prisma.$executeRaw`
+    insert into public.activity_logs (
+      organization_id,
+      actor_user_id,
+      action,
+      entity_type,
+      entity_id,
+      metadata
+    )
+    values (
+      ${organization.id}::uuid,
+      ${user.id}::uuid,
+      ${action},
+      ${entityType},
+      ${entityId}::uuid,
+      ${JSON.stringify(metadata)}::jsonb
+    )
+  `;
 }
 
 export type DocumentActionState = {
@@ -50,10 +68,6 @@ function getValidationFailure(error: z.ZodError): DocumentActionState {
   };
 }
 
-function sanitizePathSegment(value: string) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
 function sanitizeFileName(fileName: string) {
   const cleaned = fileName
     .normalize("NFKD")
@@ -66,14 +80,6 @@ function sanitizeFileName(fileName: string) {
 
   const fallback = cleaned || "document";
   return fallback.slice(0, 120);
-}
-
-function buildDocumentFilePath(organizationId: string, companyId: string, documentId: string, originalFileName: string) {
-  const safeOrganizationId = sanitizePathSegment(organizationId);
-  const safeCompanyId = sanitizePathSegment(companyId);
-  const safeDocumentId = sanitizePathSegment(documentId);
-  const safeFileName = sanitizeFileName(originalFileName);
-  return `${safeOrganizationId}/${safeCompanyId}/${safeDocumentId}/${safeFileName}`;
 }
 
 function getStorageErrorMessage(error: { message?: string; statusCode?: string | number } | null | undefined) {
@@ -99,40 +105,38 @@ function getStorageErrorMessage(error: { message?: string; statusCode?: string |
   return "Upload failed. Please try again.";
 }
 
-async function cleanupUploadedFile(supabase: Awaited<ReturnType<typeof createClient>>, filePath: string) {
-  const { error } = await supabase.storage.from("crm-documents").remove([filePath]);
-  if (error) {
+async function cleanupUploadedFile(filePath: string) {
+  if (!isLocalStoredFilePath(filePath)) {
+    return;
+  }
+
+  try {
+    await removePrivateUpload(filePath);
+  } catch (error) {
     logServerError("document.upload.cleanup_failed", error, { filePath });
   }
 }
 
-function getSignedUrlErrorMessage(error: { message?: string; statusCode?: string | number } | null | undefined) {
-  const rawMessage = error?.message?.toLowerCase() ?? "";
-  const statusCode = String(error?.statusCode ?? "");
-
-  if (rawMessage.includes("bucket not found") || rawMessage.includes("not found") || statusCode === "404") {
-    return "Storage bucket not found. Please create crm-documents bucket.";
-  }
-
-  if (rawMessage.includes("row-level security") || rawMessage.includes("permission denied") || rawMessage.includes("unauthorized") || statusCode === "403" || statusCode === "401") {
-    return "You do not have permission to access this document.";
-  }
-
-  return "Unable to prepare this document. Please try again.";
-}
-
 async function validateDocumentOwnership(documentId: string): Promise<{ organization: Awaited<ReturnType<typeof requireOrganization>>; document: AccessibleDocumentFile }> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
+  const rows = await prisma.$queryRaw<AccessibleDocumentFile[]>`
+    select
+      id::text as id,
+      organization_id::text as organization_id,
+      company_id::text as company_id,
+      file_path,
+      file_name,
+      file_size_mb,
+      mime_type,
+      file_extension
+    from public.documents
+    where id = ${documentId}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
 
-  const { data: document, error } = await supabase
-    .from("documents")
-    .select("id, organization_id, company_id, file_path, file_name, file_size_mb, mime_type, file_extension")
-    .eq("id", documentId)
-    .eq("organization_id", organization.id)
-    .single();
-
-  if (error || !document) {
+  const document = rows[0] ?? null;
+  if (!document) {
     throw new Error("Document not found or access denied.");
   }
 
@@ -147,23 +151,8 @@ async function createSignedDocumentUrl(documentId: string, expiresInSeconds = 90
     throw new Error("This document is missing its stored file path.");
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .storage
-    .from("crm-documents")
-    .createSignedUrl(document.file_path, expiresInSeconds);
-
-  if (error || !data?.signedUrl) {
-    logServerError("document.signed_url", error ?? new Error("Signed URL was not returned."), {
-      documentId,
-      filePath: document.file_path,
-      expiresInSeconds,
-    });
-    throw new Error(getSignedUrlErrorMessage(error));
-  }
-
   return {
-    signedUrl: data.signedUrl,
+    signedUrl: buildStorageRouteUrl(`/api/storage/documents/${documentId}`),
     fileName: document.file_name,
     mimeType: document.mime_type,
     fileExtension: document.file_extension,
@@ -172,13 +161,23 @@ async function createSignedDocumentUrl(documentId: string, expiresInSeconds = 90
 }
 
 export async function createDocument(formData: FormData): Promise<DocumentActionState> {
+  await requirePermission("documents.upload");
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
   const maybeFile = formData.get("file");
   const file = maybeFile instanceof File ? maybeFile : null;
   if (!file || file.size <= 0) return { ok: false, error: "File is required." };
+
+  const hardSizeValidation = validateUploadSize(file.size);
+  if (!hardSizeValidation.ok) {
+    return { ok: false, error: hardSizeValidation.message };
+  }
+
+  const uploadMetadataValidation = validateUploadMetadata(file);
+  if (!uploadMetadataValidation.ok) {
+    return { ok: false, error: uploadMetadataValidation.message };
+  }
 
   const fileSizeLimit = await checkFileSizeLimit(file.size);
   if (!fileSizeLimit.allowed) {
@@ -210,17 +209,12 @@ export async function createDocument(formData: FormData): Promise<DocumentAction
 
   const documentId = crypto.randomUUID();
   const safeFileName = sanitizeFileName(file.name);
-  const fileExtension = safeFileName.includes(".") ? safeFileName.split(".").pop() : null;
-  const filePath = buildDocumentFilePath(organization.id, validated.data.company_id, documentId, safeFileName);
+  const fileExtension = uploadMetadataValidation.extension ?? null;
+  const filePath = buildDocumentStoredPath(organization.id, validated.data.company_id, documentId, safeFileName);
 
-  const { error: uploadError } = await supabase.storage
-    .from("crm-documents")
-    .upload(filePath, file, {
-      upsert: false,
-      contentType: file.type || undefined,
-    });
-
-  if (uploadError) {
+  try {
+    await savePrivateUpload(filePath, file);
+  } catch (uploadError) {
     logServerError("document.upload.storage", uploadError, {
       organizationId: organization.id,
       companyId: validated.data.company_id,
@@ -229,37 +223,78 @@ export async function createDocument(formData: FormData): Promise<DocumentAction
       fileName: file.name,
       fileSize: file.size,
     });
-    return { ok: false, error: getStorageErrorMessage(uploadError) };
+    return { ok: false, error: getStorageErrorMessage(null) };
   }
 
-  const { error: dbError } = await supabase.from("documents").insert({
-    id: documentId,
-    organization_id: organization.id,
-    ...validated.data,
-    file_name: safeFileName,
-    file_path: filePath,
-    file_size_mb: Number((file.size / (1024 * 1024)).toFixed(2)),
-    mime_type: file.type,
-    file_extension: fileExtension,
-    uploaded_by: user.id,
-    created_by: user.id,
-    updated_by: user.id,
-  });
-
-  if (dbError) {
-    await cleanupUploadedFile(supabase, filePath);
+  try {
+    await prisma.$executeRaw`
+      insert into public.documents (
+        id,
+        organization_id,
+        company_id,
+        contact_person_id,
+        interaction_id,
+        followup_id,
+        document_type,
+        title,
+        description,
+        file_name,
+        file_path,
+        file_size_mb,
+        mime_type,
+        file_extension,
+        status,
+        submitted_to,
+        submitted_at,
+        expiry_date,
+        remarks,
+        uploaded_by,
+        created_by,
+        updated_by
+      )
+      values (
+        ${documentId}::uuid,
+        ${organization.id}::uuid,
+        ${validated.data.company_id}::uuid,
+        ${validated.data.contact_person_id}::uuid,
+        ${validated.data.interaction_id}::uuid,
+        ${validated.data.followup_id}::uuid,
+        ${validated.data.document_type},
+        ${validated.data.title},
+        ${validated.data.description},
+        ${safeFileName},
+        ${filePath},
+        ${Number((file.size / (1024 * 1024)).toFixed(2))},
+        ${file.type},
+        ${fileExtension},
+        ${validated.data.status},
+        ${validated.data.submitted_to},
+        ${validated.data.submitted_at}::date,
+        ${validated.data.expiry_date}::date,
+        ${validated.data.remarks},
+        ${user.id}::uuid,
+        ${user.id}::uuid,
+        ${user.id}::uuid
+      )
+    `;
+  } catch (dbError) {
+    await cleanupUploadedFile(filePath);
     logServerError("document.upload.record", dbError, { organizationId: organization.id, documentId, companyId: validated.data.company_id });
     return { ok: false, error: getSafeErrorMessage(dbError, "The document was uploaded but could not be saved. Please try again.") };
   }
 
   await insertActivityLog("uploaded", "document", documentId, { title: validated.data.title });
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("assigned_user_id, name")
-    .eq("id", validated.data.company_id)
-    .eq("organization_id", organization.id)
-    .maybeSingle();
+  const companyRows = await prisma.$queryRaw<Array<{ assigned_user_id: string | null; name: string | null }>>`
+    select
+      assigned_user_id::text as assigned_user_id,
+      name
+    from public.companies
+    where id = ${validated.data.company_id}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
+  const company = companyRows[0] ?? null;
 
   if (company?.assigned_user_id && company.assigned_user_id !== user.id) {
     await createNotification({
@@ -278,9 +313,9 @@ export async function createDocument(formData: FormData): Promise<DocumentAction
 }
 
 export async function updateDocument(documentId: string, formData: FormData): Promise<DocumentActionState> {
+  await requirePermission("documents.update");
   const user = await requireAuth();
   const { organization, document } = await validateDocumentOwnership(documentId);
-  const supabase = await createClient();
 
   const rawValues = Object.fromEntries(formData.entries());
   const validated = documentSchema.safeParse(rawValues);
@@ -292,9 +327,19 @@ export async function updateDocument(documentId: string, formData: FormData): Pr
   const maybeFile = formData.get("file");
   const file = maybeFile instanceof File ? maybeFile : null;
   let filePath = document.file_path;
-  let fileMetadata = {};
+  let fileMetadata: Record<string, unknown> = {};
 
   if (file && file.size > 0) {
+    const hardSizeValidation = validateUploadSize(file.size);
+    if (!hardSizeValidation.ok) {
+      return { ok: false, error: hardSizeValidation.message };
+    }
+
+    const uploadMetadataValidation = validateUploadMetadata(file);
+    if (!uploadMetadataValidation.ok) {
+      return { ok: false, error: uploadMetadataValidation.message };
+    }
+
     const fileSizeLimit = await checkFileSizeLimit(file.size);
     if (!fileSizeLimit.allowed) {
       await insertActivityLog("subscription.limit_reached", "organization", organization.id, {
@@ -317,16 +362,11 @@ export async function updateDocument(documentId: string, formData: FormData): Pr
     }
 
     const safeFileName = sanitizeFileName(file.name);
-    const newFilePath = buildDocumentFilePath(organization.id, validated.data.company_id, documentId, safeFileName);
-    
-    const { error: uploadError } = await supabase.storage
-      .from("crm-documents")
-      .upload(newFilePath, file, {
-        upsert: false,
-        contentType: file.type || undefined,
-      });
+    const newFilePath = buildDocumentStoredPath(organization.id, validated.data.company_id, documentId, safeFileName);
 
-    if (uploadError) {
+    try {
+      await savePrivateUpload(newFilePath, file);
+    } catch (uploadError) {
       logServerError("document.update.storage", uploadError, {
         organizationId: organization.id,
         companyId: validated.data.company_id,
@@ -336,45 +376,11 @@ export async function updateDocument(documentId: string, formData: FormData): Pr
         fileName: file.name,
         fileSize: file.size,
       });
-
-      if (newFilePath === document.file_path && uploadError.message?.toLowerCase().includes("already exists")) {
-        const { error: removeCurrentFileError } = await supabase.storage.from("crm-documents").remove([document.file_path]);
-        if (removeCurrentFileError) {
-          logServerError("document.update.remove_current_file_failed", removeCurrentFileError, {
-            organizationId: organization.id,
-            documentId,
-            filePath: document.file_path,
-          });
-          return { ok: false, error: "Upload failed. Please try again." };
-        }
-
-        const retryUpload = await supabase.storage.from("crm-documents").upload(newFilePath, file, {
-          upsert: false,
-          contentType: file.type || undefined,
-        });
-
-        if (retryUpload.error) {
-          logServerError("document.update.storage_retry", retryUpload.error, {
-            organizationId: organization.id,
-            documentId,
-            newFilePath,
-          });
-          return { ok: false, error: getStorageErrorMessage(retryUpload.error) };
-        }
-      } else {
-        return { ok: false, error: getStorageErrorMessage(uploadError) };
-      }
+      return { ok: false, error: getStorageErrorMessage(null) };
     }
 
-    if (newFilePath !== document.file_path) {
-      const { error: removeOldFileError } = await supabase.storage.from("crm-documents").remove([document.file_path]);
-      if (removeOldFileError) {
-        logServerError("document.update.remove_old_file_failed", removeOldFileError, {
-          organizationId: organization.id,
-          documentId,
-          filePath: document.file_path,
-        });
-      }
+    if (newFilePath !== document.file_path && isLocalStoredFilePath(document.file_path)) {
+      await cleanupUploadedFile(document.file_path);
     }
 
     filePath = newFilePath;
@@ -383,30 +389,45 @@ export async function updateDocument(documentId: string, formData: FormData): Pr
       file_path: filePath,
       file_size_mb: Number((file.size / (1024 * 1024)).toFixed(2)),
       mime_type: file.type,
-      file_extension: safeFileName.includes(".") ? safeFileName.split(".").pop() : null,
+      file_extension: uploadMetadataValidation.extension ?? null,
     };
-    
+
     await insertActivityLog("file_replaced", "document", documentId, { title: validated.data.title });
   }
 
-  const { error: dbError } = await supabase
-    .from("documents")
-    .update({
-      ...validated.data,
-      ...fileMetadata,
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", documentId)
-    .eq("organization_id", organization.id);
-
-  if (dbError) {
+  try {
+    await prisma.$executeRaw`
+      update public.documents
+      set
+        company_id = ${validated.data.company_id}::uuid,
+        contact_person_id = ${validated.data.contact_person_id}::uuid,
+        interaction_id = ${validated.data.interaction_id}::uuid,
+        followup_id = ${validated.data.followup_id}::uuid,
+        document_type = ${validated.data.document_type},
+        title = ${validated.data.title},
+        description = ${validated.data.description},
+        file_name = ${String(fileMetadata.file_name ?? document.file_name)},
+        file_path = ${String(fileMetadata.file_path ?? filePath)},
+        file_size_mb = ${Number(fileMetadata.file_size_mb ?? document.file_size_mb ?? 0)},
+        mime_type = ${String(fileMetadata.mime_type ?? document.mime_type ?? "") || null},
+        file_extension = ${String(fileMetadata.file_extension ?? document.file_extension ?? "") || null},
+        status = ${validated.data.status},
+        submitted_to = ${validated.data.submitted_to},
+        submitted_at = ${validated.data.submitted_at}::date,
+        expiry_date = ${validated.data.expiry_date}::date,
+        remarks = ${validated.data.remarks},
+        updated_by = ${user.id}::uuid,
+        updated_at = now()
+      where id = ${documentId}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (dbError) {
     logServerError("document.update.record", dbError, {
       organizationId: organization.id,
       documentId,
       companyId: validated.data.company_id,
     });
-    return { ok: false, error: dbError.message };
+    return { ok: false, error: getSafeErrorMessage(dbError, "Unable to update this document right now.") };
   }
 
   await insertActivityLog("updated", "document", documentId, { title: validated.data.title });
@@ -419,22 +440,22 @@ export async function updateDocument(documentId: string, formData: FormData): Pr
 }
 
 export async function archiveDocument(documentId: string): Promise<DocumentActionState> {
+  await requirePermission("documents.archive");
   const user = await requireAuth();
   const { organization } = await validateDocumentOwnership(documentId);
-  const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("documents")
-    .update({
-      status: "archived",
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", documentId)
-    .eq("organization_id", organization.id);
-
-  if (error) {
-    return { ok: false, error: error.message };
+  try {
+    await prisma.$executeRaw`
+      update public.documents
+      set
+        status = 'archived',
+        updated_by = ${user.id}::uuid,
+        updated_at = now()
+      where id = ${documentId}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to archive this document right now.") };
   }
 
   await insertActivityLog("archived", "document", documentId);
@@ -446,50 +467,65 @@ export async function archiveDocument(documentId: string): Promise<DocumentActio
 }
 
 export async function logDocumentDownload(documentId: string): Promise<void> {
+  await requirePermission("documents.download");
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
 
-  await supabase.from("document_download_logs").insert({
-    organization_id: organization.id,
-    document_id: documentId,
-    downloaded_by: user.id,
-  });
+  await prisma.$executeRaw`
+    insert into public.document_download_logs (
+      organization_id,
+      document_id,
+      downloaded_by
+    )
+    values (
+      ${organization.id}::uuid,
+      ${documentId}::uuid,
+      ${user.id}::uuid
+    )
+  `;
 
   await insertActivityLog("downloaded", "document", documentId);
 }
 
 export async function getSignedDocumentDownloadUrl(documentId: string) {
-  return createSignedDocumentUrl(documentId, 900);
+  await requirePermission("documents.download");
+  const document = await createSignedDocumentUrl(documentId, 900);
+  if (isLocalStoredFilePath((await validateDocumentOwnership(documentId)).document.file_path)) {
+    return {
+      ...document,
+      signedUrl: buildStorageRouteUrl(`/api/storage/documents/${documentId}?download=1`),
+    };
+  }
+
+  return document;
 }
 
 export async function getSignedDocumentViewUrl(documentId: string) {
+  await requirePermission("documents.view");
   return createSignedDocumentUrl(documentId, 900);
 }
 
 export async function deleteDocument(documentId: string): Promise<DocumentActionState> {
+  await requirePermission("documents.archive");
   const { organization, document } = await validateDocumentOwnership(documentId);
-  const supabase = await createClient();
 
-  // 1. Delete file from storage
-  const { error: storageError } = await supabase.storage
-    .from("crm-documents")
-    .remove([document.file_path]);
-
-  if (storageError) {
-    logServerError("document.delete.storage", storageError, { organizationId: organization.id, documentId, filePath: document.file_path });
-    return { ok: false, error: "Unable to remove the stored file. Please try again." };
+  if (isLocalStoredFilePath(document.file_path)) {
+    try {
+      await removePrivateUpload(document.file_path);
+    } catch (storageError) {
+      logServerError("document.delete.storage", storageError, { organizationId: organization.id, documentId, filePath: document.file_path });
+      return { ok: false, error: "Unable to remove the stored file. Please try again." };
+    }
   }
 
-  // 2. Delete record from database
-  const { error: dbError } = await supabase
-    .from("documents")
-    .delete()
-    .eq("id", documentId)
-    .eq("organization_id", organization.id);
-
-  if (dbError) {
-    return { ok: false, error: dbError.message };
+  try {
+    await prisma.$executeRaw`
+      delete from public.documents
+      where id = ${documentId}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+  } catch (dbError) {
+    return { ok: false, error: getSafeErrorMessage(dbError, "Unable to delete the document right now.") };
   }
 
   revalidatePath("/documents");

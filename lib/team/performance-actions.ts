@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireAuth, requireOrganization } from "@/lib/auth/session";
+import { hasPermission, requireAuth, requireOrganization } from "@/lib/auth/session";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { PERFORMANCE_TARGET_METRICS, PERFORMANCE_TARGET_PERIODS, type PerformanceTargetMetric } from "@/lib/team/types";
 
 const performanceTargetSchema = z.object({
@@ -16,26 +16,94 @@ const performanceTargetSchema = z.object({
   notes: z.string().trim().max(250).optional(),
 });
 
+async function ensureCanManagePerformanceTarget(targetUserId: string, organizationId: string, actorUserId: string) {
+  if (targetUserId === actorUserId) {
+    return;
+  }
+
+  if (await hasPermission("settings.manage")) {
+    return;
+  }
+
+  const targetProfile = await prisma.user.findFirst({
+    where: {
+      id: targetUserId,
+      organization_id: organizationId,
+      is_active: true,
+      manager_user_id: actorUserId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!targetProfile) {
+    throw new Error("You do not have permission to manage this user target.");
+  }
+}
+
 export async function upsertPerformanceTarget(input: unknown) {
   const user = await requireAuth();
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const parsed = performanceTargetSchema.safeParse(input);
 
   if (!parsed.success) {
     throw new Error(parsed.error.errors[0]?.message ?? "Please check the target form and try again.");
   }
 
-  const { data, error } = await supabase.rpc("upsert_user_performance_target", {
-    target_user_id: parsed.data.userId,
-    target_metric: parsed.data.metricKey,
-    target_period: parsed.data.periodType,
-    target_value: parsed.data.targetValue,
-    target_effective_date: parsed.data.effectiveDate,
-    target_notes: parsed.data.notes ?? null,
+  const targetProfile = await prisma.user.findFirst({
+    where: {
+      id: parsed.data.userId,
+      organization_id: organization.id,
+    },
+    select: {
+      id: true,
+    },
   });
 
-  if (error) {
+  if (!targetProfile) {
+    throw new Error("Target user was not found in this workspace.");
+  }
+
+  await ensureCanManagePerformanceTarget(parsed.data.userId, organization.id, user.id);
+
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      insert into public.user_performance_targets (
+        organization_id,
+        user_id,
+        metric_key,
+        period_type,
+        target_value,
+        effective_date,
+        notes,
+        assigned_by
+      )
+      values (
+        ${organization.id}::uuid,
+        ${parsed.data.userId}::uuid,
+        ${parsed.data.metricKey},
+        ${parsed.data.periodType},
+        ${parsed.data.targetValue},
+        ${parsed.data.effectiveDate}::date,
+        nullif(${parsed.data.notes ?? null}, ''),
+        ${user.id}::uuid
+      )
+      on conflict (organization_id, user_id, metric_key, period_type, effective_date)
+      do update set
+        target_value = excluded.target_value,
+        notes = excluded.notes,
+        assigned_by = excluded.assigned_by,
+        updated_at = now()
+      returning id
+    `;
+
+    revalidatePath("/dashboard");
+    revalidatePath("/team");
+    revalidatePath("/reports");
+
+    return rows[0]?.id ?? null;
+  } catch (error) {
     logServerError("performance_target.upsert", error, {
       organizationId: organization.id,
       actorUserId: user.id,
@@ -45,26 +113,32 @@ export async function upsertPerformanceTarget(input: unknown) {
     });
     throw new Error(getSafeErrorMessage(error, "Unable to save the target right now."));
   }
-
-  revalidatePath("/dashboard");
-  revalidatePath("/team");
-  revalidatePath("/reports");
-
-  return data as string;
 }
 
 export async function deletePerformanceTarget(targetId: string) {
-  await requireAuth();
-  await requireOrganization();
-  const supabase = await createClient();
+  const user = await requireAuth();
+  const organization = await requireOrganization();
 
-  const { error } = await supabase.rpc("delete_user_performance_target", {
-    target_row_id: targetId,
-  });
+  const rows = await prisma.$queryRaw<Array<{ id: string; user_id: string }>>`
+    select id, user_id::text as user_id
+    from public.user_performance_targets
+    where id = ${targetId}::uuid
+      and organization_id = ${organization.id}::uuid
+    limit 1
+  `;
 
-  if (error) {
-    throw new Error(getSafeErrorMessage(error, "Unable to delete the target right now."));
+  const targetRecord = rows[0] ?? null;
+
+  if (!targetRecord) {
+    throw new Error("Target record was not found.");
   }
+
+  await ensureCanManagePerformanceTarget(targetRecord.user_id, organization.id, user.id);
+
+  await prisma.$executeRaw`
+    delete from public.user_performance_targets
+    where id = ${targetId}::uuid
+  `;
 
   revalidatePath("/dashboard");
   revalidatePath("/team");

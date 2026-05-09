@@ -1,5 +1,5 @@
+import { prisma } from "@/lib/prisma";
 import { requireOrganization } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
 
 const DEFAULT_SECTION_LIMIT = 5;
 
@@ -30,6 +30,62 @@ export type GlobalSearchResults = {
   helpRequests: GlobalSearchItem[];
 };
 
+type SearchCompanyRow = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  status: string | null;
+};
+
+type SearchContactRow = {
+  id: string;
+  name: string;
+  email: string | null;
+  mobile: string | null;
+  designation: string | null;
+  status: string | null;
+  company_name: string | null;
+};
+
+type SearchInteractionRow = {
+  id: string;
+  interaction_type: string;
+  discussion_details: string | null;
+  next_action: string | null;
+  status: string | null;
+  company_name: string | null;
+};
+
+type SearchFollowupRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string | null;
+  priority: string | null;
+  company_name: string | null;
+};
+
+type SearchDocumentRow = {
+  id: string;
+  title: string;
+  file_name: string | null;
+  remarks: string | null;
+  status: string | null;
+  document_type: string | null;
+  company_name: string | null;
+};
+
+type SearchHelpRequestRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string | null;
+  help_type: string | null;
+  company_name: string | null;
+};
+
 function createEmptyResults(): GlobalSearchResults {
   return {
     companies: [],
@@ -49,17 +105,8 @@ function hasEnoughQuery(query: string) {
   return normalizeQuery(query).length >= 2;
 }
 
-function getRelationName(value: unknown) {
-  if (Array.isArray(value)) {
-    const firstValue = value[0] as { name?: string } | undefined;
-    return firstValue?.name ?? null;
-  }
-
-  if (value && typeof value === "object" && "name" in value) {
-    return (value as { name?: string }).name ?? null;
-  }
-
-  return null;
+function toPattern(query: string) {
+  return `%${query}%`;
 }
 
 export async function searchCompanies(query: string, limit = DEFAULT_SECTION_LIMIT): Promise<GlobalSearchItem[]> {
@@ -69,21 +116,23 @@ export async function searchCompanies(query: string, limit = DEFAULT_SECTION_LIM
   }
 
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("companies")
-    .select("id, name, email, phone, website, status")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .or(`name.ilike.%${normalizedQuery}%,email.ilike.%${normalizedQuery}%,phone.ilike.%${normalizedQuery}%,website.ilike.%${normalizedQuery}%`)
-    .order("updated_at", { ascending: false })
-    .limit(limit);
+  const pattern = toPattern(normalizedQuery);
+  const data = await prisma.$queryRaw<SearchCompanyRow[]>`
+    select id, name, email, phone, website, status
+    from public.companies
+    where organization_id = ${organization.id}::uuid
+      and status <> 'archived'
+      and (
+        name ilike ${pattern}
+        or email ilike ${pattern}
+        or phone ilike ${pattern}
+        or website ilike ${pattern}
+      )
+    order by updated_at desc
+    limit ${limit}
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((company) => ({
+  return data.map((company) => ({
     id: company.id,
     type: "company" as const,
     title: company.name,
@@ -101,25 +150,36 @@ export async function searchContacts(query: string, limit = DEFAULT_SECTION_LIMI
   }
 
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("contact_persons")
-    .select("id, name, email, mobile, designation, status, companies(name)")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .or(`name.ilike.%${normalizedQuery}%,email.ilike.%${normalizedQuery}%,mobile.ilike.%${normalizedQuery}%,designation.ilike.%${normalizedQuery}%`)
-    .order("updated_at", { ascending: false })
-    .limit(limit);
+  const pattern = toPattern(normalizedQuery);
+  const data = await prisma.$queryRaw<SearchContactRow[]>`
+    select
+      cp.id,
+      cp.name,
+      cp.email,
+      cp.mobile,
+      cp.designation,
+      cp.status,
+      c.name as company_name
+    from public.contact_persons cp
+    left join public.companies c
+      on c.id = cp.company_id
+    where cp.organization_id = ${organization.id}::uuid
+      and cp.status <> 'archived'
+      and (
+        cp.name ilike ${pattern}
+        or cp.email ilike ${pattern}
+        or cp.mobile ilike ${pattern}
+        or cp.designation ilike ${pattern}
+      )
+    order by cp.updated_at desc
+    limit ${limit}
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((contact) => ({
+  return data.map((contact) => ({
     id: contact.id,
     type: "contact" as const,
     title: contact.name,
-    subtitle: contact.email ?? contact.mobile ?? contact.designation ?? getRelationName(contact.companies) ?? "Contact record",
+    subtitle: contact.email ?? contact.mobile ?? contact.designation ?? contact.company_name ?? "Contact record",
     href: `/contacts/${contact.id}`,
     badge: contact.designation ?? contact.status,
     status: contact.status,
@@ -133,24 +193,32 @@ export async function searchInteractions(query: string, limit = DEFAULT_SECTION_
   }
 
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("interactions")
-    .select("id, interaction_type, discussion_details, next_action, status, companies(name)")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .or(`discussion_details.ilike.%${normalizedQuery}%,next_action.ilike.%${normalizedQuery}%`)
-    .order("meeting_datetime", { ascending: false })
-    .limit(limit);
+  const pattern = toPattern(normalizedQuery);
+  const data = await prisma.$queryRaw<SearchInteractionRow[]>`
+    select
+      i.id,
+      i.interaction_type,
+      i.discussion_details,
+      i.next_action,
+      i.status,
+      c.name as company_name
+    from public.interactions i
+    left join public.companies c
+      on c.id = i.company_id
+    where i.organization_id = ${organization.id}::uuid
+      and i.status <> 'archived'
+      and (
+        i.discussion_details ilike ${pattern}
+        or i.next_action ilike ${pattern}
+      )
+    order by i.meeting_datetime desc
+    limit ${limit}
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((meeting) => ({
+  return data.map((meeting) => ({
     id: meeting.id,
     type: "meeting" as const,
-    title: getRelationName(meeting.companies) ? `${getRelationName(meeting.companies)} meeting` : meeting.interaction_type,
+    title: meeting.company_name ? `${meeting.company_name} meeting` : meeting.interaction_type,
     subtitle: meeting.discussion_details ?? meeting.next_action ?? "Interaction record",
     href: `/meetings/${meeting.id}`,
     badge: meeting.interaction_type,
@@ -165,25 +233,33 @@ export async function searchFollowups(query: string, limit = DEFAULT_SECTION_LIM
   }
 
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("followups")
-    .select("id, title, description, status, priority, companies(name)")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .or(`title.ilike.%${normalizedQuery}%,description.ilike.%${normalizedQuery}%`)
-    .order("scheduled_at", { ascending: true })
-    .limit(limit);
+  const pattern = toPattern(normalizedQuery);
+  const data = await prisma.$queryRaw<SearchFollowupRow[]>`
+    select
+      f.id,
+      f.title,
+      f.description,
+      f.status,
+      f.priority,
+      c.name as company_name
+    from public.followups f
+    left join public.companies c
+      on c.id = f.company_id
+    where f.organization_id = ${organization.id}::uuid
+      and f.status <> 'archived'
+      and (
+        f.title ilike ${pattern}
+        or f.description ilike ${pattern}
+      )
+    order by f.scheduled_at asc
+    limit ${limit}
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((followup) => ({
+  return data.map((followup) => ({
     id: followup.id,
     type: "followup" as const,
     title: followup.title,
-    subtitle: followup.description ?? getRelationName(followup.companies) ?? "Follow-up record",
+    subtitle: followup.description ?? followup.company_name ?? "Follow-up record",
     href: `/followups/${followup.id}`,
     badge: followup.priority ?? followup.status,
     status: followup.status,
@@ -197,25 +273,35 @@ export async function searchDocuments(query: string, limit = DEFAULT_SECTION_LIM
   }
 
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("documents")
-    .select("id, title, file_name, remarks, status, document_type, companies(name)")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .or(`title.ilike.%${normalizedQuery}%,file_name.ilike.%${normalizedQuery}%,remarks.ilike.%${normalizedQuery}%`)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const pattern = toPattern(normalizedQuery);
+  const data = await prisma.$queryRaw<SearchDocumentRow[]>`
+    select
+      d.id,
+      d.title,
+      d.file_name,
+      d.remarks,
+      d.status,
+      d.document_type,
+      c.name as company_name
+    from public.documents d
+    left join public.companies c
+      on c.id = d.company_id
+    where d.organization_id = ${organization.id}::uuid
+      and d.status <> 'archived'
+      and (
+        d.title ilike ${pattern}
+        or d.file_name ilike ${pattern}
+        or d.remarks ilike ${pattern}
+      )
+    order by d.created_at desc
+    limit ${limit}
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((document) => ({
+  return data.map((document) => ({
     id: document.id,
     type: "document" as const,
     title: document.title,
-    subtitle: document.file_name ?? document.remarks ?? getRelationName(document.companies) ?? "Document record",
+    subtitle: document.file_name ?? document.remarks ?? document.company_name ?? "Document record",
     href: `/documents/${document.id}`,
     badge: document.document_type ?? document.status,
     status: document.status,
@@ -229,25 +315,33 @@ export async function searchHelpRequests(query: string, limit = DEFAULT_SECTION_
   }
 
   const organization = await requireOrganization();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("help_requests")
-    .select("id, title, description, status, help_type, companies(name)")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .or(`title.ilike.%${normalizedQuery}%,description.ilike.%${normalizedQuery}%`)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const pattern = toPattern(normalizedQuery);
+  const data = await prisma.$queryRaw<SearchHelpRequestRow[]>`
+    select
+      hr.id,
+      hr.title,
+      hr.description,
+      hr.status,
+      hr.help_type,
+      c.name as company_name
+    from public.help_requests hr
+    left join public.companies c
+      on c.id = hr.company_id
+    where hr.organization_id = ${organization.id}::uuid
+      and hr.status <> 'archived'
+      and (
+        hr.title ilike ${pattern}
+        or hr.description ilike ${pattern}
+      )
+    order by hr.created_at desc
+    limit ${limit}
+  `;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((request) => ({
+  return data.map((request) => ({
     id: request.id,
     type: "help_request" as const,
     title: request.title,
-    subtitle: request.description ?? getRelationName(request.companies) ?? "Help request",
+    subtitle: request.description ?? request.company_name ?? "Help request",
     href: `/need-help/${request.id}`,
     badge: request.help_type ?? request.status,
     status: request.status,

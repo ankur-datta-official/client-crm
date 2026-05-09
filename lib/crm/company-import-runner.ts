@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { prisma } from "@/lib/prisma";
 import { temperatureFromRating } from "@/lib/crm/schemas";
 import {
   type CompanyImportRow,
@@ -51,59 +51,57 @@ function appendNote(base: string | null | undefined, extra: string) {
 }
 
 export async function runCompanyContactImport(params: {
-  supabase: SupabaseClient;
   organizationId: string;
   userId: string;
   companies: CompanyImportRow[];
   contacts: ContactImportRow[];
 }): Promise<CompanyImportResult> {
-  const { supabase, organizationId, userId } = params;
+  const { organizationId, userId } = params;
   const errors: string[] = [];
   let companiesImported = 0;
   let contactsImported = 0;
 
-  const [{ data: stageRow, error: stageError }, { data: industryRows, error: industryError }, { data: existingCompanies, error: companiesError }] =
-    await Promise.all([
-      supabase
-        .from("pipeline_stages")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true)
-        .order("position", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
-      supabase.from("industries").select("id, name").eq("organization_id", organizationId).neq("status", "archived"),
-      supabase.from("companies").select("id, name").eq("organization_id", organizationId).neq("status", "archived"),
-    ]);
+  const [stageRows, industryRows, existingCompanies] = await Promise.all([
+    prisma.$queryRaw<Array<{ id: string }>>`
+      select id
+      from public.pipeline_stages
+      where organization_id = ${organizationId}::uuid
+        and is_active = true
+      order by position asc
+      limit 1
+    `,
+    prisma.$queryRaw<IndustryRow[]>`
+      select id, name
+      from public.industries
+      where organization_id = ${organizationId}::uuid
+        and status <> 'archived'
+    `,
+    prisma.$queryRaw<Array<{ id: string; name: string }>>`
+      select id, name
+      from public.companies
+      where organization_id = ${organizationId}::uuid
+        and status <> 'archived'
+    `,
+  ]);
 
-  if (stageError || !stageRow?.id) {
-    errors.push(`Companies: could not resolve default pipeline stage (${stageError?.message ?? "none"}).`);
-    return { companiesImported: 0, contactsImported: 0, errors };
-  }
-
-  if (industryError) {
-    errors.push(`Companies: failed to load industries (${industryError.message}).`);
-    return { companiesImported: 0, contactsImported: 0, errors };
-  }
-
-  if (companiesError) {
-    errors.push(`Companies: failed to load existing companies (${companiesError.message}).`);
+  const stageRow = stageRows[0] ?? null;
+  if (!stageRow?.id) {
+    errors.push("Companies: could not resolve default pipeline stage.");
     return { companiesImported: 0, contactsImported: 0, errors };
   }
 
   const industryByKey = new Map<string, string>();
-  for (const row of (industryRows ?? []) as IndustryRow[]) {
+  for (const row of industryRows) {
     industryByKey.set(normalizeCompanyKey(row.name), row.id);
   }
 
   const companyNameToId = new Map<string, string>();
-  for (const c of existingCompanies ?? []) {
-    companyNameToId.set(normalizeCompanyKey(String(c.name)), String(c.id));
+  for (const company of existingCompanies) {
+    companyNameToId.set(normalizeCompanyKey(company.name), company.id);
   }
 
   const processedCompanyKeysFromFile = new Set<string>();
-
-  const pipeline_stage_id = stageRow.id;
+  const pipelineStageId = stageRow.id;
 
   for (let i = 0; i < params.companies.length; i++) {
     const excelRow = i + 2;
@@ -115,7 +113,6 @@ export async function runCompanyContactImport(params: {
       if (!rawName) continue;
 
       const key = normalizeCompanyKey(rawName);
-
       if (processedCompanyKeysFromFile.has(key)) {
         errors.push(`${label}: duplicate company_name '${rawName}' in file.`);
         continue;
@@ -141,14 +138,15 @@ export async function runCompanyContactImport(params: {
       const phones = phonesFromCompanyRow(row);
       const emails = emailsFromCompanyRow(row);
       const industryCell = row.industry?.trim() ?? "";
-      let industry_id: string | null = null;
+      let industryId: string | null = null;
+
       if (industryCell) {
         const found = industryByKey.get(normalizeCompanyKey(industryCell));
         if (!found) {
           errors.push(`${label}: industry '${industryCell}' was not found.`);
           continue;
         }
-        industry_id = found;
+        industryId = found;
       }
 
       const website = normalizeWebsite(row.website);
@@ -160,60 +158,77 @@ export async function runCompanyContactImport(params: {
         notes = appendNote(notes, `Additional emails: ${emails.slice(1).join(", ")}`);
       }
 
-      const sl = row.sl?.trim();
-      const lead_source = sl || null;
-
-      const { data: inserted, error: insertError } = await supabase
-        .from("companies")
-        .insert({
-          organization_id: organizationId,
-          name: rawName,
+      const leadSource = row.sl?.trim() || null;
+      const insertedRows = await prisma.$queryRaw<Array<{ id: string }>>`
+        insert into public.companies (
+          organization_id,
+          name,
           industry_id,
           pipeline_stage_id,
-          status: "active",
-          phone: phones[0] ?? null,
-          email: emails[0] ?? null,
+          status,
+          phone,
+          email,
           website,
-          address: row.address?.trim() || null,
-          city: row.city?.trim() || null,
-          notes: notes || null,
+          address,
+          city,
+          notes,
           lead_source,
-          assigned_user_id: userId,
-          success_rating: 5,
-          lead_temperature: temperatureFromRating(5),
-          created_by: userId,
-          updated_by: userId,
-        })
-        .select("id")
-        .single();
+          assigned_user_id,
+          success_rating,
+          lead_temperature,
+          created_by,
+          updated_by
+        )
+        values (
+          ${organizationId}::uuid,
+          ${rawName},
+          ${industryId}::uuid,
+          ${pipelineStageId}::uuid,
+          'active',
+          ${phones[0] ?? null},
+          ${emails[0] ?? null},
+          ${website},
+          ${row.address?.trim() || null},
+          ${row.city?.trim() || null},
+          ${notes || null},
+          ${leadSource},
+          ${userId}::uuid,
+          5,
+          ${temperatureFromRating(5)},
+          ${userId}::uuid,
+          ${userId}::uuid
+        )
+        returning id
+      `;
 
-      if (insertError || !inserted?.id) {
-        errors.push(`${label}: ${insertError?.message ?? "insert failed"}.`);
+      const insertedId = insertedRows[0]?.id ?? null;
+      if (!insertedId) {
+        errors.push(`${label}: insert failed.`);
         continue;
       }
 
-      companyNameToId.set(key, inserted.id);
+      companyNameToId.set(key, insertedId);
       companiesImported += 1;
 
       try {
         await applyScoringEvent({
-          organizationId: organizationId,
+          organizationId,
           userId,
           actionKey: "lead_created",
-          companyId: inserted.id,
-          sourceRecordId: inserted.id,
+          companyId: insertedId,
+          sourceRecordId: insertedId,
           sourceRecordType: "company",
           metadata: {
             company_name: rawName,
-            lead_source,
+            lead_source: leadSource,
             source: "bulk_import",
           },
           actorUserId: userId,
           addToLeadScore: true,
-          idempotencyKey: buildScoreIdempotencyKey(["lead_created", inserted.id, "bulk_import"]),
+          idempotencyKey: buildScoreIdempotencyKey(["lead_created", insertedId, "bulk_import"]),
         });
       } catch {
-        /* scoring is best-effort */
+        // scoring remains best-effort
       }
     } catch (e) {
       errors.push(`${label}: ${e instanceof Error ? e.message : String(e)}.`);
@@ -250,13 +265,13 @@ export async function runCompanyContactImport(params: {
       }
 
       const companyNameRaw = row.company_name?.trim() ?? "";
-      const cKey = normalizeCompanyKey(companyNameRaw);
+      const companyKey = normalizeCompanyKey(companyNameRaw);
       if (!companyNameRaw) {
         errors.push(`${label}: company_name is required.`);
         continue;
       }
 
-      const companyId = companyNameToId.get(cKey);
+      const companyId = companyNameToId.get(companyKey);
       if (!companyId) {
         errors.push(`${label}: company '${companyNameRaw}' not found.`);
         continue;
@@ -274,7 +289,7 @@ export async function runCompanyContactImport(params: {
 
       contactQueue.push({
         excelRow,
-        companyKey: cKey,
+        companyKey,
         companyId,
         name: contactName,
         designation: row.designation?.trim() || null,
@@ -285,15 +300,15 @@ export async function runCompanyContactImport(params: {
         is_primary: parsePrimaryContactFlag(row.is_primary_contact),
       });
     } catch (e) {
-      errors.push(`Row ${i + 2} Contacts: ${e instanceof Error ? e.message : String(e)}.`);
+      errors.push(`${label}: ${e instanceof Error ? e.message : String(e)}.`);
     }
   }
 
   const byCompany = new Map<string, ContactWork[]>();
-  for (const c of contactQueue) {
-    const list = byCompany.get(c.companyId) ?? [];
-    list.push(c);
-    byCompany.set(c.companyId, list);
+  for (const contact of contactQueue) {
+    const list = byCompany.get(contact.companyId) ?? [];
+    list.push(contact);
+    byCompany.set(contact.companyId, list);
   }
 
   for (const [, list] of byCompany) {
@@ -317,28 +332,41 @@ export async function runCompanyContactImport(params: {
     return a.is_primary ? 1 : -1;
   });
 
-  for (const c of nonPrimaryFirst) {
-    const label = `Row ${c.excelRow} Contacts`;
-    try {
-      const { error } = await supabase.from("contact_persons").insert({
-        organization_id: organizationId,
-        company_id: c.companyId,
-        name: c.name,
-        designation: c.designation,
-        mobile: c.mobile,
-        whatsapp: c.whatsapp,
-        email: c.email,
-        remarks: c.remarks,
-        is_primary: c.is_primary,
-        status: "active",
-        created_by: userId,
-        updated_by: userId,
-      });
+  for (const contact of nonPrimaryFirst) {
+    const label = `Row ${contact.excelRow} Contacts`;
 
-      if (error) {
-        errors.push(`${label}: ${error.message}.`);
-        continue;
-      }
+    try {
+      await prisma.$executeRaw`
+        insert into public.contact_persons (
+          organization_id,
+          company_id,
+          name,
+          designation,
+          mobile,
+          whatsapp,
+          email,
+          remarks,
+          is_primary,
+          status,
+          created_by,
+          updated_by
+        )
+        values (
+          ${organizationId}::uuid,
+          ${contact.companyId}::uuid,
+          ${contact.name},
+          ${contact.designation},
+          ${contact.mobile},
+          ${contact.whatsapp},
+          ${contact.email},
+          ${contact.remarks},
+          ${contact.is_primary},
+          'active',
+          ${userId}::uuid,
+          ${userId}::uuid
+        )
+      `;
+
       contactsImported += 1;
     } catch (e) {
       errors.push(`${label}: ${e instanceof Error ? e.message : String(e)}.`);

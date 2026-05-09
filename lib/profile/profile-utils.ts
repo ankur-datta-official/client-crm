@@ -1,26 +1,17 @@
-import { createClient } from "@/lib/supabase/server";
 import { logServerError } from "@/lib/errors";
+import {
+  buildProfileAvatarStoredPath,
+  buildStorageRouteUrl,
+  getProfileIdFromStoredPath,
+  isExternalFileUrl,
+  isLocalStoredFilePath,
+  sanitizeStoredFileName,
+} from "@/lib/storage/local";
 
 export const PROFILE_AVATAR_BUCKET = "profile-avatars";
 
-const EXTERNAL_URL_PATTERN = /^(https?:)?\/\//i;
-
-function sanitizePathSegment(value: string) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
 export function sanitizeAvatarFileName(fileName: string) {
-  const cleaned = fileName
-    .normalize("NFKD")
-    .replace(/[^\x20-\x7E]/g, "")
-    .replace(/[\\/:*?"<>|]/g, "-")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^\.+/, "")
-    .trim();
-
-  const fallback = cleaned || "avatar";
-  return fallback.slice(0, 100);
+  return sanitizeStoredFileName(fileName, "avatar", 100);
 }
 
 export function isStoredProfileAvatarPath(value?: string | null) {
@@ -28,36 +19,38 @@ export function isStoredProfileAvatarPath(value?: string | null) {
     return false;
   }
 
-  return !EXTERNAL_URL_PATTERN.test(value) && !value.startsWith("/") && !value.startsWith("data:") && !value.startsWith("blob:");
+  return !isExternalFileUrl(value);
 }
 
 export function buildProfileAvatarPath(organizationId: string, profileId: string, fileName: string) {
-  const safeOrganizationId = sanitizePathSegment(organizationId);
-  const safeProfileId = sanitizePathSegment(profileId);
-  const safeFileName = sanitizeAvatarFileName(fileName);
-
-  return `${safeOrganizationId}/${safeProfileId}/${safeFileName}`;
+  return buildProfileAvatarStoredPath(organizationId, profileId, fileName);
 }
 
-export async function resolveProfileAvatarUrl(avatarUrl?: string | null, expiresInSeconds = 900) {
+export async function resolveProfileAvatarUrl(
+  avatarUrl?: string | null,
+  expiresInSeconds = 900,
+  options?: { profileId?: string | null; organizationId?: string | null },
+) {
   if (!avatarUrl) {
     return null;
   }
 
-  if (!isStoredProfileAvatarPath(avatarUrl)) {
+  if (isExternalFileUrl(avatarUrl)) {
     return avatarUrl;
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.storage.from(PROFILE_AVATAR_BUCKET).createSignedUrl(avatarUrl, expiresInSeconds);
-
-  if (error || !data?.signedUrl) {
-    logServerError("profile.avatar.resolve", error ?? new Error("Signed avatar URL was not returned."), {
-      avatarPath: avatarUrl,
-      expiresInSeconds,
-    });
-    return null;
+  if (isLocalStoredFilePath(avatarUrl)) {
+    const profileId = getProfileIdFromStoredPath(avatarUrl);
+    return profileId ? buildStorageRouteUrl(`/api/storage/avatars/${profileId}`) : null;
   }
 
-  return data.signedUrl;
+  if (options?.profileId) {
+    return buildStorageRouteUrl(`/api/storage/avatars/${options.profileId}`);
+  }
+
+  logServerError("profile.avatar.resolve.missing_profile_id", new Error("Profile ID is required to resolve a legacy avatar route."), {
+    avatarPath: avatarUrl,
+    expiresInSeconds,
+  });
+  return null;
 }

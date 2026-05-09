@@ -1,5 +1,8 @@
+"use server";
+
+import { Prisma } from "@prisma/client";
 import { requireOrganization } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 
 export type DateRangeFilter = "today" | "this_week" | "this_month" | "last_30_days" | "this_quarter" | "custom";
 
@@ -35,10 +38,11 @@ function buildDateRange(filters: ReportFilters): { start: Date; end: Date } {
     case "last_30_days":
       start.setDate(start.getDate() - 30);
       break;
-    case "this_quarter":
+    case "this_quarter": {
       const quarter = Math.floor(now.getMonth() / 3);
       start = new Date(now.getFullYear(), quarter * 3, 1);
       break;
+    }
     case "custom":
       if (filters.startDate) {
         start = new Date(filters.startDate);
@@ -54,6 +58,26 @@ function buildDateRange(filters: ReportFilters): { start: Date; end: Date } {
   }
 
   return { start, end };
+}
+
+function toNumber(value: bigint | number | string | null | undefined) {
+  if (typeof value === "bigint") return Number(value);
+  return Number(value ?? 0);
+}
+
+function buildCompanyWhere(organizationId: string, filters: ReportFilters) {
+  const clauses: Prisma.Sql[] = [
+    Prisma.sql`c.organization_id = ${organizationId}::uuid`,
+    Prisma.sql`c.status <> 'archived'`,
+  ];
+
+  if (filters.industryId) clauses.push(Prisma.sql`c.industry_id = ${filters.industryId}::uuid`);
+  if (filters.pipelineStageId) clauses.push(Prisma.sql`c.pipeline_stage_id = ${filters.pipelineStageId}::uuid`);
+  if (filters.assignedUserId) clauses.push(Prisma.sql`c.assigned_user_id = ${filters.assignedUserId}::uuid`);
+  if (filters.leadTemperature) clauses.push(Prisma.sql`c.lead_temperature = ${filters.leadTemperature}`);
+  if (filters.companyCategoryId) clauses.push(Prisma.sql`c.category_id = ${filters.companyCategoryId}::uuid`);
+
+  return Prisma.join(clauses, " and ");
 }
 
 export type SalesOverviewReport = {
@@ -77,181 +101,121 @@ export type SalesOverviewReport = {
 
 export async function getSalesOverviewReport(filters: ReportFilters = {}): Promise<SalesOverviewReport> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const { start, end } = buildDateRange(filters);
+  const companyWhere = buildCompanyWhere(organization.id, filters);
 
   const [
-    totalResult,
-    newLeadsResult,
-    hotResult,
-    veryHotResult,
-    pipelineValueResult,
-    wonResult,
-    lostResult,
-    meetingsResult,
-    followupsDueResult,
-    overdueResult,
-    documentsResult,
-    openHelpResult,
-    tempDistResult,
-    stageDistResult,
-    monthlyTrendResult,
-    meetingTrendResult,
+    counts,
+    temperatureRows,
+    stageRows,
+    monthlyRows,
+    meetingRows,
   ] = await Promise.all([
-    supabase
-      .from("companies")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .neq("status", "archived"),
-    supabase
-      .from("companies")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .neq("status", "archived")
-      .gte("created_at", start.toISOString())
-      .lte("created_at", end.toISOString()),
-    supabase
-      .from("companies")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .eq("lead_temperature", "hot")
-      .neq("status", "archived"),
-    supabase
-      .from("companies")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .eq("lead_temperature", "very_hot")
-      .neq("status", "archived"),
-    supabase
-      .from("companies")
-      .select("estimated_value")
-      .eq("organization_id", organization.id)
-      .neq("status", "archived"),
-    supabase
-      .from("companies")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .eq("pipeline_stages.is_won", true)
-      .neq("status", "archived"),
-    supabase
-      .from("companies")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .eq("pipeline_stages.is_lost", true)
-      .neq("status", "archived"),
-    supabase
-      .from("interactions")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .neq("status", "archived")
-      .gte("meeting_datetime", start.toISOString())
-      .lte("meeting_datetime", end.toISOString()),
-    supabase
-      .from("followups")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .eq("status", "pending")
-      .gte("scheduled_at", start.toISOString())
-      .lte("scheduled_at", end.toISOString()),
-    supabase
-      .from("followups")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .eq("status", "pending")
-      .lt("scheduled_at", new Date().toISOString()),
-    supabase
-      .from("documents")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .neq("status", "archived")
-      .gte("created_at", start.toISOString())
-      .lte("created_at", end.toISOString()),
-    supabase
-      .from("help_requests")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organization.id)
-      .in("status", ["open", "in_progress"]),
-    supabase
-      .from("companies")
-      .select("lead_temperature")
-      .eq("organization_id", organization.id)
-      .neq("status", "archived"),
-    supabase
-      .from("companies")
-      .select("pipeline_stages(name, color)")
-      .eq("organization_id", organization.id)
-      .neq("status", "archived"),
-    supabase
-      .from("companies")
-      .select("created_at")
-      .eq("organization_id", organization.id)
-      .neq("status", "archived")
-      .order("created_at"),
-    supabase
-      .from("interactions")
-      .select("meeting_datetime")
-      .eq("organization_id", organization.id)
-      .neq("status", "archived")
-      .gte("meeting_datetime", start.toISOString())
-      .lte("meeting_datetime", end.toISOString())
-      .order("meeting_datetime"),
+    prisma.$queryRaw<Array<{
+      total_companies: bigint;
+      new_leads_in_period: bigint;
+      hot_leads: bigint;
+      very_hot_leads: bigint;
+      pipeline_value: string | number | null;
+      won_deals: bigint;
+      lost_deals: bigint;
+      meetings_completed: bigint;
+      followups_due: bigint;
+      overdue_followups: bigint;
+      documents_submitted: bigint;
+      open_help_requests: bigint;
+    }>>(Prisma.sql`
+      select
+        (select count(*) from public.companies c where ${companyWhere}) as total_companies,
+        (select count(*) from public.companies c where ${companyWhere} and c.created_at >= ${start.toISOString()}::timestamptz and c.created_at <= ${end.toISOString()}::timestamptz) as new_leads_in_period,
+        (select count(*) from public.companies c where ${companyWhere} and c.lead_temperature = 'hot') as hot_leads,
+        (select count(*) from public.companies c where ${companyWhere} and c.lead_temperature = 'very_hot') as very_hot_leads,
+        (select coalesce(sum(c.estimated_value), 0) from public.companies c where ${companyWhere}) as pipeline_value,
+        (select count(*) from public.companies c left join public.pipeline_stages ps on ps.id = c.pipeline_stage_id where ${companyWhere} and ps.is_won = true) as won_deals,
+        (select count(*) from public.companies c left join public.pipeline_stages ps on ps.id = c.pipeline_stage_id where ${companyWhere} and ps.is_lost = true) as lost_deals,
+        (select count(*) from public.interactions i where i.organization_id = ${organization.id}::uuid and i.status <> 'archived' and i.meeting_datetime >= ${start.toISOString()}::timestamptz and i.meeting_datetime <= ${end.toISOString()}::timestamptz) as meetings_completed,
+        (select count(*) from public.followups f where f.organization_id = ${organization.id}::uuid and f.status = 'pending' and f.scheduled_at >= ${start.toISOString()}::timestamptz and f.scheduled_at <= ${end.toISOString()}::timestamptz) as followups_due,
+        (select count(*) from public.followups f where f.organization_id = ${organization.id}::uuid and f.status = 'pending' and f.scheduled_at < now()) as overdue_followups,
+        (select count(*) from public.documents d where d.organization_id = ${organization.id}::uuid and d.status <> 'archived' and d.created_at >= ${start.toISOString()}::timestamptz and d.created_at <= ${end.toISOString()}::timestamptz) as documents_submitted,
+        (select count(*) from public.help_requests hr where hr.organization_id = ${organization.id}::uuid and hr.status in ('open','in_progress')) as open_help_requests
+    `),
+    prisma.$queryRaw<Array<{ lead_temperature: string | null }>>(Prisma.sql`
+      select c.lead_temperature
+      from public.companies c
+      where ${companyWhere}
+    `),
+    prisma.$queryRaw<Array<{ stage_name: string | null; stage_color: string | null }>>(Prisma.sql`
+      select ps.name as stage_name, ps.color as stage_color
+      from public.companies c
+      left join public.pipeline_stages ps on ps.id = c.pipeline_stage_id
+      where ${companyWhere}
+    `),
+    prisma.$queryRaw<Array<{ created_at: Date }>>(Prisma.sql`
+      select c.created_at
+      from public.companies c
+      where ${companyWhere}
+      order by c.created_at asc
+    `),
+    prisma.$queryRaw<Array<{ meeting_datetime: Date }>>(Prisma.sql`
+      select i.meeting_datetime
+      from public.interactions i
+      where i.organization_id = ${organization.id}::uuid
+        and i.status <> 'archived'
+        and i.meeting_datetime >= ${start.toISOString()}::timestamptz
+        and i.meeting_datetime <= ${end.toISOString()}::timestamptz
+      order by i.meeting_datetime asc
+    `),
   ]);
 
-  const tempDist: { [key: string]: number } = { cold: 0, warm: 0, hot: 0, very_hot: 0 };
-  (tempDistResult.data || []).forEach((c: any) => {
-    if (c.lead_temperature && tempDist[c.lead_temperature] !== undefined) {
-      tempDist[c.lead_temperature]++;
+  const countRow = counts[0];
+  const tempDist: Record<string, number> = { cold: 0, warm: 0, hot: 0, very_hot: 0 };
+  for (const row of temperatureRows) {
+    if (row.lead_temperature && row.lead_temperature in tempDist) {
+      tempDist[row.lead_temperature] += 1;
     }
-  });
+  }
 
-  const stageDist: { [key: string]: { count: number; color: string } } = {};
-  (stageDistResult.data || []).forEach((c: any) => {
-    const stageName = c.pipeline_stages?.name || "Unknown";
-    const stageColor = c.pipeline_stages?.color || "#888";
+  const stageDist: Record<string, { count: number; color: string }> = {};
+  for (const row of stageRows) {
+    const stageName = row.stage_name || "Unknown";
+    const stageColor = row.stage_color || "#888";
     if (!stageDist[stageName]) {
       stageDist[stageName] = { count: 0, color: stageColor };
     }
-    stageDist[stageName].count++;
-  });
+    stageDist[stageName].count += 1;
+  }
 
-  const monthlyTrend: { [key: string]: number } = {};
-  const meetingTrend: { [key: string]: number } = {};
+  const monthlyTrend: Record<string, number> = {};
   const currentMonth = new Date(start);
   while (currentMonth <= end) {
     const monthKey = currentMonth.toISOString().slice(0, 7);
     monthlyTrend[monthKey] = 0;
     currentMonth.setMonth(currentMonth.getMonth() + 1);
   }
-  (monthlyTrendResult.data || []).forEach((c: any) => {
-    const monthKey = c.created_at?.slice(0, 7);
-    if (monthKey && monthlyTrend[monthKey] !== undefined) {
-      monthlyTrend[monthKey]++;
-    }
-  });
+  for (const row of monthlyRows) {
+    const monthKey = row.created_at.toISOString().slice(0, 7);
+    if (monthKey in monthlyTrend) monthlyTrend[monthKey] += 1;
+  }
 
-  (meetingTrendResult.data || []).forEach((m: any) => {
-    const dateKey = m.meeting_datetime?.slice(0, 10);
-    if (dateKey) {
-      meetingTrend[dateKey] = (meetingTrend[dateKey] || 0) + 1;
-    }
-  });
-
-  const pipelineValue = (pipelineValueResult.data || [])
-    .reduce((sum: number, c: any) => sum + (c.estimated_value || 0), 0);
+  const meetingTrend: Record<string, number> = {};
+  for (const row of meetingRows) {
+    const dateKey = row.meeting_datetime.toISOString().slice(0, 10);
+    meetingTrend[dateKey] = (meetingTrend[dateKey] || 0) + 1;
+  }
 
   return {
-    totalCompanies: totalResult.count || 0,
-    newLeadsInPeriod: newLeadsResult.count || 0,
-    hotLeads: hotResult.count || 0,
-    veryHotLeads: veryHotResult.count || 0,
-    pipelineValue,
-    wonDeals: wonResult.count || 0,
-    lostDeals: lostResult.count || 0,
-    meetingsCompleted: meetingsResult.count || 0,
-    followupsDue: followupsDueResult.count || 0,
-    overdueFollowups: overdueResult.count || 0,
-    documentsSubmitted: documentsResult.count || 0,
-    openHelpRequests: openHelpResult.count || 0,
+    totalCompanies: toNumber(countRow?.total_companies),
+    newLeadsInPeriod: toNumber(countRow?.new_leads_in_period),
+    hotLeads: toNumber(countRow?.hot_leads),
+    veryHotLeads: toNumber(countRow?.very_hot_leads),
+    pipelineValue: toNumber(countRow?.pipeline_value),
+    wonDeals: toNumber(countRow?.won_deals),
+    lostDeals: toNumber(countRow?.lost_deals),
+    meetingsCompleted: toNumber(countRow?.meetings_completed),
+    followupsDue: toNumber(countRow?.followups_due),
+    overdueFollowups: toNumber(countRow?.overdue_followups),
+    documentsSubmitted: toNumber(countRow?.documents_submitted),
+    openHelpRequests: toNumber(countRow?.open_help_requests),
     leadTemperatureDistribution: Object.entries(tempDist).map(([temperature, count]) => ({ temperature, count })),
     pipelineStageDistribution: Object.entries(stageDist).map(([stage, data]) => ({ stage, ...data })),
     monthlyLeadCreationTrend: Object.entries(monthlyTrend).map(([month, count]) => ({ month, count })),
@@ -272,39 +236,34 @@ export type LeadReportData = {
 
 export async function getLeadReport(filters: ReportFilters = {}): Promise<LeadReportData> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const { start, end } = buildDateRange(filters);
+  const companyWhere = buildCompanyWhere(organization.id, filters);
 
-  let baseQuery = supabase
-    .from("companies")
-    .select(`
-      id, name, lead_temperature, success_rating, estimated_value, created_at,
-      industries(name),
-      company_categories(name),
-      pipeline_stages(name, color),
-      assigned_profile:profiles!assigned_user_id(full_name, email)
-    `)
-    .eq("organization_id", organization.id)
-    .neq("status", "archived");
+  const leads = await prisma.$queryRaw<any[]>(Prisma.sql`
+    select
+      c.id::text as id,
+      c.name,
+      c.lead_source,
+      c.lead_temperature,
+      c.success_rating,
+      c.estimated_value,
+      c.created_at,
+      case when i.id is null then null else jsonb_build_object('name', i.name) end as industries,
+      case when cc.id is null then null else jsonb_build_object('name', cc.name) end as company_categories,
+      case when ps.id is null then null else jsonb_build_object('name', ps.name, 'color', ps.color) end as pipeline_stages,
+      case when p.id is null then null else jsonb_build_object('full_name', p.full_name, 'email', p.email) end as assigned_profile
+    from public.companies c
+    left join public.industries i on i.id = c.industry_id
+    left join public.company_categories cc on cc.id = c.category_id
+    left join public.pipeline_stages ps on ps.id = c.pipeline_stage_id
+    left join public.profiles p on p.id = c.assigned_user_id
+    where ${companyWhere}
+  `);
 
-  if (filters.industryId) {
-    baseQuery = baseQuery.eq("industry_id", filters.industryId);
-  }
-  if (filters.pipelineStageId) {
-    baseQuery = baseQuery.eq("pipeline_stage_id", filters.pipelineStageId);
-  }
-  if (filters.assignedUserId) {
-    baseQuery = baseQuery.eq("assigned_user_id", filters.assignedUserId);
-  }
-
-  const { data: allLeads } = await baseQuery;
-
-  const leads = allLeads || [];
-
-  const industryMap: { [key: string]: number } = {};
-  const categoryMap: { [key: string]: number } = {};
-  const sourceMap: { [key: string]: number } = {};
-  const userMap: { [key: string]: number } = {};
+  const industryMap: Record<string, number> = {};
+  const categoryMap: Record<string, number> = {};
+  const sourceMap: Record<string, number> = {};
+  const userMap: Record<string, number> = {};
 
   leads.forEach((l: any) => {
     const industry = l.industries?.name || "Unassigned";
@@ -329,25 +288,25 @@ export async function getLeadReport(filters: ReportFilters = {}): Promise<LeadRe
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const { data: leadsWithFollowups } = await supabase
-    .from("followups")
-    .select("company_id")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .gte("created_at", thirtyDaysAgo.toISOString());
+  const [leadsWithFollowups, leadsWithMeetings] = await Promise.all([
+    prisma.$queryRaw<Array<{ company_id: string }>>(Prisma.sql`
+      select distinct company_id::text as company_id
+      from public.followups
+      where organization_id = ${organization.id}::uuid
+        and status <> 'archived'
+        and created_at >= ${thirtyDaysAgo.toISOString()}::timestamptz
+    `),
+    prisma.$queryRaw<Array<{ company_id: string }>>(Prisma.sql`
+      select distinct company_id::text as company_id
+      from public.interactions
+      where organization_id = ${organization.id}::uuid
+        and status <> 'archived'
+        and created_at >= ${thirtyDaysAgo.toISOString()}::timestamptz
+    `),
+  ]);
 
-  const { data: leadsWithMeetings } = await supabase
-    .from("interactions")
-    .select("company_id")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .gte("created_at", thirtyDaysAgo.toISOString());
-
-  const followupCompanyIds = new Set((leadsWithFollowups || []).map((f: any) => f.company_id));
-  const meetingCompanyIds = new Set((leadsWithMeetings || []).map((m: any) => m.company_id));
-
-  const leadsWithoutFollowup = leads.filter((l: any) => !followupCompanyIds.has(l.id));
-  const leadsWithoutMeeting = leads.filter((l: any) => !meetingCompanyIds.has(l.id));
+  const followupCompanyIds = new Set(leadsWithFollowups.map((f) => f.company_id));
+  const meetingCompanyIds = new Set(leadsWithMeetings.map((m) => m.company_id));
 
   return {
     leadsByIndustry: Object.entries(industryMap).map(([industry, count]) => ({ industry, count })),
@@ -356,8 +315,8 @@ export async function getLeadReport(filters: ReportFilters = {}): Promise<LeadRe
     leadsByAssignedUser: Object.entries(userMap).map(([user, count]) => ({ user, count })),
     hotLeads,
     recentlyAddedLeads,
-    leadsWithoutFollowup,
-    leadsWithoutMeeting,
+    leadsWithoutFollowup: leads.filter((l: any) => !followupCompanyIds.has(l.id)),
+    leadsWithoutMeeting: leads.filter((l: any) => !meetingCompanyIds.has(l.id)),
   };
 }
 
@@ -372,83 +331,68 @@ export type PipelineReportData = {
 
 export async function getPipelineReport(filters: ReportFilters = {}): Promise<PipelineReportData> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
+  const companyWhere = buildCompanyWhere(organization.id, filters);
 
-  const { data: allCompanies } = await supabase
-    .from("companies")
-    .select(`
-      id, estimated_value, success_rating,
-      pipeline_stages(id, name, color, is_won, is_lost, position)
-    `)
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .order("pipeline_stages(position)");
+  const companies = await prisma.$queryRaw<any[]>(Prisma.sql`
+    select
+      c.id::text as id,
+      c.estimated_value,
+      c.success_rating,
+      case when ps.id is null then null else jsonb_build_object(
+        'id', ps.id,
+        'name', ps.name,
+        'color', ps.color,
+        'is_won', ps.is_won,
+        'is_lost', ps.is_lost,
+        'position', ps.position
+      ) end as pipeline_stages
+    from public.companies c
+    left join public.pipeline_stages ps on ps.id = c.pipeline_stage_id
+    where ${companyWhere}
+    order by ps.position asc nulls last
+  `);
 
-  const companies = allCompanies || [];
-
-  const stageMap: { [key: string]: { count: number; value: number; color: string; ratings: number[] } } = {};
+  const stageMap: Record<string, { count: number; value: number; color: string; ratings: number[] }> = {};
   let wonCount = 0;
   let lostCount = 0;
 
   companies.forEach((c: any) => {
     const stage = c.pipeline_stages;
     if (!stage) return;
-
     const stageName = stage.name;
     if (!stageMap[stageName]) {
       stageMap[stageName] = { count: 0, value: 0, color: stage.color || "#888", ratings: [] };
     }
-    stageMap[stageName].count++;
-    stageMap[stageName].value += c.estimated_value || 0;
-    if (c.success_rating) {
-      stageMap[stageName].ratings.push(c.success_rating);
-    }
-    if (stage.is_won) wonCount++;
-    if (stage.is_lost) lostCount++;
+    stageMap[stageName].count += 1;
+    stageMap[stageName].value += Number(c.estimated_value || 0);
+    if (c.success_rating) stageMap[stageName].ratings.push(Number(c.success_rating));
+    if (stage.is_won) wonCount += 1;
+    if (stage.is_lost) lostCount += 1;
   });
-
-  const companiesByStage = Object.entries(stageMap).map(([stage, data]) => ({
-    stage,
-    count: data.count,
-    color: data.color,
-  }));
-
-  const pipelineValueByStage = Object.entries(stageMap).map(([stage, data]) => ({
-    stage,
-    value: data.value,
-    color: data.color,
-  }));
-
-  const avgRatingByStage = Object.entries(stageMap)
-    .filter(([, data]) => data.ratings.length > 0)
-    .map(([stage, data]) => ({
-      stage,
-      avgRating: data.ratings.reduce((a, b) => a + b, 0) / data.ratings.length,
-    }));
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const recentInteractions = await prisma.$queryRaw<Array<{ company_id: string }>>(Prisma.sql`
+    select distinct company_id::text as company_id
+    from public.interactions
+    where organization_id = ${organization.id}::uuid
+      and status <> 'archived'
+      and meeting_datetime >= ${thirtyDaysAgo.toISOString()}::timestamptz
+  `);
 
-  const { data: recentInteractions } = await supabase
-    .from("interactions")
-    .select("company_id, meeting_datetime")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .gte("meeting_datetime", thirtyDaysAgo.toISOString());
-
-  const recentCompanyIds = new Set((recentInteractions || []).map((i: any) => i.company_id));
+  const recentCompanyIds = new Set(recentInteractions.map((i) => i.company_id));
   const stuckLeads = companies.filter((c: any) => !recentCompanyIds.has(c.id) && !c.pipeline_stages?.is_won && !c.pipeline_stages?.is_lost);
-
-  const negotiationStage = Object.values(stageMap).length > 0 ? "Negotiation" : null;
   const negotiationStageLeads = companies.filter((c: any) => {
     const stageName = c.pipeline_stages?.name?.toLowerCase() || "";
     return stageName.includes("negotiat") || stageName.includes("proposal");
   });
 
   return {
-    companiesByStage,
-    pipelineValueByStage,
-    avgRatingByStage,
+    companiesByStage: Object.entries(stageMap).map(([stage, data]) => ({ stage, count: data.count, color: data.color })),
+    pipelineValueByStage: Object.entries(stageMap).map(([stage, data]) => ({ stage, value: data.value, color: data.color })),
+    avgRatingByStage: Object.entries(stageMap)
+      .filter(([, data]) => data.ratings.length > 0)
+      .map(([stage, data]) => ({ stage, avgRating: data.ratings.reduce((a, b) => a + b, 0) / data.ratings.length })),
     wonLostCount: { won: wonCount, lost: lostCount },
     stuckLeads,
     negotiationStageLeads,
@@ -467,56 +411,58 @@ export type MeetingReportData = {
 
 export async function getMeetingReport(filters: ReportFilters = {}): Promise<MeetingReportData> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const { start, end } = buildDateRange(filters);
 
-  const { data: meetings } = await supabase
-    .from("interactions")
-    .select(`
-      id, meeting_datetime, interaction_type, success_rating, lead_temperature, next_action, next_followup_date,
-      companies(id, name),
-      contact_persons(id, name),
-      profiles!created_by(full_name, email)
-    `)
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .gte("meeting_datetime", start.toISOString())
-    .lte("meeting_datetime", end.toISOString())
-    .order("meeting_datetime", { ascending: false });
+  const meetings = await prisma.$queryRaw<any[]>(Prisma.sql`
+    select
+      i.id::text as id,
+      i.meeting_datetime,
+      i.interaction_type,
+      i.success_rating,
+      i.lead_temperature,
+      i.next_action,
+      i.next_followup_at,
+      case when c.id is null then null else jsonb_build_object('id', c.id, 'name', c.name) end as companies,
+      case when cp.id is null then null else jsonb_build_object('id', cp.id, 'name', cp.name) end as contact_persons,
+      case when p.id is null then null else jsonb_build_object('full_name', p.full_name, 'email', p.email) end as profiles
+    from public.interactions i
+    left join public.companies c on c.id = i.company_id
+    left join public.contact_persons cp on cp.id = i.contact_person_id
+    left join public.profiles p on p.id = i.created_by
+    where i.organization_id = ${organization.id}::uuid
+      and i.status <> 'archived'
+      and i.meeting_datetime >= ${start.toISOString()}::timestamptz
+      and i.meeting_datetime <= ${end.toISOString()}::timestamptz
+    order by i.meeting_datetime desc
+  `);
 
-  const allMeetings = meetings || [];
-
-  const typeMap: { [key: string]: number } = {};
-  const userMap: { [key: string]: number } = {};
+  const typeMap: Record<string, number> = {};
+  const userMap: Record<string, number> = {};
   const ratings: number[] = [];
 
-  allMeetings.forEach((m: any) => {
+  meetings.forEach((m: any) => {
     typeMap[m.interaction_type] = (typeMap[m.interaction_type] || 0) + 1;
     const user = m.profiles?.full_name || m.profiles?.email || "Unknown";
     userMap[user] = (userMap[user] || 0) + 1;
-    if (m.success_rating) ratings.push(m.success_rating);
+    if (m.success_rating) ratings.push(Number(m.success_rating));
   });
 
-  const hotMeetings = allMeetings.filter((m: any) => m.lead_temperature === "hot" || m.lead_temperature === "very_hot");
-  const meetingsWithNextAction = allMeetings.filter((m: any) => m.next_action);
-
-  const { data: meetingsWithFollowups } = await supabase
-    .from("followups")
-    .select("interaction_id")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived");
-
-  const followupInteractionIds = new Set((meetingsWithFollowups || []).map((f: any) => f.interaction_id));
-  const meetingsWithoutFollowup = allMeetings.filter((m: any) => !followupInteractionIds.has(m.id));
+  const meetingsWithFollowups = await prisma.$queryRaw<Array<{ interaction_id: string | null }>>(Prisma.sql`
+    select interaction_id::text as interaction_id
+    from public.followups
+    where organization_id = ${organization.id}::uuid
+      and status <> 'archived'
+  `);
+  const followupInteractionIds = new Set(meetingsWithFollowups.map((f) => f.interaction_id).filter(Boolean));
 
   return {
-    totalMeetings: allMeetings.length,
+    totalMeetings: meetings.length,
     meetingsByType: Object.entries(typeMap).map(([type, count]) => ({ type, count })),
     meetingsBySalesperson: Object.entries(userMap).map(([user, count]) => ({ user, count })),
     avgSuccessRating: ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0,
-    hotMeetings,
-    meetingsWithNextAction,
-    meetingsWithoutFollowup,
+    hotMeetings: meetings.filter((m: any) => m.lead_temperature === "hot" || m.lead_temperature === "very_hot"),
+    meetingsWithNextAction: meetings.filter((m: any) => m.next_action),
+    meetingsWithoutFollowup: meetings.filter((m: any) => !followupInteractionIds.has(m.id)),
   };
 }
 
@@ -534,62 +480,65 @@ export type FollowupReportData = {
 
 export async function getFollowupReport(filters: ReportFilters = {}): Promise<FollowupReportData> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const { start, end } = buildDateRange(filters);
 
   const now = new Date();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
-  const { data: allFollowups } = await supabase
-    .from("followups")
-    .select(`
-      id, title, scheduled_at, completed_at, status, priority, followup_type,
-      companies(id, name),
-      assigned_profile:profiles!assigned_user_id(full_name, email),
-      created_profile:profiles!created_by(full_name, email)
-    `)
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .order("scheduled_at", { ascending: true });
-
-  const followups = allFollowups || [];
+  const followups = await prisma.$queryRaw<any[]>(Prisma.sql`
+    select
+      f.id::text as id,
+      f.title,
+      f.scheduled_at,
+      f.completed_at,
+      f.status,
+      f.priority,
+      f.followup_type,
+      case when c.id is null then null else jsonb_build_object('id', c.id, 'name', c.name) end as companies,
+      case when ap.id is null then null else jsonb_build_object('full_name', ap.full_name, 'email', ap.email) end as assigned_profile,
+      case when cp.id is null then null else jsonb_build_object('full_name', cp.full_name, 'email', cp.email) end as created_profile
+    from public.followups f
+    left join public.companies c on c.id = f.company_id
+    left join public.profiles ap on ap.id = f.assigned_user_id
+    left join public.profiles cp on cp.id = f.created_by
+    where f.organization_id = ${organization.id}::uuid
+      and f.status <> 'archived'
+    order by f.scheduled_at asc
+  `);
 
   const todaysFollowups = followups.filter((f: any) => {
     const sched = new Date(f.scheduled_at);
-    return sched >= new Date(now.setHours(0, 0, 0, 0)) && sched <= todayEnd && f.status === "pending";
+    return sched >= todayStart && sched <= todayEnd && f.status === "pending";
   });
-
   const upcomingFollowups = followups.filter((f: any) => {
     const sched = new Date(f.scheduled_at);
     return sched > todayEnd && sched <= end && f.status === "pending";
   });
-
   const completedFollowups = followups.filter((f: any) => {
+    if (!f.completed_at) return false;
     const completed = new Date(f.completed_at);
     return completed >= start && completed <= end && f.status === "completed";
   });
-
   const overdueFollowups = followups.filter((f: any) => {
     const sched = new Date(f.scheduled_at);
     return sched < now && f.status === "pending";
   });
 
-  const userMap: { [key: string]: number } = {};
-  const priorityMap: { [key: string]: number } = {};
-  const statusMap: { [key: string]: number } = {};
-  const completionTrend: { [key: string]: number } = {};
+  const userMap: Record<string, number> = {};
+  const priorityMap: Record<string, number> = {};
+  const statusMap: Record<string, number> = {};
+  const completionTrend: Record<string, number> = {};
 
   followups.forEach((f: any) => {
     const user = f.assigned_profile?.full_name || f.assigned_profile?.email || "Unassigned";
     userMap[user] = (userMap[user] || 0) + 1;
-
     priorityMap[f.priority] = (priorityMap[f.priority] || 0) + 1;
-
     statusMap[f.status] = (statusMap[f.status] || 0) + 1;
-
     if (f.completed_at) {
-      const dateKey = f.completed_at.slice(0, 10);
+      const dateKey = new Date(f.completed_at).toISOString().slice(0, 10);
       completionTrend[dateKey] = (completionTrend[dateKey] || 0) + 1;
     }
   });
@@ -599,14 +548,13 @@ export async function getFollowupReport(filters: ReportFilters = {}): Promise<Fo
     return sched >= start && sched <= end;
   }).length;
   const totalCompleted = completedFollowups.length;
-  const completionRate = totalScheduled > 0 ? (totalCompleted / totalScheduled) * 100 : 0;
 
   return {
     todaysFollowups,
     upcomingFollowups,
     completedFollowups,
     overdueFollowups,
-    completionRate,
+    completionRate: totalScheduled > 0 ? (totalCompleted / totalScheduled) * 100 : 0,
     followupsByUser: Object.entries(userMap).map(([user, count]) => ({ user, count })),
     followupsByPriority: Object.entries(priorityMap).map(([priority, count]) => ({ priority, count })),
     followupStatusDistribution: Object.entries(statusMap).map(([status, count]) => ({ status, count })),
@@ -624,29 +572,35 @@ export type DocumentReportData = {
 
 export async function getDocumentReport(filters: ReportFilters = {}): Promise<DocumentReportData> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const { start, end } = buildDateRange(filters);
 
-  const { data: documents } = await supabase
-    .from("documents")
-    .select(`
-      id, title, document_type, status, file_name, file_extension, file_size_mb, created_at,
-      companies(id, name),
-      uploaded_profile:profiles!uploaded_by(full_name, email)
-    `)
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .gte("created_at", start.toISOString())
-    .lte("created_at", end.toISOString())
-    .order("created_at", { ascending: false });
+  const documents = await prisma.$queryRaw<any[]>(Prisma.sql`
+    select
+      d.id::text as id,
+      d.title,
+      d.document_type,
+      d.status,
+      d.file_name,
+      d.file_extension,
+      d.file_size_mb,
+      d.created_at,
+      case when c.id is null then null else jsonb_build_object('id', c.id, 'name', c.name) end as companies,
+      case when up.id is null then null else jsonb_build_object('full_name', up.full_name, 'email', up.email) end as uploaded_profile
+    from public.documents d
+    left join public.companies c on c.id = d.company_id
+    left join public.profiles up on up.id = d.uploaded_by
+    where d.organization_id = ${organization.id}::uuid
+      and d.status <> 'archived'
+      and d.created_at >= ${start.toISOString()}::timestamptz
+      and d.created_at <= ${end.toISOString()}::timestamptz
+    order by d.created_at desc
+  `);
 
-  const allDocs = documents || [];
+  const typeMap: Record<string, number> = {};
+  const statusMap: Record<string, number> = {};
+  const userMap: Record<string, number> = {};
 
-  const typeMap: { [key: string]: number } = {};
-  const statusMap: { [key: string]: number } = {};
-  const userMap: { [key: string]: number } = {};
-
-  allDocs.forEach((d: any) => {
+  documents.forEach((d: any) => {
     typeMap[d.document_type] = (typeMap[d.document_type] || 0) + 1;
     statusMap[d.status] = (statusMap[d.status] || 0) + 1;
     const user = d.uploaded_profile?.full_name || d.uploaded_profile?.email || "Unknown";
@@ -654,11 +608,11 @@ export async function getDocumentReport(filters: ReportFilters = {}): Promise<Do
   });
 
   return {
-    totalDocuments: allDocs.length,
+    totalDocuments: documents.length,
     documentsByType: Object.entries(typeMap).map(([type, count]) => ({ type, count })),
     documentsByStatus: Object.entries(statusMap).map(([status, count]) => ({ status, count })),
     documentsByUser: Object.entries(userMap).map(([user, count]) => ({ user, count })),
-    recentDocuments: allDocs.slice(0, 20),
+    recentDocuments: documents.slice(0, 20),
   };
 }
 
@@ -674,29 +628,33 @@ export type HelpRequestReportData = {
 
 export async function getHelpRequestReport(filters: ReportFilters = {}): Promise<HelpRequestReportData> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
   const { start, end } = buildDateRange(filters);
 
-  const { data: helpRequests } = await supabase
-    .from("help_requests")
-    .select(`
-      id, title, help_type, priority, status, created_at,
-      companies(id, name),
-      requested_profile:profiles!requested_by(full_name, email),
-      assigned_profile:profiles!assigned_to(full_name, email)
-    `)
-    .eq("organization_id", organization.id)
-    .neq("status", "archived")
-    .gte("created_at", start.toISOString())
-    .lte("created_at", end.toISOString())
-    .order("created_at", { ascending: false });
+  const allRequests = await prisma.$queryRaw<any[]>(Prisma.sql`
+    select
+      hr.id::text as id,
+      hr.title,
+      hr.help_type,
+      hr.priority,
+      hr.status,
+      hr.created_at,
+      case when c.id is null then null else jsonb_build_object('id', c.id, 'name', c.name) end as companies,
+      case when rp.id is null then null else jsonb_build_object('full_name', rp.full_name, 'email', rp.email) end as requested_profile,
+      case when ap.id is null then null else jsonb_build_object('full_name', ap.full_name, 'email', ap.email) end as assigned_profile
+    from public.help_requests hr
+    left join public.companies c on c.id = hr.company_id
+    left join public.profiles rp on rp.id = hr.requested_by
+    left join public.profiles ap on ap.id = hr.assigned_to
+    where hr.organization_id = ${organization.id}::uuid
+      and hr.status <> 'archived'
+      and hr.created_at >= ${start.toISOString()}::timestamptz
+      and hr.created_at <= ${end.toISOString()}::timestamptz
+    order by hr.created_at desc
+  `);
 
-  const allRequests = helpRequests || [];
-
-  const typeMap: { [key: string]: number } = {};
-  const userMap: { [key: string]: number } = {};
-  const priorityMap: { [key: string]: number } = {};
-
+  const typeMap: Record<string, number> = {};
+  const userMap: Record<string, number> = {};
+  const priorityMap: Record<string, number> = {};
   let openCount = 0;
   let urgentCount = 0;
   let resolvedCount = 0;
@@ -704,10 +662,8 @@ export async function getHelpRequestReport(filters: ReportFilters = {}): Promise
   allRequests.forEach((r: any) => {
     typeMap[r.help_type] = (typeMap[r.help_type] || 0) + 1;
     priorityMap[r.priority] = (priorityMap[r.priority] || 0) + 1;
-
     const assignedUser = r.assigned_profile?.full_name || r.assigned_profile?.email || "Unassigned";
     userMap[assignedUser] = (userMap[assignedUser] || 0) + 1;
-
     if (r.status === "open" || r.status === "in_progress") openCount++;
     if (r.priority === "urgent") urgentCount++;
     if (r.status === "resolved") resolvedCount++;
@@ -744,57 +700,56 @@ export type TeamPerformanceReportData = {
 
 export async function getTeamPerformanceReport(filters: ReportFilters = {}): Promise<TeamPerformanceReportData> {
   const organization = await requireOrganization();
-  const supabase = await createClient();
+  const companyWhere = buildCompanyWhere(organization.id, filters);
 
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, full_name, email")
-    .eq("organization_id", organization.id);
+  const [profiles, companies, meetings, followups, documents, helpRequests] = await Promise.all([
+    prisma.$queryRaw<Array<{ id: string; full_name: string | null; email: string }>>(Prisma.sql`
+      select id::text as id, full_name, email
+      from public.profiles
+      where organization_id = ${organization.id}::uuid
+    `),
+    prisma.$queryRaw<Array<{ assigned_user_id: string | null; estimated_value: number | null; lead_temperature: string | null }>>(Prisma.sql`
+      select assigned_user_id::text as assigned_user_id, estimated_value, lead_temperature
+      from public.companies c
+      where ${companyWhere}
+    `),
+    prisma.$queryRaw<Array<{ created_by: string | null }>>(Prisma.sql`
+      select created_by::text as created_by
+      from public.interactions
+      where organization_id = ${organization.id}::uuid
+        and status <> 'archived'
+    `),
+    prisma.$queryRaw<Array<{ assigned_user_id: string | null; status: string; created_by: string | null; scheduled_at: Date }>>(Prisma.sql`
+      select assigned_user_id::text as assigned_user_id, status, created_by::text as created_by, scheduled_at
+      from public.followups
+      where organization_id = ${organization.id}::uuid
+        and status <> 'archived'
+    `),
+    prisma.$queryRaw<Array<{ uploaded_by: string | null }>>(Prisma.sql`
+      select uploaded_by::text as uploaded_by
+      from public.documents
+      where organization_id = ${organization.id}::uuid
+        and status <> 'archived'
+    `),
+    prisma.$queryRaw<Array<{ requested_by: string | null; assigned_to: string | null; status: string }>>(Prisma.sql`
+      select requested_by::text as requested_by, assigned_to::text as assigned_to, status
+      from public.help_requests
+      where organization_id = ${organization.id}::uuid
+        and status <> 'archived'
+    `),
+  ]);
 
-  const { data: companies } = await supabase
-    .from("companies")
-    .select("assigned_user_id, estimated_value, lead_temperature")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived");
-
-  const { data: meetings } = await supabase
-    .from("interactions")
-    .select("created_by")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived");
-
-  const { data: followups } = await supabase
-    .from("followups")
-    .select("assigned_user_id, status, created_by")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived");
-
-  const { data: documents } = await supabase
-    .from("documents")
-    .select("uploaded_by")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived");
-
-  const { data: helpRequests } = await supabase
-    .from("help_requests")
-    .select("requested_by, assigned_to")
-    .eq("organization_id", organization.id)
-    .neq("status", "archived");
-
-  const teamStats = (profiles || []).map((profile: any) => {
-    const userCompanies = (companies || []).filter((c: any) => c.assigned_user_id === profile.id);
-    const userMeetings = (meetings || []).filter((m: any) => m.created_by === profile.id);
-    const userFollowupsCreated = (followups || []).filter((f: any) => f.created_by === profile.id);
-    const userFollowupsCompleted = userFollowupsCreated.filter((f: any) => f.status === "completed");
-    const userOverdueFollowups = userFollowupsCreated.filter((f: any) => {
-      const sched = new Date(f.scheduled_at);
-      return f.status === "pending" && sched < new Date();
-    });
-    const userDocuments = (documents || []).filter((d: any) => d.uploaded_by === profile.id);
-    const userHelpRequestsCreated = (helpRequests || []).filter((h: any) => h.requested_by === profile.id);
-    const userHelpRequestsResolved = (helpRequests || []).filter((h: any) => h.assigned_to === profile.id && h.status === "resolved");
-    const userHotLeads = userCompanies.filter((c: any) => c.lead_temperature === "hot" || c.lead_temperature === "very_hot");
-    const userPipelineValue = userCompanies.reduce((sum: number, c: any) => sum + (c.estimated_value || 0), 0);
+  const teamStats = profiles.map((profile) => {
+    const userCompanies = companies.filter((c) => c.assigned_user_id === profile.id);
+    const userMeetings = meetings.filter((m) => m.created_by === profile.id);
+    const userFollowupsCreated = followups.filter((f) => f.created_by === profile.id);
+    const userFollowupsCompleted = userFollowupsCreated.filter((f) => f.status === "completed");
+    const userOverdueFollowups = userFollowupsCreated.filter((f) => f.status === "pending" && new Date(f.scheduled_at) < new Date());
+    const userDocuments = documents.filter((d) => d.uploaded_by === profile.id);
+    const userHelpRequestsCreated = helpRequests.filter((h) => h.requested_by === profile.id);
+    const userHelpRequestsResolved = helpRequests.filter((h) => h.assigned_to === profile.id && h.status === "resolved");
+    const userHotLeads = userCompanies.filter((c) => c.lead_temperature === "hot" || c.lead_temperature === "very_hot");
+    const userPipelineValue = userCompanies.reduce((sum, c) => sum + Number(c.estimated_value || 0), 0);
 
     return {
       userId: profile.id,
