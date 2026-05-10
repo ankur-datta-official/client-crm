@@ -78,6 +78,8 @@ model User {
   createdDocuments                    Document[]                 @relation("DocumentCreatedBy")
   updatedDocuments                    Document[]                 @relation("DocumentUpdatedBy")
   uploadedDocuments                   Document[]                 @relation("DocumentUploadedBy")
+  adminAuditLogsAuthored              AdminAuditLog[]            @relation("AdminAuditLogActor")
+  adminAuditLogsTargeting             AdminAuditLog[]            @relation("AdminAuditLogTargetUser")
 
   @@index([organization_id])
   @@index([manager_user_id])
@@ -95,7 +97,6 @@ model Organization {
   owner                     User                       @relation("OrganizationOwner", fields: [owner_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   members                   User[]                     @relation("OrganizationMembers")
   roles                     Role[]
-  subscriptions             OrganizationSubscription[]
   notifications             Notification[]
   teamInvitations           TeamInvitation[]
   userRoles                 UserRole[]
@@ -104,6 +105,7 @@ model Organization {
   profileTargets            UserPerformanceTarget[]
   pipelineStages            PipelineStage[]
   activityLogs              ActivityLog[]
+  adminAuditLogs            AdminAuditLog[]
   industries                Industry[]
   companyCategories         CompanyCategory[]
   contactPersons            ContactPerson[]
@@ -184,62 +186,63 @@ model UserRole {
 }
 
 model Notification {
-  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id String       @db.Uuid
-  user_id         String       @db.Uuid
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id String?       @db.Uuid
+  user_id         String        @db.Uuid
+  scope           String        @default("workspace")
   type            String
   title           String
   message         String
   link            String?
-  is_read         Boolean      @default(false)
-  read_at         DateTime?    @db.Timestamptz(6)
-  created_at      DateTime     @default(now()) @db.Timestamptz(6)
-  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  user            User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  payload         Json?
+  is_read         Boolean       @default(false)
+  read_at         DateTime?     @db.Timestamptz(6)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  organization    Organization? @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([organization_id, user_id, is_read, created_at(sort: Desc)])
+  @@index([organization_id, user_id, created_at(sort: Desc)])
+  @@index([user_id, scope, is_read, created_at(sort: Desc)])
   @@index([user_id, created_at(sort: Desc)])
   @@map("notifications")
 }
 
-model SubscriptionPlan {
+model SignupRequest {
   id                        String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                      String                     @unique
-  slug                      String                     @unique
-  description               String?
-  monthly_price             Decimal                    @default(0) @db.Decimal(10, 2)
-  max_users                 Int?
-  max_organizations         Int                        @default(1)
-  max_companies             Int?
-  storage_limit_mb          Int?
-  file_size_limit_mb        Int?
-  custom_pipeline           Boolean                    @default(false)
-  pdf_export                Boolean                    @default(false)
-  csv_import                Boolean                    @default(false)
-  advanced_reports          Boolean                    @default(false)
-  audit_log                 Boolean                    @default(false)
-  is_active                 Boolean                    @default(true)
+  email                     String                     @unique
+  full_name                 String?
+  password_hash             String
+  status                    String                     @default("pending")
+  requested_at              DateTime                   @default(now()) @db.Timestamptz(6)
+  approved_at               DateTime?                  @db.Timestamptz(6)
+  rejected_at               DateTime?                  @db.Timestamptz(6)
+  completed_at              DateTime?                  @db.Timestamptz(6)
+  reviewed_by               String?                    @db.Uuid
+  notes                     String?
+  last_passkey_issued_at    DateTime?                  @db.Timestamptz(6)
   created_at                DateTime                   @default(now()) @db.Timestamptz(6)
-  organizationSubscriptions OrganizationSubscription[]
+  updated_at                DateTime                   @default(now()) @db.Timestamptz(6)
 
-  @@map("subscription_plans")
+  @@index([status, requested_at(sort: Desc)])
+  @@index([reviewed_by])
+  @@map("signup_requests")
 }
 
-model OrganizationSubscription {
-  id                       String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id          String           @unique @db.Uuid
-  plan_id                  String           @db.Uuid
-  status                   String           @default("trialing")
-  trial_starts_at          DateTime         @default(now()) @db.Timestamptz(6)
-  trial_ends_at            DateTime         @db.Timestamptz(6)
-  current_period_starts_at DateTime?        @db.Timestamptz(6)
-  current_period_ends_at   DateTime?        @db.Timestamptz(6)
-  created_at               DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at               DateTime         @default(now()) @db.Timestamptz(6)
-  organization             Organization     @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  plan                     SubscriptionPlan @relation(fields: [plan_id], references: [id], onDelete: Restrict)
+model AccessPasskey {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  signup_request_id String    @db.Uuid
+  email             String
+  token_hash        String    @unique
+  expires_at        DateTime  @db.Timestamptz(6)
+  used_at           DateTime? @db.Timestamptz(6)
+  issued_by         String?   @db.Uuid
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
 
-  @@map("organization_subscriptions")
+  @@index([signup_request_id, created_at(sort: Desc)])
+  @@index([email, used_at, expires_at])
+  @@index([issued_by])
+  @@map("access_passkeys")
 }
 
 model TeamInvitation {
@@ -394,6 +397,27 @@ model ActivityLog {
   actorUser       User?    @relation("ActivityLogActor", fields: [actor_user_id], references: [id], onDelete: SetNull)
 
   @@map("activity_logs")
+}
+
+model AdminAuditLog {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actor_user_id     String?   @db.Uuid
+  target_user_id    String?   @db.Uuid
+  organization_id   String?   @db.Uuid
+  action            String
+  entity_type       String
+  entity_id         String?
+  metadata          Json      @default("{}")
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  actorUser         User?     @relation("AdminAuditLogActor", fields: [actor_user_id], references: [id], onDelete: SetNull)
+  targetUser        User?     @relation("AdminAuditLogTargetUser", fields: [target_user_id], references: [id], onDelete: SetNull)
+  organization      Organization? @relation(fields: [organization_id], references: [id], onDelete: SetNull)
+
+  @@index([actor_user_id, created_at(sort: Desc)])
+  @@index([target_user_id, created_at(sort: Desc)])
+  @@index([organization_id, created_at(sort: Desc)])
+  @@index([action, created_at(sort: Desc)])
+  @@map("admin_audit_logs")
 }
 
 model Industry {

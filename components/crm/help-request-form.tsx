@@ -49,6 +49,14 @@ export function HelpRequestForm({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
+  const hasRelatedContext = Boolean(
+    helpRequest?.contact_person_id ||
+      helpRequest?.interaction_id ||
+      helpRequest?.followup_id ||
+      helpRequest?.document_id,
+  );
+  const hasAssignment = Boolean(helpRequest?.assigned_to);
+  const hasDetails = Boolean(helpRequest?.description || helpRequest?.resolution_note);
 
   const form = useForm<HelpRequestFormValues>({
     resolver: zodResolver(helpRequestSchema),
@@ -124,7 +132,7 @@ export function HelpRequestForm({
 
   return (
     <form className="space-y-5" onSubmit={form.handleSubmit((values) => onSubmit(values, "save"))}>
-      <FormRequiredNote message="Company, help type, title, priority, and status are required. Use the optional sections when you need to link the request to other CRM records or assign internal ownership." />
+      <FormRequiredNote message="Company, help type, title, priority, and status are required. Use the optional sections when you need to link the request to other CRM records or assign internal ownership." dismissible />
       {(defaultCompanyId || defaultContactId || defaultInteractionId || defaultFollowupId || defaultDocumentId) && !helpRequest ? (
         <FormContextHint message="This request was opened from an existing CRM record, so related context has been preselected where possible." />
       ) : null}
@@ -176,7 +184,7 @@ export function HelpRequestForm({
         </SelectField>
       </FormSection>
 
-      <FormSection title="Related CRM Context" description="Link this request to existing records for better context." optional>
+      <FormSection title="Related CRM Context" description="Link this request to existing records for better context." optional collapsible defaultCollapsed={!hasRelatedContext}>
         <SelectField label="Contact Person" error={fieldErrors.contact_person_id} {...form.register("contact_person_id")}>
           <option value="">No contact selected</option>
           {availableContacts.map((c) => (
@@ -214,7 +222,7 @@ export function HelpRequestForm({
         </SelectField>
       </FormSection>
 
-      <FormSection title="Assignment & Priority" description="Set who should handle this and how urgent it is." optional>
+      <FormSection title="Assignment & Priority" description="Set who should handle this and how urgent it is." optional collapsible defaultCollapsed={!hasAssignment}>
         <SelectField label="Assigned To" error={fieldErrors.assigned_to} {...form.register("assigned_to")}>
           <option value="">Unassigned</option>
           {teamMembers.map((m) => (
@@ -225,8 +233,8 @@ export function HelpRequestForm({
         </SelectField>
       </FormSection>
 
-      <FormSection title="Details" description="Additional information about this help request." optional contentClassName="grid-cols-1">
-        <div className="space-y-2">
+      <FormSection title="Details" description="Additional information about this help request." optional collapsible defaultCollapsed={!hasDetails} contentClassName="grid-cols-1 md:grid-cols-1 xl:grid-cols-1">
+        <div className="w-full min-w-0 space-y-2">
           <Label htmlFor="description">Description</Label>
           <textarea
             id="description"

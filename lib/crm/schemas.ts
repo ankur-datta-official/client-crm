@@ -170,7 +170,7 @@ export const companySchema = z.object({
   city: optionalString,
   country: optionalString,
   success_rating: optionalNumber(z.coerce.number().int().min(1, "Success rating must be between 1 and 10.").max(10, "Success rating must be between 1 and 10.")),
-  lead_temperature: z.preprocess(emptyToUndefined, leadTemperatureSchema.optional()).transform((value) => value ?? "warm"),
+  lead_temperature: optionalEnum(["cold", "warm", "hot", "very_hot"]),
   estimated_value: optionalNumber(z.coerce.number().min(0, "Estimated value must be zero or greater.")),
   expected_closing_date: optionalDate,
   notes: optionalString,

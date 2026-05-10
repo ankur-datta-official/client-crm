@@ -4,7 +4,6 @@ import { getCurrentProfile, getCurrentUser, hasPermission } from "@/lib/auth/ses
 import { buildSampleImportWorkbook, parseCompaniesCsv, parseImportWorkbook } from "@/lib/crm/company-import-shared";
 import { runCompanyContactImport } from "@/lib/crm/company-import-runner";
 import { logServerError } from "@/lib/errors";
-import { checkFileSizeLimit, hasPlanFeatureForOrganization } from "@/lib/subscription/subscription-queries";
 
 export const runtime = "nodejs";
 
@@ -29,23 +28,10 @@ export async function POST(request: Request) {
 
     const organizationId = profile.organization_id;
 
-    const csvImportEnabled = await hasPlanFeatureForOrganization(organizationId, "csv_import");
-    if (!csvImportEnabled) {
-      return NextResponse.json(
-        { error: "Bulk import is not available on your current plan." },
-        { status: 403 },
-      );
-    }
-
     const formData = await request.formData();
     const file = formData.get("file");
     if (!file || !(file instanceof Blob)) {
       return NextResponse.json({ error: "Missing file field." }, { status: 400 });
-    }
-
-    const sizeCheck = await checkFileSizeLimit(file.size);
-    if (!sizeCheck.allowed) {
-      return NextResponse.json({ error: sizeCheck.message ?? "File too large." }, { status: 400 });
     }
 
     const name = "name" in file && typeof file.name === "string" ? file.name : "upload";
@@ -122,11 +108,6 @@ export async function GET() {
 
     if (!profile?.organization_id || !profile.is_active) {
       return NextResponse.json({ error: "Workspace not available." }, { status: 400 });
-    }
-
-    const csvImportEnabled = await hasPlanFeatureForOrganization(profile.organization_id, "csv_import");
-    if (!csvImportEnabled) {
-      return NextResponse.json({ error: "Bulk import is not available on your current plan." }, { status: 403 });
     }
 
     const buf = buildSampleImportWorkbook();

@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { CompanyStatusBadge } from "@/components/crm/company-status-badge";
-import { FeatureLockCard } from "@/components/subscription/feature-lock-card";
 import type { CompanyCategory, Industry, PipelineStage, RecordStatus } from "@/lib/crm/types";
 import {
   archiveCompanyCategoryAction,
@@ -166,12 +165,8 @@ export function CompanyCategorySettingsManager({ categories }: { categories: Com
 
 export function PipelineSettingsManager({
   stages,
-  canCustomize = true,
-  upgradeMessage,
 }: {
   stages: PipelineStage[];
-  canCustomize?: boolean;
-  upgradeMessage?: string;
 }) {
   const [editing, setEditing] = useState<EditingState<PipelineStage>>(null);
   const [error, setError] = useState<string | null>(null);
@@ -212,15 +207,12 @@ export function PipelineSettingsManager({
           <CheckboxField label="Lost" name="is_lost" defaultChecked={editing?.is_lost ?? false} />
           <CheckboxField label="Active" name="is_active" defaultChecked={editing?.is_active ?? true} />
           <div className="flex items-end gap-2">
-            <Button type="submit" disabled={isPending || !canCustomize}>{editing ? "Update" : "Add"}</Button>
-            {editing ? <Button type="button" variant="outline" onClick={() => setEditing(null)} disabled={!canCustomize}>Cancel</Button> : null}
+            <Button type="submit" disabled={isPending}>{editing ? "Update" : "Add"}</Button>
+            {editing ? <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button> : null}
           </div>
         </form>
       }
     >
-      {!canCustomize && upgradeMessage ? (
-        <FeatureLockCard featureName="Custom Pipeline" description={upgradeMessage} />
-      ) : null}
       {stages.map((stage) => (
         <ListRow
           key={stage.id}
@@ -229,14 +221,11 @@ export function PipelineSettingsManager({
           badge={<span className="inline-flex items-center gap-2 text-sm"><span className="size-3 rounded-full" style={{ background: stage.color }} />{stage.is_active ? "Active" : "Archived"}</span>}
           meta={stage.is_won ? "Won stage" : stage.is_lost ? "Lost stage" : undefined}
           onEdit={() => {
-            if (!canCustomize) return;
             setEditing(stage);
           }}
           onArchive={() => {
-            if (!canCustomize) return;
             setArchiveId(stage.id);
           }}
-          actionsDisabled={!canCustomize}
         />
       ))}
       <ConfirmModal

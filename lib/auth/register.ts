@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { isFixedSuperAdminEmail } from "@/lib/auth/super-admin";
 
 export async function ensureRegistrationEmailAvailable(email: string) {
   const normalizedEmail = email.trim().toLowerCase();
@@ -53,6 +54,7 @@ export async function createRegisteredUser(input: {
   const now = new Date();
   const email = input.email.trim().toLowerCase();
   const fullName = input.fullName?.trim() || null;
+  const isSuperAdmin = isFixedSuperAdminEmail(email);
 
   if (input.provider === "betterauth") {
     const userId = crypto.randomUUID();
@@ -65,7 +67,7 @@ export async function createRegisteredUser(input: {
         name: fullName,
         password_hash: input.passwordHash,
         is_active: true,
-        is_super_admin: false,
+        is_super_admin: isSuperAdmin,
         created_at: now,
         updated_at: now,
         accounts: {
@@ -91,7 +93,7 @@ export async function createRegisteredUser(input: {
       name: fullName,
       password_hash: input.passwordHash,
       is_active: true,
-      is_super_admin: false,
+      is_super_admin: isSuperAdmin,
       updated_at: now,
     },
   });

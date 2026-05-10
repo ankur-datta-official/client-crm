@@ -5,6 +5,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
+import { resolveSuperAdminAccess } from "@/lib/auth/super-admin";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -58,6 +59,11 @@ export const authOptions: NextAuthOptions = {
           throw new Error("This account is inactive. Please contact your administrator.");
         }
 
+        const isSuperAdmin = resolveSuperAdminAccess({
+          email: user.email,
+          isSuperAdmin: user.is_super_admin,
+        });
+
         return {
           id: user.id,
           email: user.email,
@@ -65,7 +71,7 @@ export const authOptions: NextAuthOptions = {
           image: user.image,
           organizationId: user.organization_id,
           isActive: user.is_active,
-          isSuperAdmin: user.is_super_admin,
+          isSuperAdmin,
         };
       },
     }),
@@ -106,7 +112,10 @@ export const authOptions: NextAuthOptions = {
       token.picture = currentUser.image;
       token.organizationId = currentUser.organization_id;
       token.isActive = currentUser.is_active;
-      token.isSuperAdmin = currentUser.is_super_admin;
+      token.isSuperAdmin = resolveSuperAdminAccess({
+        email: currentUser.email,
+        isSuperAdmin: currentUser.is_super_admin,
+      });
       return token;
     },
     async session({ session, token }) {

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { sidebarItems } from "@/config/navigation";
+import { ChevronLeft, ChevronRight, LayoutDashboard, X } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
+import { sidebarItems, type SidebarItem } from "@/config/navigation";
 import { UserAvatar } from "@/components/shared/user-avatar";
 import { Button } from "@/components/ui/button";
 import type { Profile } from "@/lib/auth/session";
@@ -20,7 +21,7 @@ type AppSidebarProps = {
 
 const navSections = ["Overview", "Workspace", "Performance", "Admin"] as const;
 
-const tourAnchorByHref: Partial<Record<(typeof sidebarItems)[number]["href"], string>> = {
+const tourAnchorByHref: Record<string, string> = {
   "/dashboard": "tour-nav-dashboard",
   "/companies": "tour-nav-companies",
   "/contacts": "tour-nav-contacts",
@@ -32,6 +33,7 @@ const tourAnchorByHref: Partial<Record<(typeof sidebarItems)[number]["href"], st
 };
 
 const navIconStyles: Record<string, string> = {
+  "/admin": "bg-[linear-gradient(135deg,#fef3c7,#fde68a)] text-amber-700 ring-1 ring-amber-200/80",
   "/dashboard": "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-sky-700 ring-1 ring-sky-200/80",
   "/companies": "bg-[linear-gradient(135deg,#ecfeff,#cffafe)] text-cyan-700 ring-1 ring-cyan-200/80",
   "/contacts": "bg-[linear-gradient(135deg,#f0fdfa,#ccfbf1)] text-teal-700 ring-1 ring-teal-200/80",
@@ -44,7 +46,6 @@ const navIconStyles: Record<string, string> = {
   "/rewards": "bg-[linear-gradient(135deg,#ecfeff,#cffafe)] text-cyan-700 ring-1 ring-cyan-200/80",
   "/reports": "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-blue-700 ring-1 ring-blue-200/80",
   "/team": "bg-[linear-gradient(135deg,#f0fdfa,#ccfbf1)] text-teal-700 ring-1 ring-teal-200/80",
-  "/subscription": "bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] text-slate-700 ring-1 ring-slate-200/80",
   "/settings": "bg-[linear-gradient(135deg,#f1f5f9,#e2e8f0)] text-slate-700 ring-1 ring-slate-200/80",
 };
 
@@ -57,6 +58,12 @@ export function AppSidebar({
   profile,
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const itemsWithAdmin: Array<SidebarItem | { title: string; href: string; icon: typeof LayoutDashboard; section: typeof navSections[number] }> = profile?.is_super_admin
+    ? [
+        ...sidebarItems,
+        { title: "Admin Console", href: "/admin", icon: LayoutDashboard, section: "Admin" as const },
+      ]
+    : [...sidebarItems];
 
   return (
     <>
@@ -77,18 +84,7 @@ export function AppSidebar({
         <div className={cn("relative border-b border-slate-200/80 pb-4 pt-5 dark:border-slate-800/80", collapsed ? "px-3" : "px-4")}>
           <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(226,232,240,0.55),rgba(248,250,252,0))] dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.78),rgba(15,23,42,0))]" />
           <div className={cn("relative flex items-start gap-3", collapsed ? "flex-col items-center justify-center" : "justify-between")}>
-            <Link href="/dashboard" className={cn("relative flex min-w-0 items-center", collapsed ? "justify-center" : "gap-3")}>
-              <span className="relative flex size-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-[linear-gradient(145deg,#0f172a,#243447)] text-white shadow-[0_14px_26px_rgba(15,23,42,0.18)] dark:border-slate-700/70 dark:shadow-[0_14px_26px_rgba(2,6,23,0.35)]">
-                <Building2 className="relative z-10 size-5" />
-                <span className="absolute -right-1 -top-1 size-3 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
-              </span>
-              {!collapsed ? (
-                <span className="min-w-0">
-                  <span className="block truncate text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">Client CRM</span>
-                  <span className="mt-0.5 block truncate text-xs font-medium text-slate-500 dark:text-slate-400">Sales Workspace</span>
-                </span>
-              ) : null}
-            </Link>
+            <BrandLogo compact={collapsed} />
             <div className={cn("items-center gap-2", collapsed ? "hidden" : "flex")}>
               <Button
                 className="hidden rounded-xl border border-slate-300 bg-white text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/70 hover:border-emerald-200 hover:bg-emerald-50/60 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-800 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 md:inline-flex"
@@ -120,7 +116,7 @@ export function AppSidebar({
         <nav className={cn("min-h-0 flex-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
           <div className="space-y-6 pb-4">
             {navSections.map((section) => {
-              const items = sidebarItems.filter((item) => item.section === section);
+              const items = itemsWithAdmin.filter((item) => item.section === section);
               if (items.length === 0) {
                 return null;
               }

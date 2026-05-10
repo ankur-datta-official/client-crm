@@ -14,9 +14,8 @@ import {
   validateUploadSize,
 } from "@/lib/storage/local";
 import { prisma } from "@/lib/prisma";
-import { checkFileSizeLimit, checkStorageLimit } from "@/lib/subscription/subscription-queries";
 import { documentSchema } from "@/lib/crm/schemas";
-import { createNotification } from "@/lib/notifications/notifications";
+import { createWorkspaceNotification } from "@/lib/notifications/notifications";
 
 async function insertActivityLog(action: string, entityType: string, entityId: string, metadata: Record<string, any> = {}) {
   const user = await requireAuth();
@@ -179,27 +178,6 @@ export async function createDocument(formData: FormData): Promise<DocumentAction
     return { ok: false, error: uploadMetadataValidation.message };
   }
 
-  const fileSizeLimit = await checkFileSizeLimit(file.size);
-  if (!fileSizeLimit.allowed) {
-    await insertActivityLog("subscription.limit_reached", "organization", organization.id, {
-      limit_type: "file_size",
-      projected: fileSizeLimit.projected,
-      max: fileSizeLimit.max,
-    });
-    return { ok: false, error: "File is larger than your plan limit." };
-  }
-
-  const storageLimit = await checkStorageLimit(file.size / (1024 * 1024));
-  if (!storageLimit.allowed) {
-    await insertActivityLog("subscription.limit_reached", "organization", organization.id, {
-      limit_type: "storage",
-      current: storageLimit.current,
-      projected: storageLimit.projected,
-      max: storageLimit.max,
-    });
-    return { ok: false, error: storageLimit.message ?? "Document storage limit has been reached for your current plan." };
-  }
-
   const rawValues = Object.fromEntries(formData.entries());
   const validated = documentSchema.safeParse(rawValues);
 
@@ -297,7 +275,7 @@ export async function createDocument(formData: FormData): Promise<DocumentAction
   const company = companyRows[0] ?? null;
 
   if (company?.assigned_user_id && company.assigned_user_id !== user.id) {
-    await createNotification({
+    await createWorkspaceNotification({
       userId: company.assigned_user_id,
       type: "document.uploaded",
       title: "New document uploaded",
@@ -338,27 +316,6 @@ export async function updateDocument(documentId: string, formData: FormData): Pr
     const uploadMetadataValidation = validateUploadMetadata(file);
     if (!uploadMetadataValidation.ok) {
       return { ok: false, error: uploadMetadataValidation.message };
-    }
-
-    const fileSizeLimit = await checkFileSizeLimit(file.size);
-    if (!fileSizeLimit.allowed) {
-      await insertActivityLog("subscription.limit_reached", "organization", organization.id, {
-        limit_type: "file_size",
-        projected: fileSizeLimit.projected,
-        max: fileSizeLimit.max,
-      });
-      return { ok: false, error: "File is larger than your plan limit." };
-    }
-
-    const storageLimit = await checkStorageLimit(file.size / (1024 * 1024), Number(document.file_size_mb ?? 0));
-    if (!storageLimit.allowed) {
-      await insertActivityLog("subscription.limit_reached", "organization", organization.id, {
-        limit_type: "storage",
-        current: storageLimit.current,
-        projected: storageLimit.projected,
-        max: storageLimit.max,
-      });
-      return { ok: false, error: storageLimit.message ?? "Document storage limit has been reached for your current plan." };
     }
 
     const safeFileName = sanitizeFileName(file.name);

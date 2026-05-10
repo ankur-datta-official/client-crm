@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getCurrentProfile, hasPermission, requireAuth, requireOrganization } from "@/lib/auth/session";
-import { createNotification } from "@/lib/notifications/notifications";
+import { createWorkspaceNotification } from "@/lib/notifications/notifications";
 import { prisma } from "@/lib/prisma";
 
 type MinimalProfile = {
@@ -191,7 +191,7 @@ export async function notifyDirectManagerOfActivity(input: {
     return;
   }
 
-  await createNotification({
+  await createWorkspaceNotification({
     userId: manager.id,
     type: "team.subordinate_activity",
     title: input.title,

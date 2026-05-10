@@ -2,6 +2,7 @@ export const PRODUCT_TOUR_VERSION = "v1";
 
 export type ProductTourState = {
   version: string;
+  audienceKey: string;
   lastCompletedVersion: string | null;
   lastSkippedVersion: string | null;
   lastStartedAt: string | null;
@@ -18,6 +19,7 @@ export type TourStep = {
 };
 
 export type ProductTourSession = {
+  audienceKey: string;
   version: string;
   index: number;
   mode: "auto" | "manual";

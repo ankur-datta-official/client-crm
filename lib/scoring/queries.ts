@@ -180,6 +180,14 @@ function isWalletSummaryFunctionUnavailableError(error: unknown) {
   );
 }
 
+function isWalletLeaderboardFunctionUnavailableError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2010" &&
+    error.message.includes("42883")
+  );
+}
+
 async function getWalletSummaryFromTables(userId?: string | null): Promise<WalletSummary | null> {
   if (!userId) {
     return null;
@@ -368,17 +376,103 @@ export async function getCompanyScoringHistory(companyId: string, limit = 50) {
 
 export async function getWalletLeaderboard(period: "all_time" | "weekly" | "daily" = "all_time", limit = 10) {
   const organization = await requireOrganization();
-  const rows = await prisma.$queryRaw<any[]>`
-    select *
-    from public.get_wallet_leaderboard(
-      ${organization.id}::uuid,
-      ${period},
-      ${limit}
+
+  try {
+    const rows = await prisma.$queryRaw<any[]>`
+      select *
+      from public.get_wallet_leaderboard(
+        ${organization.id}::uuid,
+        ${period},
+        ${limit}
+      )
+    `;
+
+    const mapped: LeaderboardEntry[] = rows.map((row) => ({
+      ...row,
+      wallet_balance: Number(row.wallet_balance),
+      wallet_lifetime_earned: Number(row.wallet_lifetime_earned),
+      period_points: Number(row.period_points),
+    }));
+
+    return resolveLeaderboardAvatarUrls(mapped);
+  } catch (error) {
+    if (isWalletLeaderboardFunctionUnavailableError(error)) {
+      return getWalletLeaderboardFromTables(organization.id, period, limit);
+    }
+
+    throw error;
+  }
+}
+
+async function getWalletLeaderboardFromTables(
+  organizationId: string,
+  period: "all_time" | "weekly" | "daily",
+  limit: number,
+) {
+  const leaderboardLimit = Math.max(1, limit);
+  const startAt =
+    period === "daily"
+      ? Prisma.sql`date_trunc('day', now())`
+      : period === "weekly"
+        ? Prisma.sql`date_trunc('week', now())`
+        : Prisma.sql`null::timestamptz`;
+
+  const rows = await prisma.$queryRaw<Array<{
+    user_id: string;
+    full_name: string | null;
+    email: string;
+    avatar_url: string | null;
+    wallet_balance: number | bigint;
+    wallet_lifetime_earned: number | bigint;
+    period_points: number | bigint;
+  }>>`
+    with bounds as (
+      select ${startAt} as start_at
+    ),
+    ranked as (
+      select
+        p.id::text as user_id,
+        p.full_name,
+        p.email,
+        p.avatar_url,
+        p.wallet_balance,
+        p.wallet_lifetime_earned,
+        coalesce(sum(
+          case
+            when b.start_at is null and wt.points_delta > 0 then wt.points_delta
+            when b.start_at is not null and wt.created_at >= b.start_at and wt.points_delta > 0 then wt.points_delta
+            else 0
+          end
+        ), 0)::integer as period_points
+      from public.profiles p
+      cross join bounds b
+      left join public.wallet_transactions wt
+        on wt.organization_id = p.organization_id
+       and wt.user_id = p.id
+      where p.organization_id = ${organizationId}::uuid
+        and p.is_active = true
+      group by p.id, p.full_name, p.email, p.avatar_url, p.wallet_balance, p.wallet_lifetime_earned
     )
+    select
+      ranked.user_id,
+      ranked.full_name,
+      ranked.email,
+      ranked.avatar_url,
+      ranked.wallet_balance,
+      ranked.wallet_lifetime_earned,
+      ranked.period_points
+    from ranked
+    where ranked.period_points > 0 or ${period} = 'all_time'
+    order by ranked.period_points desc, ranked.wallet_balance desc, ranked.email asc
+    limit ${leaderboardLimit}
   `;
 
-  const mapped: LeaderboardEntry[] = rows.map((row) => ({
-    ...row,
+  const mapped: LeaderboardEntry[] = rows.map((row, index) => ({
+    rank: index + 1,
+    user_id: row.user_id,
+    full_name: row.full_name,
+    email: row.email,
+    avatar_url: row.avatar_url,
     wallet_balance: Number(row.wallet_balance),
     wallet_lifetime_earned: Number(row.wallet_lifetime_earned),
     period_points: Number(row.period_points),
@@ -532,7 +626,6 @@ export async function getScoringAdminDashboard() {
     rewardRows,
     challengeRows,
     topActionRows,
-    leaderboardRows,
   ] = await Promise.all([
     prisma.$queryRaw<any[]>`
       select *
@@ -564,15 +657,9 @@ export async function getScoringAdminDashboard() {
       where organization_id = ${organization.id}::uuid
         and points_delta > 0
     `,
-    prisma.$queryRaw<any[]>`
-      select *
-      from public.get_wallet_leaderboard(
-        ${organization.id}::uuid,
-        'all_time',
-        10
-      )
-    `,
   ]);
+
+  const leaderboard = await getWalletLeaderboard("all_time", 10);
 
   const topEarnActions = Object.entries(
     topActionRows.reduce<Record<string, number>>((acc, item) => {
@@ -582,13 +669,6 @@ export async function getScoringAdminDashboard() {
   )
     .map(([actionKey, totalPoints]) => ({ actionKey, totalPoints }))
     .sort((a, b) => b.totalPoints - a.totalPoints);
-
-  const leaderboard: LeaderboardEntry[] = leaderboardRows.map((row) => ({
-    ...row,
-    wallet_balance: Number(row.wallet_balance),
-    wallet_lifetime_earned: Number(row.wallet_lifetime_earned),
-    period_points: Number(row.period_points),
-  }));
 
   return {
     rules: rulesRows.map((row) => ({
@@ -606,6 +686,6 @@ export async function getScoringAdminDashboard() {
     rewards: dedupeRewards(rewardRows.map(mapReward)),
     challenges: dedupeChallenges(challengeRows.map(mapChallenge)),
     topEarnActions,
-    leaderboard: await resolveLeaderboardAvatarUrls(leaderboard),
+    leaderboard,
   };
 }

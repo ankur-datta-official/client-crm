@@ -1,28 +1,26 @@
 "use server";
 
 import { cache } from "react";
-import { getCurrentUser, requireOrganization } from "@/lib/auth/session";
+import { Prisma } from "@prisma/client";
+import { getCurrentProfile, getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+
+export type NotificationScope = "workspace" | "global";
+export type NotificationPayload = Record<string, unknown> | null;
 
 export type NotificationRow = {
   id: string;
-  organization_id: string;
+  organization_id: string | null;
   user_id: string;
+  scope: NotificationScope;
   type: string;
   title: string;
   message: string;
   link: string | null;
+  payload: NotificationPayload;
   is_read: boolean;
   read_at: string | null;
   created_at: string;
-};
-
-type CreateNotificationInput = {
-  userId: string;
-  type: string;
-  title: string;
-  message: string;
-  link?: string | null;
 };
 
 type NotificationCenterData = {
@@ -30,58 +28,181 @@ type NotificationCenterData = {
   unreadCount: number;
 };
 
+type NotificationDbRow = {
+  id: string;
+  organization_id: string | null;
+  user_id: string;
+  scope: string;
+  type: string;
+  title: string;
+  message: string;
+  link: string | null;
+  payload: NotificationPayload;
+  is_read: boolean;
+  read_at: Date | null;
+  created_at: Date;
+};
+
+type BaseNotificationInput = {
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string | null;
+  payload?: NotificationPayload;
+};
+
+type WorkspaceNotificationInput = BaseNotificationInput & {
+  organizationId?: string | null;
+};
+
+type GlobalNotificationInput = BaseNotificationInput;
+
+type NotificationViewer = {
+  userId: string;
+  organizationId: string | null;
+  isSuperAdmin: boolean;
+};
+
+function mapNotificationRow(row: NotificationDbRow): NotificationRow {
+  return {
+    id: row.id,
+    organization_id: row.organization_id,
+    user_id: row.user_id,
+    scope: row.scope === "global" ? "global" : "workspace",
+    type: row.type,
+    title: row.title,
+    message: row.message,
+    link: row.link,
+    payload: row.payload ?? null,
+    is_read: row.is_read,
+    read_at: row.read_at?.toISOString() ?? null,
+    created_at: row.created_at.toISOString(),
+  };
+}
+
+function toJsonbSql(payload: NotificationPayload | undefined) {
+  if (!payload) {
+    return Prisma.sql`null::jsonb`;
+  }
+
+  return Prisma.sql`${JSON.stringify(payload)}::jsonb`;
+}
+
+function buildVisibleNotificationWhereSql(viewer: NotificationViewer) {
+  if (viewer.isSuperAdmin) {
+    if (viewer.organizationId) {
+      return Prisma.sql`
+        n.user_id = ${viewer.userId}::uuid
+        and (
+          n.scope = 'global'
+          or (
+            n.scope = 'workspace'
+            and n.organization_id = ${viewer.organizationId}::uuid
+          )
+        )
+      `;
+    }
+
+    return Prisma.sql`
+      n.user_id = ${viewer.userId}::uuid
+      and n.scope = 'global'
+    `;
+  }
+
+  if (!viewer.organizationId) {
+    return Prisma.sql`
+      n.user_id = ${viewer.userId}::uuid
+      and 1 = 0
+    `;
+  }
+
+  return Prisma.sql`
+    n.user_id = ${viewer.userId}::uuid
+    and n.scope = 'workspace'
+    and n.organization_id = ${viewer.organizationId}::uuid
+  `;
+}
+
 const getNotificationCenterDataCached = cache(
-  async (organizationId: string, userId: string, limit: number): Promise<NotificationCenterData> => {
-    const [rows, unreadCount] = await prisma.$transaction([
-      prisma.notification.findMany({
-        where: {
-          organization_id: organizationId,
-          user_id: userId,
-        },
-        orderBy: {
-          created_at: "desc",
-        },
-        take: limit,
-      }),
-      prisma.notification.count({
-        where: {
-          organization_id: organizationId,
-          user_id: userId,
-          is_read: false,
-        },
-      }),
+  async (
+    userId: string,
+    organizationId: string,
+    isSuperAdmin: boolean,
+    limit: number,
+  ): Promise<NotificationCenterData> => {
+    const viewer: NotificationViewer = {
+      userId,
+      organizationId: organizationId || null,
+      isSuperAdmin,
+    };
+    const whereSql = buildVisibleNotificationWhereSql(viewer);
+
+    const [rows, unreadRows] = await Promise.all([
+      prisma.$queryRaw<NotificationDbRow[]>`
+        select
+          n.id::text as id,
+          n.organization_id::text as organization_id,
+          n.user_id::text as user_id,
+          n.scope,
+          n.type,
+          n.title,
+          n.message,
+          n.link,
+          n.payload,
+          n.is_read,
+          n.read_at,
+          n.created_at
+        from public.notifications n
+        where ${whereSql}
+        order by n.created_at desc
+        limit ${limit}
+      `,
+      prisma.$queryRaw<Array<{ count: bigint }>>`
+        select count(*)::bigint as count
+        from public.notifications n
+        where ${whereSql}
+          and n.is_read = false
+      `,
     ]);
 
     return {
-      notifications: rows.map((row) => ({
-        id: row.id,
-        organization_id: row.organization_id,
-        user_id: row.user_id,
-        type: row.type,
-        title: row.title,
-        message: row.message,
-        link: row.link,
-        is_read: row.is_read,
-        read_at: row.read_at?.toISOString() ?? null,
-        created_at: row.created_at.toISOString(),
-      })),
-      unreadCount,
+      notifications: rows.map(mapNotificationRow),
+      unreadCount: Number(unreadRows[0]?.count ?? 0),
     };
   },
 );
 
-export async function getNotificationCenterData(limit = 8): Promise<NotificationCenterData> {
-  const organization = await requireOrganization();
-  const user = await getCurrentUser();
+async function getNotificationViewer(): Promise<NotificationViewer | null> {
+  const [user, profile] = await Promise.all([getCurrentUser(), getCurrentProfile()]);
 
-  if (!user) {
+  if (!user || !profile?.is_active) {
+    return null;
+  }
+
+  return {
+    userId: user.id,
+    organizationId: profile.organization_id,
+    isSuperAdmin: profile.is_super_admin,
+  };
+}
+
+export async function getNotificationCenterData(limit = 8): Promise<NotificationCenterData> {
+  const viewer = await getNotificationViewer();
+
+  if (!viewer) {
     return {
       notifications: [],
       unreadCount: 0,
     };
   }
 
-  return getNotificationCenterDataCached(organization.id, user.id, limit);
+  return getNotificationCenterDataCached(
+    viewer.userId,
+    viewer.organizationId ?? "",
+    viewer.isSuperAdmin,
+    limit,
+  );
 }
 
 export async function getNotifications(limit = 8): Promise<NotificationRow[]> {
@@ -95,64 +216,203 @@ export async function getUnreadNotificationCount() {
 }
 
 export async function markNotificationAsRead(notificationId: string) {
-  const organization = await requireOrganization();
-  const user = await getCurrentUser();
+  const viewer = await getNotificationViewer();
 
-  if (!user) {
+  if (!viewer) {
     throw new Error("Authentication required.");
   }
 
-  await prisma.notification.updateMany({
-    data: {
-      is_read: true,
-      read_at: new Date(),
-    },
-    where: {
-      id: notificationId,
-      organization_id: organization.id,
-      user_id: user.id,
-    },
-  });
+  const whereSql = buildVisibleNotificationWhereSql(viewer);
+
+  await prisma.$executeRaw`
+    update public.notifications n
+    set
+      is_read = true,
+      read_at = now()
+    where n.id = ${notificationId}::uuid
+      and ${whereSql}
+  `;
 
   return { success: true };
 }
 
 export async function markAllNotificationsAsRead() {
-  const organization = await requireOrganization();
-  const user = await getCurrentUser();
+  const viewer = await getNotificationViewer();
 
-  if (!user) {
+  if (!viewer) {
     throw new Error("Authentication required.");
   }
 
-  await prisma.notification.updateMany({
-    data: {
-      is_read: true,
-      read_at: new Date(),
-    },
-    where: {
-      organization_id: organization.id,
-      user_id: user.id,
-      is_read: false,
-    },
-  });
+  const whereSql = buildVisibleNotificationWhereSql(viewer);
+
+  await prisma.$executeRaw`
+    update public.notifications n
+    set
+      is_read = true,
+      read_at = now()
+    where ${whereSql}
+      and n.is_read = false
+  `;
 
   return { success: true };
 }
 
-export async function createNotification(input: CreateNotificationInput) {
-  const organization = await requireOrganization();
+export async function createWorkspaceNotification(input: WorkspaceNotificationInput) {
+  const profile = await getCurrentProfile();
+  const organizationId = input.organizationId ?? profile?.organization_id ?? null;
 
-  await prisma.notification.create({
-    data: {
-      organization_id: organization.id,
-      user_id: input.userId,
-      type: input.type,
-      title: input.title,
-      message: input.message,
-      link: input.link ?? null,
-    },
-  });
+  if (!organizationId) {
+    throw new Error("Workspace notifications require an active organization.");
+  }
+
+  await prisma.$executeRaw`
+    insert into public.notifications (
+      organization_id,
+      user_id,
+      scope,
+      type,
+      title,
+      message,
+      link,
+      payload
+    )
+    values (
+      ${organizationId}::uuid,
+      ${input.userId}::uuid,
+      'workspace',
+      ${input.type},
+      ${input.title},
+      ${input.message},
+      ${input.link ?? null},
+      ${toJsonbSql(input.payload)}
+    )
+  `;
 
   return { success: true };
+}
+
+export async function createGlobalNotification(input: GlobalNotificationInput) {
+  await prisma.$executeRaw`
+    insert into public.notifications (
+      organization_id,
+      user_id,
+      scope,
+      type,
+      title,
+      message,
+      link,
+      payload
+    )
+    values (
+      null,
+      ${input.userId}::uuid,
+      'global',
+      ${input.type},
+      ${input.title},
+      ${input.message},
+      ${input.link ?? null},
+      ${toJsonbSql(input.payload)}
+    )
+  `;
+
+  return { success: true };
+}
+
+export async function createGlobalNotifications(input: {
+  userIds: string[];
+  type: string;
+  title: string;
+  message: string;
+  link?: string | null;
+  payload?: NotificationPayload;
+}) {
+  const uniqueUserIds = Array.from(new Set(input.userIds.filter(Boolean)));
+
+  if (uniqueUserIds.length === 0) {
+    return { success: true, count: 0 };
+  }
+
+  const valuesSql = Prisma.join(
+    uniqueUserIds.map((userId) => Prisma.sql`(
+      null,
+      ${userId}::uuid,
+      'global',
+      ${input.type},
+      ${input.title},
+      ${input.message},
+      ${input.link ?? null},
+      ${toJsonbSql(input.payload)}
+    )`),
+  );
+
+  await prisma.$executeRaw`
+    insert into public.notifications (
+      organization_id,
+      user_id,
+      scope,
+      type,
+      title,
+      message,
+      link,
+      payload
+    )
+    values ${valuesSql}
+  `;
+
+  return { success: true, count: uniqueUserIds.length };
+}
+
+export async function createWorkspaceNotifications(input: {
+  organizationId?: string | null;
+  userIds: string[];
+  type: string;
+  title: string;
+  message: string;
+  link?: string | null;
+  payload?: NotificationPayload;
+}) {
+  const profile = await getCurrentProfile();
+  const organizationId = input.organizationId ?? profile?.organization_id ?? null;
+  const uniqueUserIds = Array.from(new Set(input.userIds.filter(Boolean)));
+
+  if (!organizationId) {
+    throw new Error("Workspace notifications require an active organization.");
+  }
+
+  if (uniqueUserIds.length === 0) {
+    return { success: true, count: 0 };
+  }
+
+  const valuesSql = Prisma.join(
+    uniqueUserIds.map((userId) => Prisma.sql`(
+      ${organizationId}::uuid,
+      ${userId}::uuid,
+      'workspace',
+      ${input.type},
+      ${input.title},
+      ${input.message},
+      ${input.link ?? null},
+      ${toJsonbSql(input.payload)}
+    )`),
+  );
+
+  await prisma.$executeRaw`
+    insert into public.notifications (
+      organization_id,
+      user_id,
+      scope,
+      type,
+      title,
+      message,
+      link,
+      payload
+    )
+    values ${valuesSql}
+  `;
+
+  return { success: true, count: uniqueUserIds.length };
+}
+
+export async function createNotification(input: WorkspaceNotificationInput) {
+  return createWorkspaceNotification(input);
 }

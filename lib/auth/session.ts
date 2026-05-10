@@ -12,6 +12,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { resolveProfileAvatarUrl } from "@/lib/profile/profile-utils";
 import { resolveActiveWorkspaceIdForUser } from "@/lib/workspace/service";
+import { resolveSuperAdminAccess } from "@/lib/auth/super-admin";
 
 export type AuthUser = {
   id: string;
@@ -105,7 +106,10 @@ async function getPrismaProfileByUserId(userId: string): Promise<Profile | null>
     phone: data.phone,
     manager_user_id: data.manager_user_id,
     is_active: data.is_active,
-    is_super_admin: data.is_super_admin,
+    is_super_admin: resolveSuperAdminAccess({
+      email: data.email,
+      isSuperAdmin: data.is_super_admin,
+    }),
   };
 }
 
@@ -127,12 +131,16 @@ async function getPrismaOrganizationById(organizationId: string): Promise<Organi
 async function getPrismaUserPermissionsByUserId(userId: string): Promise<string[]> {
   const profile = await getPrismaProfileByUserId(userId);
 
-  if (!profile?.organization_id || !profile.is_active) {
+  if (!profile?.is_active) {
     return [];
   }
 
   if (profile.is_super_admin) {
     return ["*"];
+  }
+
+  if (!profile.organization_id) {
+    return [];
   }
 
   try {
@@ -224,6 +232,17 @@ export async function requireAuth(): Promise<AuthUser> {
   return user;
 }
 
+export async function requireActiveProfile() {
+  await requireAuth();
+  const profile = await getCurrentProfile();
+
+  if (profile && !profile.is_active) {
+    redirect("/account-inactive");
+  }
+
+  return profile;
+}
+
 export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const user = await getCurrentUser();
   return user ? getPrismaProfileByUserId(user.id) : null;
@@ -242,7 +261,7 @@ export const getCurrentOrganization = cache(async (): Promise<Organization | nul
 export const getCurrentAppContext = cache(async () => {
   const user = await requireAuth();
   const [profile, organization] = await Promise.all([
-    getCurrentProfile(),
+    requireActiveProfile(),
     getCurrentOrganization(),
   ]);
 
@@ -250,12 +269,7 @@ export const getCurrentAppContext = cache(async () => {
 });
 
 export async function requireOrganization(): Promise<Organization> {
-  await requireAuth();
-  const profile = await getCurrentProfile();
-
-  if (profile && !profile.is_active) {
-    redirect("/unauthorized");
-  }
+  const profile = await requireActiveProfile();
 
   const organization = await getCurrentOrganization();
 
@@ -264,6 +278,16 @@ export async function requireOrganization(): Promise<Organization> {
   }
 
   return organization;
+}
+
+export async function requireSuperAdmin() {
+  const profile = await requireActiveProfile();
+
+  if (!profile?.is_active || !profile.is_super_admin) {
+    redirect("/unauthorized");
+  }
+
+  return profile;
 }
 
 export const getUserPermissions = cache(async (): Promise<string[]> => {

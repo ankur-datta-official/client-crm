@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
@@ -33,9 +33,75 @@ export function NotificationCenter({
   const [notifications, setNotifications] = useState(initialNotifications);
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [isPending, startTransition] = useTransition();
+  const notificationsRef = useRef(initialNotifications);
+  const unreadCountRef = useRef(initialUnreadCount);
 
   const hasNotifications = notifications.length > 0;
   const unreadLabel = useMemo(() => (unreadCount > 9 ? "9+" : String(unreadCount)), [unreadCount]);
+
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
+
+  useEffect(() => {
+    unreadCountRef.current = unreadCount;
+  }, [unreadCount]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function refreshNotifications() {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/notifications", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as {
+          notifications: NotificationRow[];
+          unreadCount: number;
+        };
+
+        if (!isMounted) {
+          return;
+        }
+
+        const currentIds = notificationsRef.current.map((notification) => notification.id).join("|");
+        const nextIds = data.notifications.map((notification) => notification.id).join("|");
+        const currentUnread = unreadCountRef.current;
+
+        if (currentIds !== nextIds || currentUnread !== data.unreadCount) {
+          setNotifications(data.notifications);
+          setUnreadCount(data.unreadCount);
+        }
+      } catch {
+        // Keep the bell quiet on transient polling failures.
+      }
+    }
+
+    const intervalId = window.setInterval(refreshNotifications, 25000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshNotifications();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   function updateAsRead(notificationId: string) {
     setNotifications((current) =>
@@ -88,7 +154,7 @@ export function NotificationCenter({
           <Bell className="size-5 text-slate-600 dark:text-slate-300" />
           {unreadCount > 0 ? (
             <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-black text-white shadow-sm ring-2 ring-white dark:ring-slate-950">
-              {unreadCount}
+              {unreadLabel}
             </span>
           ) : null}
           <span className="sr-only">Notifications</span>

@@ -26,7 +26,7 @@ type ProductTourContextValue = {
 
 const ProductTourContext = createContext<ProductTourContextValue | null>(null);
 
-const SESSION_STORAGE_KEY = "crm-product-tour-session";
+const SESSION_STORAGE_PREFIX = "crm-product-tour-session";
 const AUTO_SEEN_STORAGE_PREFIX = "crm-product-tour-auto-seen";
 
 const accentStyles: Record<TourStep["accent"], string> = {
@@ -36,22 +36,31 @@ const accentStyles: Record<TourStep["accent"], string> = {
   violet: "from-violet-500 to-fuchsia-500",
 };
 
-function readStoredSession(version: string) {
+function getSessionStorageKey(version: string, audienceKey: string) {
+  return `${SESSION_STORAGE_PREFIX}:${version}:${audienceKey}`;
+}
+
+function readStoredSession(version: string, audienceKey: string) {
   if (typeof window === "undefined") {
     return null;
   }
 
   try {
-    const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(getSessionStorageKey(version, audienceKey));
     if (!raw) {
       return null;
     }
     const parsed = JSON.parse(raw) as ProductTourSession;
-    if (parsed.version !== version || parsed.index < 0 || parsed.index >= PRODUCT_TOUR_STEPS.length) {
+    if (
+      parsed.version !== version
+      || parsed.audienceKey !== audienceKey
+      || parsed.index < 0
+      || parsed.index >= PRODUCT_TOUR_STEPS.length
+    ) {
       return null;
     }
     if (parsed.mode === "auto") {
-      writeStoredSession(null);
+      writeStoredSession(version, audienceKey, null);
       return null;
     }
     return parsed;
@@ -60,37 +69,37 @@ function readStoredSession(version: string) {
   }
 }
 
-function writeStoredSession(session: ProductTourSession | null) {
+function writeStoredSession(version: string, audienceKey: string, session: ProductTourSession | null) {
   if (typeof window === "undefined") {
     return;
   }
 
   if (!session) {
-    window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    window.sessionStorage.removeItem(getSessionStorageKey(version, audienceKey));
     return;
   }
 
-  window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  window.sessionStorage.setItem(getSessionStorageKey(version, audienceKey), JSON.stringify(session));
 }
 
-function getAutoSeenStorageKey(version: string) {
-  return `${AUTO_SEEN_STORAGE_PREFIX}:${version}`;
+function getAutoSeenStorageKey(version: string, audienceKey: string) {
+  return `${AUTO_SEEN_STORAGE_PREFIX}:${version}:${audienceKey}`;
 }
 
-function hasSeenAutoTour(version: string) {
+function hasSeenAutoTour(version: string, audienceKey: string) {
   if (typeof window === "undefined") {
     return false;
   }
 
-  return window.localStorage.getItem(getAutoSeenStorageKey(version)) === "true";
+  return window.localStorage.getItem(getAutoSeenStorageKey(version, audienceKey)) === "true";
 }
 
-function markAutoTourSeen(version: string) {
+function markAutoTourSeen(version: string, audienceKey: string) {
   if (typeof window === "undefined") {
     return;
   }
 
-  window.localStorage.setItem(getAutoSeenStorageKey(version), "true");
+  window.localStorage.setItem(getAutoSeenStorageKey(version, audienceKey), "true");
 }
 
 export function ProductTourProvider({
@@ -117,8 +126,8 @@ export function ProductTourProvider({
   const step = PRODUCT_TOUR_STEPS[currentIndex];
 
   const clearSession = useCallback(() => {
-    writeStoredSession(null);
-  }, []);
+    writeStoredSession(initialState.version, initialState.audienceKey, null);
+  }, [initialState.audienceKey, initialState.version]);
 
   const beginTour = useCallback((nextMode: "auto" | "manual" = "manual", index = 0) => {
     setAutoStartSuppressed(false);
@@ -126,21 +135,22 @@ export function ProductTourProvider({
     setCurrentIndex(index);
     setOpen(true);
     if (nextMode === "manual") {
-      writeStoredSession({
+      writeStoredSession(initialState.version, initialState.audienceKey, {
+        audienceKey: initialState.audienceKey,
         version: initialState.version,
         index,
         mode: nextMode,
       });
     } else {
-      writeStoredSession(null);
-      markAutoTourSeen(initialState.version);
+      writeStoredSession(initialState.version, initialState.audienceKey, null);
+      markAutoTourSeen(initialState.version, initialState.audienceKey);
     }
 
     if (!hasStarted) {
       setHasStarted(true);
       void markProductTourStarted().catch(() => undefined);
     }
-  }, [hasStarted, initialState.version]);
+  }, [hasStarted, initialState.audienceKey, initialState.version]);
 
   const closeTour = useCallback(() => {
     setOpen(false);
@@ -151,38 +161,39 @@ export function ProductTourProvider({
 
   const handleDismiss = useCallback(() => {
     setAutoStartSuppressed(true);
-    markAutoTourSeen(initialState.version);
+    markAutoTourSeen(initialState.version, initialState.audienceKey);
     closeTour();
-  }, [closeTour, initialState.version]);
+  }, [closeTour, initialState.audienceKey, initialState.version]);
 
   const handleSkip = useCallback(() => {
     setAutoStartSuppressed(true);
-    markAutoTourSeen(initialState.version);
+    markAutoTourSeen(initialState.version, initialState.audienceKey);
     closeTour();
     void skipProductTour().catch(() => undefined);
-  }, [closeTour, initialState.version]);
+  }, [closeTour, initialState.audienceKey, initialState.version]);
 
   const handleComplete = useCallback(() => {
     setAutoStartSuppressed(true);
-    markAutoTourSeen(initialState.version);
+    markAutoTourSeen(initialState.version, initialState.audienceKey);
     closeTour();
     void completeProductTour()
       .then(() => {
         toast.success("Tutorial completed. You can restart it anytime from your profile menu or Settings.");
       })
       .catch(() => undefined);
-  }, [closeTour, initialState.version]);
+  }, [closeTour, initialState.audienceKey, initialState.version]);
 
   const goToIndex = useCallback((nextIndex: number) => {
     setCurrentIndex(nextIndex);
     if (mode === "manual") {
-      writeStoredSession({
+      writeStoredSession(initialState.version, initialState.audienceKey, {
+        audienceKey: initialState.audienceKey,
         version: initialState.version,
         index: nextIndex,
         mode,
       });
     }
-  }, [initialState.version, mode]);
+  }, [initialState.audienceKey, initialState.version, mode]);
 
   const handleNext = useCallback(() => {
     if (currentIndex >= PRODUCT_TOUR_STEPS.length - 1) {
@@ -204,7 +215,7 @@ export function ProductTourProvider({
       return;
     }
 
-    const stored = readStoredSession(initialState.version);
+    const stored = readStoredSession(initialState.version, initialState.audienceKey);
     if (stored) {
       const frameId = window.requestAnimationFrame(() => beginTour(stored.mode, stored.index));
       return () => window.cancelAnimationFrame(frameId);
@@ -213,13 +224,13 @@ export function ProductTourProvider({
     if (!initialState.shouldAutoStart) {
       return;
     }
-    if (hasSeenAutoTour(initialState.version)) {
+    if (hasSeenAutoTour(initialState.version, initialState.audienceKey)) {
       return;
     }
 
     const frameId = window.requestAnimationFrame(() => beginTour("auto", 0));
     return () => window.cancelAnimationFrame(frameId);
-  }, [autoStartSuppressed, beginTour, hasStarted, initialState.shouldAutoStart, initialState.version, isHydrated, open]);
+  }, [autoStartSuppressed, beginTour, hasStarted, initialState.audienceKey, initialState.shouldAutoStart, initialState.version, isHydrated, open]);
 
   useEffect(() => {
     if (!open || !step) {

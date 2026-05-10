@@ -45,6 +45,9 @@ export function DocumentForm({
   const [isPending, startTransition] = useTransition();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const hasRelatedContext = Boolean(document?.contact_person_id || document?.interaction_id || document?.followup_id);
+  const hasSubmissionDetails = Boolean(document?.submitted_to || document?.submitted_at || document?.expiry_date);
+  const hasRemarks = Boolean(document?.remarks);
 
   const form = useForm<DocumentFormValues>({
     resolver: zodResolver(documentSchema),
@@ -138,7 +141,7 @@ export function DocumentForm({
 
   return (
     <form className="space-y-5" onSubmit={form.handleSubmit((values) => onSubmit(values, "save"))}>
-      <FormRequiredNote message="Company, document title, type, and a file are required for new uploads. Everything else is optional metadata you can return to later." />
+      <FormRequiredNote message="Company, document title, type, and a file are required for new uploads. Everything else is optional metadata you can return to later." dismissible />
       {(initialCompanyId || initialContactId || initialInteractionId || initialFollowupId) && !document ? (
         <FormContextHint message="This upload was opened from existing CRM context, so related records are preselected where possible." />
       ) : null}
@@ -209,7 +212,7 @@ export function DocumentForm({
         />
       </FormSection>
 
-      <FormSection title="Related CRM Context" description="Link this document to contacts, meetings, or follow-ups." optional contentClassName="md:grid-cols-2 xl:grid-cols-3">
+      <FormSection title="Related CRM Context" description="Link this document to contacts, meetings, or follow-ups." optional collapsible defaultCollapsed={!hasRelatedContext} contentClassName="md:grid-cols-2 xl:grid-cols-3">
         <SelectField
           label="Contact Person"
           error={form.formState.errors.contact_person_id?.message ?? serverFieldErrors.contact_person_id}
@@ -249,7 +252,7 @@ export function DocumentForm({
         </SelectField>
       </FormSection>
 
-      <FormSection title="Submission Details" description="Tracking where and when the document was submitted." optional contentClassName="md:grid-cols-2 xl:grid-cols-4">
+      <FormSection title="Submission Details" description="Tracking where and when the document was submitted." optional collapsible defaultCollapsed={!hasSubmissionDetails} contentClassName="md:grid-cols-2 xl:grid-cols-4">
         <Field label="Submitted To" error={form.formState.errors.submitted_to?.message ?? serverFieldErrors.submitted_to}>
           <Input {...form.register("submitted_to")} placeholder="Person or Department" />
         </Field>
@@ -263,8 +266,8 @@ export function DocumentForm({
         </Field>
       </FormSection>
 
-      <FormSection title="Additional Notes" description="Internal remarks and notes about this document." optional contentClassName="grid-cols-1">
-        <div className="space-y-2">
+      <FormSection title="Additional Notes" description="Internal remarks and notes about this document." optional collapsible defaultCollapsed={!hasRemarks} contentClassName="grid-cols-1 md:grid-cols-1 xl:grid-cols-1">
+        <div className="w-full min-w-0 space-y-2">
           <Label htmlFor="remarks">Remarks</Label>
           <textarea
             id="remarks"

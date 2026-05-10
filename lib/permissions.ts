@@ -21,6 +21,7 @@ export const ALL_PERMISSION_KEYS = Array.from(
 export type AppPermissionKey = (typeof ALL_PERMISSION_KEYS)[number];
 
 export const PROTECTED_ROUTE_RULES = [
+  { prefix: "/admin", permission: null },
   { prefix: "/dashboard", permission: "dashboard.view" },
   { prefix: "/companies", permission: "companies.view" },
   { prefix: "/contacts", permission: "contacts.view" },
@@ -31,7 +32,6 @@ export const PROTECTED_ROUTE_RULES = [
   { prefix: "/need-help", permission: "help_requests.view" },
   { prefix: "/reports", permission: "reports.view" },
   { prefix: "/team", permission: "team.view" },
-  { prefix: "/subscription", permission: "subscription.view" },
   { prefix: "/settings", permission: "settings.view" },
   { prefix: "/onboarding", permission: null },
 ] as const;

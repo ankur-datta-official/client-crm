@@ -10,7 +10,6 @@ import {
   parsePrimaryContactFlag,
 } from "@/lib/crm/company-import-shared";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
-import { checkCompanyLimitForOrganization } from "@/lib/subscription/subscription-queries";
 
 export type CompanyImportResult = {
   companiesImported: number;
@@ -126,12 +125,6 @@ export async function runCompanyContactImport(params: {
 
       if (companyNameToId.has(key)) {
         errors.push(`${label}: company '${rawName}' already exists in this workspace.`);
-        continue;
-      }
-
-      const limit = await checkCompanyLimitForOrganization(organizationId, 1);
-      if (!limit.allowed) {
-        errors.push(`${label}: ${limit.message ?? "Company limit reached."}`);
         continue;
       }
 

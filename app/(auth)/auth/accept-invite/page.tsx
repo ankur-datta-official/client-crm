@@ -120,7 +120,7 @@ export default async function AcceptInvitePage({ searchParams }: AcceptInvitePag
     <Card>
       <CardHeader>
         <CardTitle>Join {invitation.organization_name}</CardTitle>
-        <CardDescription>Review your invitation, then sign in or create the invited account to continue.</CardDescription>
+        <CardDescription>Review your invitation, then sign in or request the invited account to continue.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="rounded-lg border bg-muted/30 p-4">
@@ -176,7 +176,7 @@ export default async function AcceptInvitePage({ searchParams }: AcceptInvitePag
               <p className="mt-2">
                 {existingInvitee
                   ? `Sign in with ${invitation.email} to review and accept the workspace invitation.`
-                  : `Create an account with ${invitation.email}, verify the email, then come back here to accept access.`}
+                  : `Request an account with ${invitation.email}, complete the admin passkey step, then come back here to accept access.`}
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -192,7 +192,7 @@ export default async function AcceptInvitePage({ searchParams }: AcceptInvitePag
               ) : (
                 <>
                   <Button asChild className="flex-1">
-                    <Link href={registerHref}>Create account to accept</Link>
+                    <Link href={registerHref}>Request account to accept</Link>
                   </Button>
                   <Button asChild variant="outline" className="flex-1">
                     <Link href={loginHref}>Already have an account?</Link>

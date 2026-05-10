@@ -59,7 +59,7 @@ export function WorkspaceForm() {
             <Building2 className="size-5" />
           </div>
           <CardTitle>Organization details</CardTitle>
-          <CardDescription>This creates your tenant, trial subscription, roles, and pipeline stages.</CardDescription>
+          <CardDescription>This creates your workspace, roles, and pipeline stages.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>

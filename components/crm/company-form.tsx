@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormActionBar, FormContextHint, FormRequiredNote, FormSection } from "@/components/shared/form-helpers";
-import { companySchema, type CompanyFormValues } from "@/lib/crm/schemas";
+import { SuccessRatingSlider } from "@/components/crm/success-rating-slider";
+import { companySchema, temperatureFromRating, type CompanyFormValues } from "@/lib/crm/schemas";
 import type { Company, CompanyCategory, Industry, PipelineStage, TeamMemberOption } from "@/lib/crm/types";
 import { createCompanyAction, updateCompanyAction } from "@/lib/crm/actions";
 
@@ -28,6 +29,7 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
   const [serverError, setServerError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, string>>({});
+  const [temperatureTouched, setTemperatureTouched] = useState(Boolean(company?.lead_temperature));
   const [isPending, startTransition] = useTransition();
   const form = useForm<CompanyFormValues>({
     resolver: zodResolver(companySchema),
@@ -48,12 +50,29 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
       city: company?.city ?? "",
       country: company?.country ?? "Bangladesh",
       success_rating: company?.success_rating ?? "",
-      lead_temperature: company?.lead_temperature ?? "warm",
+      lead_temperature: company?.lead_temperature ?? "",
       estimated_value: company?.estimated_value ?? "",
       expected_closing_date: company?.expected_closing_date ?? "",
       notes: company?.notes ?? "",
     },
   });
+  const successRatingValue = form.watch("success_rating");
+  const hasContactDetails = Boolean(
+    company?.phone ||
+      company?.whatsapp ||
+      company?.email ||
+      company?.website ||
+      company?.address ||
+      company?.city ||
+      company?.country,
+  );
+  const hasSalesDetails = Boolean(
+    company?.success_rating !== null ||
+      company?.estimated_value !== null ||
+      company?.expected_closing_date ||
+      (company?.lead_temperature && company.lead_temperature !== "warm"),
+  );
+  const hasNotes = Boolean(company?.notes);
 
   function onSubmit(values: CompanyFormValues, mode: "save" | "addAnother" = "save") {
     setServerError(null);
@@ -85,7 +104,7 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
           city: "",
           country: "Bangladesh",
           success_rating: "",
-          lead_temperature: "warm",
+          lead_temperature: "",
           estimated_value: "",
           expected_closing_date: "",
           notes: "",
@@ -101,7 +120,10 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
 
   return (
     <form className="space-y-5" onSubmit={form.handleSubmit((values) => onSubmit(values, "save"))}>
-      <FormRequiredNote message="Company name, pipeline stage, and status are required. You can add contacts, meetings, follow-ups, and more detailed qualification fields later." />
+      <FormRequiredNote
+        message="Company name, pipeline stage, and status are required. You can add contacts, meetings, follow-ups, and more detailed qualification fields later."
+        dismissible
+      />
       <FormSection title="Basic Information" description="Core lead classification, ownership, and pipeline placement.">
         <Field label="Company name" required error={form.formState.errors.name?.message}>
           <Input {...form.register("name")} placeholder="Acme Enterprise" />
@@ -144,7 +166,13 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
         </SelectField>
       </FormSection>
 
-      <FormSection title="Contact Information" description="Public contact channels and location details." optional>
+      <FormSection
+        title="Contact Information"
+        description="Public contact channels and location details."
+        optional
+        collapsible
+        defaultCollapsed={!hasContactDetails}
+      >
         <div className="md:col-span-2 xl:col-span-4">
           <FormContextHint message="You can keep this lead lightweight for now. Add phone, email, and address details only when they are available." />
         </div>
@@ -157,31 +185,92 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
         <Field label="Country"><Input {...form.register("country")} /></Field>
       </FormSection>
 
-      <FormSection title="Sales Information" description="Qualification, value, temperature, and expected close timing." optional>
-        <Field label="Success rating" error={form.formState.errors.success_rating?.message ?? serverFieldErrors.success_rating}>
-          <Input type="number" min={1} max={10} {...form.register("success_rating")} />
-        </Field>
-        <SelectField label="Lead temperature" {...form.register("lead_temperature")}>
-          <option value="cold">Cold</option>
-          <option value="warm">Warm</option>
-          <option value="hot">Hot</option>
-          <option value="very_hot">Very Hot</option>
-        </SelectField>
-        <Field label="Estimated value" error={form.formState.errors.estimated_value?.message ?? serverFieldErrors.estimated_value}>
-          <Input type="number" min={0} step="0.01" {...form.register("estimated_value")} />
-        </Field>
-        <Field label="Expected closing date">
-          <Input type="date" {...form.register("expected_closing_date")} />
-        </Field>
-      </FormSection>
+        <FormSection
+          title="Sales Information"
+          description="Qualification, value, temperature, and expected close timing."
+          optional
+          collapsible
+          defaultCollapsed={!hasSalesDetails}
+          contentClassName="grid-cols-1 md:grid-cols-1 xl:grid-cols-1"
+        >
+          <div className="grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] xl:items-stretch">
+            <div className="min-w-0">
+              <Field label="Success rating" error={form.formState.errors.success_rating?.message ?? serverFieldErrors.success_rating}>
+                <input type="hidden" {...form.register("success_rating")} />
+                <SuccessRatingSlider
+                  value={successRatingValue}
+                  onChange={(nextValue) => {
+                    form.setValue("success_rating", String(nextValue), {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                      shouldValidate: true,
+                    });
+                    if (!temperatureTouched) {
+                      form.setValue("lead_temperature", temperatureFromRating(nextValue) ?? "", {
+                        shouldDirty: true,
+                        shouldTouch: true,
+                        shouldValidate: true,
+                      });
+                    }
+                  }}
+                  onClear={() => {
+                    form.setValue("success_rating", "", {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                      shouldValidate: true,
+                    });
+                    if (!temperatureTouched) {
+                      form.setValue("lead_temperature", "", {
+                        shouldDirty: true,
+                        shouldTouch: true,
+                        shouldValidate: true,
+                      });
+                    }
+                  }}
+                />
+              </Field>
+            </div>
+            <div className="grid min-w-0 content-start gap-4 md:grid-cols-2">
+              <SelectField
+                label="Lead temperature"
+                {...form.register("lead_temperature")}
+                onChange={(event) => {
+                  setTemperatureTouched(true);
+                  form.setValue("lead_temperature", event.target.value as CompanyFormValues["lead_temperature"]);
+                }}
+              >
+                <option value="">Auto from rating</option>
+                <option value="cold">Cold</option>
+                <option value="warm">Warm</option>
+                <option value="hot">Hot</option>
+                <option value="very_hot">Very Hot</option>
+              </SelectField>
+              <Field label="Estimated value" error={form.formState.errors.estimated_value?.message ?? serverFieldErrors.estimated_value}>
+                <Input type="number" min={0} step="0.01" {...form.register("estimated_value")} />
+              </Field>
+              <div className="md:col-span-2">
+                <Field label="Expected closing date">
+                  <Input type="date" {...form.register("expected_closing_date")} />
+                </Field>
+              </div>
+            </div>
+          </div>
+        </FormSection>
 
-      <FormSection title="Additional Notes" description="Internal context for qualification and next action planning." optional contentClassName="grid-cols-1">
-        <div className="space-y-2">
+      <FormSection
+        title="Additional Notes"
+        description="Internal context for qualification and next action planning."
+        optional
+        collapsible
+        defaultCollapsed={!hasNotes}
+        contentClassName="grid-cols-1 md:grid-cols-1 xl:grid-cols-1"
+      >
+        <div className="w-full min-w-0 space-y-2">
           <Label htmlFor="notes">Notes</Label>
           <textarea
             id="notes"
             {...form.register("notes")}
-            className="min-h-32 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-slate-800 dark:bg-slate-950/80 dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]"
+            className="block min-h-32 w-full min-w-0 resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 sm:min-h-36 dark:border-slate-800 dark:bg-slate-950/80 dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]"
             placeholder="Capture relationship context, requirements, risks, and decision notes."
           />
         </div>

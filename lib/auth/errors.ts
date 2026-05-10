@@ -39,10 +39,6 @@ export function getAuthErrorMessage(message: string) {
 export function getWorkspaceErrorMessage(message: string) {
   const normalized = message.toLowerCase();
 
-  if (normalized.includes("starter subscription plan is missing")) {
-    return "Starter plan is missing. Run the seed SQL file before creating a workspace.";
-  }
-
   if (normalized.includes("authentication is required") || normalized.includes("jwt")) {
     return "Your session expired. Please sign in again before creating a workspace.";
   }

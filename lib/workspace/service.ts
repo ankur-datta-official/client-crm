@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/crm/utils";
+import { resolveSuperAdminAccess } from "@/lib/auth/super-admin";
 import { PERMISSION_GROUPS } from "@/lib/team/types";
 import type { WorkspaceSummary } from "./types";
 
@@ -43,7 +44,6 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "reports.view", "reports.export",
     "team.view", "team.invite", "team.update_role", "team.deactivate",
     "settings.view", "settings.manage",
-    "subscription.view", "subscription.manage",
     "scoring.view", "scoring.manage", "rewards.manage", "leaderboard.view",
   ],
   "sales-manager": [
@@ -88,7 +88,6 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "reports.view",
     "team.view",
     "settings.view",
-    "subscription.view",
     "leaderboard.view",
   ],
 };
@@ -104,77 +103,6 @@ const DEFAULT_PIPELINE_STAGES = [
   ["Won", "won", 8, 100, true, false],
   ["Lost", "lost", 9, 0, false, true],
   ["Hold", "hold", 10, 20, false, false],
-] as const;
-
-const DEFAULT_SUBSCRIPTION_PLANS = [
-  {
-    name: "Starter",
-    slug: "starter",
-    description: "Essential CRM access for a small sales workspace.",
-    monthly_price: 0,
-    max_users: 5,
-    max_organizations: 1,
-    max_companies: 500,
-    storage_limit_mb: 1024,
-    file_size_limit_mb: 10,
-    custom_pipeline: false,
-    pdf_export: false,
-    csv_import: false,
-    advanced_reports: false,
-    audit_log: false,
-    is_active: true,
-  },
-  {
-    name: "Professional",
-    slug: "professional",
-    description: "Team-ready CRM plan with import tools and richer reporting.",
-    monthly_price: 29,
-    max_users: 15,
-    max_organizations: 1,
-    max_companies: 5000,
-    storage_limit_mb: 5120,
-    file_size_limit_mb: 25,
-    custom_pipeline: true,
-    pdf_export: true,
-    csv_import: true,
-    advanced_reports: true,
-    audit_log: false,
-    is_active: true,
-  },
-  {
-    name: "Business",
-    slug: "business",
-    description: "Higher-capacity CRM plan for growing revenue teams.",
-    monthly_price: 79,
-    max_users: 50,
-    max_organizations: 1,
-    max_companies: 25000,
-    storage_limit_mb: 20480,
-    file_size_limit_mb: 50,
-    custom_pipeline: true,
-    pdf_export: true,
-    csv_import: true,
-    advanced_reports: true,
-    audit_log: true,
-    is_active: true,
-  },
-  {
-    name: "Enterprise",
-    slug: "enterprise",
-    description: "Unlimited-scale CRM plan with full feature access.",
-    monthly_price: 199,
-    max_users: null,
-    max_organizations: 1,
-    max_companies: null,
-    storage_limit_mb: null,
-    file_size_limit_mb: 100,
-    custom_pipeline: true,
-    pdf_export: true,
-    csv_import: true,
-    advanced_reports: true,
-    audit_log: true,
-    is_active: true,
-  },
 ] as const;
 
 export function buildWorkspaceSlug(name: string) {
@@ -226,6 +154,7 @@ export async function canCreateWorkspaceForUser(
       id: userId,
     },
     select: {
+      email: true,
       is_super_admin: true,
     },
   });
@@ -234,7 +163,7 @@ export async function canCreateWorkspaceForUser(
     return false;
   }
 
-  if (user.is_super_admin) {
+  if (resolveSuperAdminAccess({ email: user.email, isSuperAdmin: user.is_super_admin })) {
     return true;
   }
 
@@ -401,6 +330,7 @@ export async function createWorkspaceForUser(userId: string, input: { name: stri
     },
     select: {
       id: true,
+      email: true,
       is_super_admin: true,
     },
   });
@@ -409,7 +339,7 @@ export async function createWorkspaceForUser(userId: string, input: { name: stri
     throw new Error("Authentication required.");
   }
 
-  if (!existingUser.is_super_admin) {
+  if (!resolveSuperAdminAccess({ email: existingUser.email, isSuperAdmin: existingUser.is_super_admin })) {
     const canCreateWorkspace = await canCreateWorkspaceForUser(userId);
 
     if (!canCreateWorkspace) {
@@ -435,26 +365,6 @@ export async function createWorkspaceForUser(userId: string, input: { name: stri
       skipDuplicates: true,
     });
 
-    await tx.subscriptionPlan.createMany({
-      data: DEFAULT_SUBSCRIPTION_PLANS.map((plan) => ({
-        ...plan,
-      })),
-      skipDuplicates: true,
-    });
-
-    const starterPlan = await tx.subscriptionPlan.findFirst({
-      where: {
-        slug: "starter",
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!starterPlan) {
-      throw new Error("Starter subscription plan is missing. Run seed migration first.");
-    }
-
     const organization = await tx.organization.create({
       data: {
         name: input.name.trim(),
@@ -475,16 +385,6 @@ export async function createWorkspaceForUser(userId: string, input: { name: stri
       data: {
         organization_id: organization.id,
         is_active: true,
-      },
-    });
-
-    await tx.organizationSubscription.create({
-      data: {
-        organization_id: organization.id,
-        plan_id: starterPlan.id,
-        status: "trialing",
-        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-        updated_at: now,
       },
     });
 

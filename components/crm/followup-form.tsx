@@ -41,6 +41,17 @@ export function FollowupForm({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
+  const hasContactMeetingContext = Boolean(followup?.contact_person_id || followup?.interaction_id);
+  const hasReminderSettings = Boolean(
+    followup?.reminder_before_minutes !== null &&
+      followup?.reminder_before_minutes !== undefined &&
+      followup.reminder_before_minutes !== 60,
+  );
+  const hasAssignmentPriority = Boolean(
+    followup?.assigned_user_id ||
+      (followup?.priority && followup.priority !== "medium"),
+  );
+  const hasDescription = Boolean(followup?.description);
 
   const form = useForm<FollowupFormValues>({
     resolver: zodResolver(followupSchema),
@@ -111,7 +122,7 @@ export function FollowupForm({
 
   return (
     <form className="space-y-5" onSubmit={form.handleSubmit((values) => onSubmit(values, "save"))}>
-      <FormRequiredNote message="Company, title, scheduled date, follow-up type, and status are required. Use the optional sections only when you need to connect the follow-up to a person, meeting, or reminder setup." />
+      <FormRequiredNote message="Company, title, scheduled date, follow-up type, and status are required. Use the optional sections only when you need to connect the follow-up to a person, meeting, or reminder setup." dismissible />
       {(defaultCompanyId || defaultContactId || defaultInteractionId) && !followup ? (
         <FormContextHint message="This follow-up was opened from an existing CRM record, so related context has been preselected where possible." />
       ) : null}
@@ -155,7 +166,7 @@ export function FollowupForm({
         </SelectField>
       </FormSection>
 
-      <FormSection title="Contact & Meeting Context" description="Connect this follow-up to a specific person or meeting." optional>
+      <FormSection title="Contact & Meeting Context" description="Connect this follow-up to a specific person or meeting." optional collapsible defaultCollapsed={!hasContactMeetingContext}>
         <SelectField label="Contact Person" error={fieldErrors.contact_person_id} {...form.register("contact_person_id")}>
           <option value="">No contact selected</option>
           {availableContacts.map((c) => (
@@ -175,13 +186,13 @@ export function FollowupForm({
         </SelectField>
       </FormSection>
 
-      <FormSection title="Reminder Settings" description="Set reminder timing for this follow-up." optional>
+      <FormSection title="Reminder Settings" description="Set reminder timing for this follow-up." optional collapsible defaultCollapsed={!hasReminderSettings}>
         <Field label="Reminder Before (minutes)" error={form.formState.errors.reminder_before_minutes?.message}>
           <Input type="number" min={0} {...form.register("reminder_before_minutes")} />
         </Field>
       </FormSection>
 
-      <FormSection title="Assignment & Priority" description="Set ownership and urgency for this follow-up." optional>
+      <FormSection title="Assignment & Priority" description="Set ownership and urgency for this follow-up." optional collapsible defaultCollapsed={!hasAssignmentPriority}>
         <SelectField label="Priority" {...form.register("priority")}>
           {followupPriorityOptions.map((p) => (
             <option key={p} value={p} className="capitalize">
@@ -200,8 +211,8 @@ export function FollowupForm({
         </SelectField>
       </FormSection>
 
-      <FormSection title="Notes" description="Additional details or context for this follow-up." optional contentClassName="grid-cols-1">
-        <div className="space-y-2">
+      <FormSection title="Notes" description="Additional details or context for this follow-up." optional collapsible defaultCollapsed={!hasDescription} contentClassName="grid-cols-1 md:grid-cols-1 xl:grid-cols-1">
+        <div className="w-full min-w-0 space-y-2">
           <Label htmlFor="description">Description</Label>
           <textarea
             id="description"

@@ -36,7 +36,7 @@ type CreateWorkspaceDialogProps = {
 export function CreateWorkspaceDialog({
   trigger,
   title = "Create another workspace",
-  description = "Start a new CRM workspace with its own subscription, roles, and pipeline stages.",
+  description = "Start a new CRM workspace with its own roles, pipeline stages, and team structure.",
 }: CreateWorkspaceDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);

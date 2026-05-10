@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAuth, requireOrganization } from "@/lib/auth/session";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
 import { followupSchema } from "@/lib/crm/schemas";
-import { createNotification } from "@/lib/notifications/notifications";
+import { createWorkspaceNotification } from "@/lib/notifications/notifications";
 import { prisma } from "@/lib/prisma";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
 import { ensureCanAssignUser, ensureCanWorkWithCompany, notifyDirectManagerOfActivity } from "@/lib/team/hierarchy";
@@ -151,7 +151,7 @@ export async function createFollowup(formData: FormData): Promise<CrmActionState
     });
 
     if (data.assigned_user_id && data.assigned_user_id !== user.id) {
-      await createNotification({
+      await createWorkspaceNotification({
         userId: data.assigned_user_id,
         type: "followup.assigned",
         title: "New follow-up assigned",
@@ -273,7 +273,7 @@ export async function completeFollowup(followupId: string): Promise<CrmActionSta
     });
 
     if (followup.created_by && followup.created_by !== user.id) {
-      await createNotification({
+      await createWorkspaceNotification({
         userId: followup.created_by,
         type: "followup.completed",
         title: "Follow-up completed",

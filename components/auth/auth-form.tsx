@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, BriefcaseBusiness, CheckCircle2, MailCheck, ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowRight, BriefcaseBusiness, CheckCircle2, Eye, EyeOff, KeyRound, MailCheck, ShieldCheck } from "lucide-react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -29,10 +29,12 @@ type AuthFormProps = {
   provider: AuthProvider;
 };
 
-type PendingVerification = {
+type PendingApproval = {
   email: string;
-  password: string;
 };
+
+const ACCESS_SUPPORT_EMAIL = "support@crm.mugnee.com";
+const ACCESS_SUPPORT_WHATSAPP = "+8801958645415";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -48,14 +50,17 @@ function getVerifiedMessage(params: {
   }
 
   return params.inviteMode
-    ? `Email verified. Sign in with ${params.inviteEmail || "the invited email"} to accept the invitation.`
-    : "Email verified. Please sign in to continue to workspace setup.";
+    ? `Access verified. Sign in with ${params.inviteEmail || "the invited email"} to accept the invitation.`
+    : "Access verified. Please sign in to continue to workspace setup.";
 }
 
 export function AuthForm({ mode, provider }: AuthFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isRegister = mode === "register";
   const emailFromQuery = searchParams.get("email") ?? "";
+  const accessPasskeyFromQuery = searchParams.get("passkey")?.trim().toUpperCase() ?? "";
+  const accessAutoFromQuery = searchParams.get("access") === "1";
   const verifiedFromQuery = searchParams.get("verified") === "1";
   const inviteMode = searchParams.get("mode") === "invite";
   const inviteEmail = searchParams.get("email")?.trim().toLowerCase() ?? "";
@@ -63,15 +68,6 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
   const inviteWorkspace = searchParams.get("workspace") ?? "";
   const inviteRole = searchParams.get("role") ?? "";
   const nextPath = searchParams.get("next") ?? "/onboarding/workspace";
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
-  const [otp, setOtp] = useState("");
-  const [pendingVerification, setPendingVerification] = useState<PendingVerification | null>(null);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-  const [isResendingOtp, setIsResendingOtp] = useState(false);
-  const isRegister = mode === "register";
-  const isOtpStep = isRegister && pendingVerification !== null;
   const lockedInviteEmail = inviteMode && inviteEmail.length > 0;
   const inviteWorkspaceLabel = inviteWorkspace || "the CRM workspace";
   const inviteRoleLabel = inviteRole || "your assigned role";
@@ -80,6 +76,21 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
     inviteMode,
     verifiedFromQuery,
   });
+
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [passkey, setPasskey] = useState(accessPasskeyFromQuery);
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(
+    isRegister && emailFromQuery && accessPasskeyFromQuery
+      ? { email: normalizeEmail(emailFromQuery) }
+      : null,
+  );
+  const [isCompletingRegistration, setIsCompletingRegistration] = useState(false);
+  const [showPasskeyStep, setShowPasskeyStep] = useState(Boolean(accessPasskeyFromQuery));
+  const [showPassword, setShowPassword] = useState(false);
+  const autoAccessTriggeredRef = useRef(false);
+
+  const isPasskeyStep = isRegister && pendingApproval !== null;
   const message = statusMessage ?? verifiedMessage;
 
   const form = useForm<AuthValues>({
@@ -125,6 +136,140 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
     return params.size > 0 ? `${path}?${params.toString()}` : path;
   }
 
+  async function submitAccessRequest(values: AuthValues) {
+    const registerResponse = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: normalizeEmail(values.email),
+        password: values.password,
+        fullName: values.fullName ?? "",
+      }),
+    });
+
+    const registerPayload = await registerResponse.json().catch(() => ({}));
+
+    if (!registerResponse.ok) {
+      setError(typeof registerPayload.error === "string" ? registerPayload.error : "Could not submit your access request.");
+      return false;
+    }
+
+    setPasskey("");
+    setStatusMessage(
+      typeof registerPayload.message === "string"
+        ? registerPayload.message
+        : "Your access request has been submitted. After approval, your secure registration link and fallback passkey will be sent by email.",
+    );
+    return true;
+  }
+
+  async function completeApprovedRegistration(options?: {
+    overrideEmail?: string;
+    overridePasskey?: string;
+  }) {
+    const registrationEmail = options?.overrideEmail ?? pendingApproval?.email ?? normalizeEmail(form.getValues("email"));
+    const accessPasskey = options?.overridePasskey ?? passkey;
+
+    if (!registrationEmail) {
+      setError("Enter your request email first.");
+      return;
+    }
+
+    if (!accessPasskey.trim()) {
+      setError("Enter the access passkey from your approval email.");
+      return;
+    }
+
+    setError(null);
+    if (!options?.overridePasskey) {
+      setStatusMessage(null);
+    }
+    setIsCompletingRegistration(true);
+
+    try {
+      const verifyResponse = await fetch("/api/auth/register", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: registrationEmail,
+          passkey: accessPasskey,
+        }),
+      });
+
+      const verifyPayload = await verifyResponse.json().catch(() => ({}));
+
+      if (!verifyResponse.ok) {
+        setError(typeof verifyPayload.error === "string" ? verifyPayload.error : "Could not verify your access link.");
+        if (options?.overridePasskey) {
+          setStatusMessage("This secure link could not complete registration automatically. Use the fallback passkey below or contact support.");
+        }
+        return;
+      }
+
+      const redirectQuery = new URLSearchParams({
+        email: registrationEmail,
+        verified: "1",
+        next: nextPath,
+      });
+
+      if (inviteMode) {
+        redirectQuery.set("mode", "invite");
+      }
+      if (inviteToken) {
+        redirectQuery.set("token", inviteToken);
+      }
+      if (inviteWorkspace) {
+        redirectQuery.set("workspace", inviteWorkspace);
+      }
+      if (inviteRole) {
+        redirectQuery.set("role", inviteRole);
+      }
+
+      setPendingApproval(null);
+      setPasskey("");
+      setStatusMessage(
+        inviteMode
+          ? "Access verified. Redirecting you to sign in and finish accepting the invitation."
+          : "Access verified. Redirecting you to sign in.",
+      );
+      router.replace(`/auth/login?${redirectQuery.toString()}`);
+      router.refresh();
+    } finally {
+      setIsCompletingRegistration(false);
+    }
+  }
+
+  const handleAutoAccessCompletion = useEffectEvent((email: string, accessPasskey: string) => {
+    void completeApprovedRegistration({
+      overrideEmail: normalizeEmail(email),
+      overridePasskey: accessPasskey,
+    });
+  });
+
+  useEffect(() => {
+    if (
+      !isRegister
+      || autoAccessTriggeredRef.current
+      || !accessAutoFromQuery
+      || !emailFromQuery
+      || !accessPasskeyFromQuery
+    ) {
+      return;
+    }
+
+    autoAccessTriggeredRef.current = true;
+    handleAutoAccessCompletion(emailFromQuery, accessPasskeyFromQuery);
+  }, [
+    accessAutoFromQuery,
+    accessPasskeyFromQuery,
+    emailFromQuery,
+    isRegister,
+  ]);
+
   async function onSubmit(values: AuthValues) {
     setError(null);
     setStatusMessage(null);
@@ -138,16 +283,16 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
 
     if (provider === "betterauth") {
       if (isRegister) {
-        const otpSent = await requestOtp({
+        const requestSubmitted = await submitAccessRequest({
           ...values,
           email: submittedEmail,
         });
 
-        if (otpSent) {
-          setPendingVerification({
+        if (requestSubmitted) {
+          setPendingApproval({
             email: submittedEmail,
-            password: values.password,
           });
+          setShowPasskeyStep(true);
         }
 
         return;
@@ -170,16 +315,16 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
 
     if (provider === "nextauth") {
       if (isRegister) {
-        const otpSent = await requestOtp({
+        const requestSubmitted = await submitAccessRequest({
           ...values,
           email: submittedEmail,
         });
 
-        if (otpSent) {
-          setPendingVerification({
+        if (requestSubmitted) {
+          setPendingApproval({
             email: submittedEmail,
-            password: values.password,
           });
+          setShowPasskeyStep(true);
         }
 
         return;
@@ -204,137 +349,20 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
     setError("Supabase Auth sign-in is no longer supported in this branch. Use the PostgreSQL-backed auth flow instead.");
   }
 
-  async function requestOtp(values: AuthValues) {
-    const registerResponse = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: normalizeEmail(values.email),
-        password: values.password,
-        fullName: values.fullName ?? "",
-      }),
-    });
-
-    const registerPayload = await registerResponse.json().catch(() => ({}));
-
-    if (!registerResponse.ok) {
-      setError(typeof registerPayload.error === "string" ? registerPayload.error : "Could not send a verification code.");
-      return false;
-    }
-
-    setDevOtpHint(
-      typeof registerPayload.devOtp === "string" && registerPayload.devOtp.length === 6
-        ? registerPayload.devOtp
-        : null,
-    );
-    setOtp("");
-    setStatusMessage(
-      typeof registerPayload.message === "string"
-        ? registerPayload.message
-        : "We sent a 6-digit verification code to your work email.",
-    );
-    return true;
-  }
-
-  async function completeVerifiedRegistration() {
-    if (!pendingVerification) {
-      setError("Start by requesting a verification code.");
-      return;
-    }
-
-    setError(null);
-    setStatusMessage(null);
-    setIsVerifyingOtp(true);
-
-    try {
-      const verifyResponse = await fetch("/api/auth/register", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: pendingVerification.email,
-          otp,
-        }),
-      });
-
-      const verifyPayload = await verifyResponse.json().catch(() => ({}));
-
-      if (!verifyResponse.ok) {
-        setError(typeof verifyPayload.error === "string" ? verifyPayload.error : "Could not verify your code.");
-        return;
-      }
-
-      const redirectQuery = new URLSearchParams({
-        email: pendingVerification.email,
-        verified: "1",
-        next: nextPath,
-      });
-
-      if (inviteMode) {
-        redirectQuery.set("mode", "invite");
-      }
-      if (inviteToken) {
-        redirectQuery.set("token", inviteToken);
-      }
-      if (inviteWorkspace) {
-        redirectQuery.set("workspace", inviteWorkspace);
-      }
-      if (inviteRole) {
-        redirectQuery.set("role", inviteRole);
-      }
-
-      setPendingVerification(null);
-      setOtp("");
-      setDevOtpHint(null);
-      setStatusMessage(
-        inviteMode
-          ? "Email verified. Redirecting you to sign in and finish accepting the invitation."
-          : "Email verified. Redirecting you to sign in.",
-      );
-      router.push(`/auth/login?${redirectQuery.toString()}`);
-      router.refresh();
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-  }
-
-  async function resendOtp() {
-    const values = form.getValues();
-    const parsed = authSchema.safeParse(values);
-
-    if (!parsed.success) {
-      setError(parsed.error.errors[0]?.message ?? "Enter valid registration details first.");
-      return;
-    }
-
-    setError(null);
-    setStatusMessage(null);
-    setIsResendingOtp(true);
-
-    try {
-      await requestOtp(parsed.data);
-    } finally {
-      setIsResendingOtp(false);
-    }
-  }
-
   const title = inviteMode
     ? isRegister
       ? `Create your account to join ${inviteWorkspaceLabel}`
       : `Sign in to join ${inviteWorkspaceLabel}`
     : isRegister
-      ? "Create your CRM account"
+      ? "Request CRM access"
       : "Welcome back";
 
   const description = inviteMode
     ? isRegister
-      ? `Use ${inviteEmail || "the invited email"} to create your account, then return to accept the ${inviteRoleLabel} invitation.`
+      ? `Use ${inviteEmail || "the invited email"} to request access. After admin approval and passkey verification, you can sign in and accept the ${inviteRoleLabel} invitation.`
       : `Sign in with ${inviteEmail || "the invited email"} to review and accept your invitation.`
     : isRegister
-      ? "Start with your admin account. Workspace setup comes next."
+      ? "Submit an access request first. After a super admin approves it, you will receive a secure access link and fallback passkey by email."
       : "Sign in to your CRM workspace and continue your daily pipeline flow.";
 
   const accentPills = inviteMode
@@ -343,8 +371,8 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
         inviteRole ? `Role: ${inviteRole}` : "Workspace invite",
       ]
     : [
-        "Protected access",
-        isRegister ? "Workspace setup next" : "Resume instantly",
+        "Admin-approved access",
+        isRegister ? "Secure link + passkey" : "Resume instantly",
       ];
 
   return (
@@ -355,7 +383,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-teal-200/80 bg-teal-50/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-700 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-teal-200">
               {isRegister ? <BriefcaseBusiness className="size-3.5" /> : <ShieldCheck className="size-3.5" />}
-              {inviteMode ? "Team invitation" : isRegister ? "Admin setup" : "Secure sign in"}
+              {inviteMode ? "Team invitation" : isRegister ? "Controlled signup" : "Secure sign in"}
             </div>
             <CardTitle className="text-[1.85rem] leading-tight tracking-tight text-slate-950 dark:text-slate-50">
               {title}
@@ -366,7 +394,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
           </div>
           <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
             <div className="flex size-10 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#14b8a6,#0ea5e9)] text-white shadow-[0_18px_28px_-18px_rgba(14,165,233,0.75)]">
-              {inviteMode ? <MailCheck className="size-5" /> : isRegister ? <BriefcaseBusiness className="size-5" /> : <ShieldCheck className="size-5" />}
+              {inviteMode ? <MailCheck className="size-5" /> : isRegister ? <KeyRound className="size-5" /> : <ShieldCheck className="size-5" />}
             </div>
           </div>
         </div>
@@ -394,7 +422,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
                 id="fullName"
                 placeholder="Amina Rahman"
                 className="h-11 rounded-2xl border-slate-200 bg-white/95 px-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80"
-                disabled={isOtpStep}
+                disabled={isPasskeyStep}
                 {...form.register("fullName")}
               />
             </div>
@@ -406,7 +434,7 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
               type="email"
               placeholder="you@company.com"
               className="h-11 rounded-2xl border-slate-200 bg-white/95 px-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80"
-              disabled={isOtpStep}
+              disabled={Boolean(pendingApproval)}
               readOnly={lockedInviteEmail}
               {...form.register("email")}
             />
@@ -419,94 +447,114 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
               <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
             ) : null}
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="password" className="text-sm font-semibold text-slate-800 dark:text-slate-200">Password</Label>
-              {!isRegister ? (
-                <Link className="text-xs font-medium text-primary hover:underline" href="/auth/forgot-password">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="password" className="text-sm font-semibold text-slate-800 dark:text-slate-200">Password</Label>
+                {!isRegister ? (
+                  <Link className="text-xs font-medium text-primary hover:underline" href="/auth/forgot-password">
                   Forgot password?
-                </Link>
+                  </Link>
+                ) : null}
+              </div>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Minimum 8 characters"
+                  className="h-11 rounded-2xl border-slate-200 bg-white/95 px-4 pr-12 shadow-sm dark:border-slate-800 dark:bg-slate-950/80"
+                  disabled={isPasskeyStep}
+                  {...form.register("password")}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-slate-500 transition hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:text-slate-100"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  disabled={isPasskeyStep}
+                >
+                  {showPassword ? <EyeOff className="size-4.5" /> : <Eye className="size-4.5" />}
+                </button>
+              </div>
+              {form.formState.errors.password ? (
+                <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
               ) : null}
             </div>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Minimum 8 characters"
-              className="h-11 rounded-2xl border-slate-200 bg-white/95 px-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80"
-              disabled={isOtpStep}
-              {...form.register("password")}
-            />
-            {form.formState.errors.password ? (
-              <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
-            ) : null}
-          </div>
-          {isOtpStep ? (
+          {isRegister && (pendingApproval !== null || showPasskeyStep) ? (
             <div className="space-y-3 rounded-3xl border border-teal-100 bg-teal-50/70 p-4 dark:border-teal-500/20 dark:bg-teal-500/10">
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Verify your email to create the account</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Complete registration with your approval email</p>
                 <p className="text-xs leading-5 text-slate-600 dark:text-slate-300">
-                  We sent a 6-digit code to <span className="font-semibold">{pendingVerification.email}</span>. Enter the code below to finish creating your account.
+                  {pendingApproval
+                    ? <>Your access request for <span className="font-semibold">{pendingApproval.email}</span> is waiting for admin approval. Once you receive the approval email, use the secure access link or enter the fallback passkey below.</>
+                    : <>Already received your approval email? Open the secure access link, or enter the fallback passkey below to finish creating the account for <span className="font-semibold">{normalizeEmail(form.getValues("email") || inviteEmail || "your email")}</span>.</>}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="otp" className="text-sm font-semibold text-slate-800 dark:text-slate-200">Verification code</Label>
+                <Label htmlFor="passkey" className="text-sm font-semibold text-slate-800 dark:text-slate-200">Fallback access passkey</Label>
                 <Input
-                  id="otp"
-                  inputMode="numeric"
+                  id="passkey"
                   autoComplete="one-time-code"
-                  maxLength={6}
-                  placeholder="123456"
-                  className="h-11 rounded-2xl border-slate-200 bg-white/95 px-4 tracking-[0.3em] shadow-sm dark:border-slate-800 dark:bg-slate-950/80"
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="ABCD-EFGH-IJKL"
+                  className="h-11 rounded-2xl border-slate-200 bg-white/95 px-4 tracking-[0.18em] shadow-sm dark:border-slate-800 dark:bg-slate-950/80"
+                  value={passkey}
+                  onChange={(event) => setPasskey(event.target.value.toUpperCase())}
                 />
               </div>
               <div className="flex flex-wrap gap-3 text-xs font-medium">
-                <button
-                  type="button"
-                  className="text-primary hover:underline disabled:opacity-60"
-                  onClick={() => void resendOtp()}
-                  disabled={isResendingOtp || form.formState.isSubmitting || isVerifyingOtp}
-                >
-                  {isResendingOtp ? "Sending again..." : "Resend code"}
-                </button>
+                {!showPasskeyStep ? (
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() => setShowPasskeyStep(true)}
+                  >
+                    I already have the approval email
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="text-slate-600 hover:underline dark:text-slate-300"
                   onClick={() => {
-                    setPendingVerification(null);
-                    setOtp("");
+                    setPendingApproval(null);
+                    setPasskey("");
                     setStatusMessage(null);
                     setError(null);
-                    setDevOtpHint(null);
+                    setShowPasskeyStep(false);
                   }}
-                  disabled={isResendingOtp || isVerifyingOtp}
                 >
-                  Change details
+                  {pendingApproval ? "Update request details" : "Clear approval mode"}
                 </button>
               </div>
             </div>
           ) : null}
-          {devOtpHint ? (
-            <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100">
-              Local dev code: <span className="font-semibold tracking-[0.28em]">{devOtpHint}</span>
-            </p>
-          ) : null}
           {error ? <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200">{error}</p> : null}
           {message ? <p className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">{message}</p> : null}
-          {isOtpStep ? (
+          {isRegister && !showPasskeyStep && !pendingApproval ? (
+            <button
+              type="button"
+              className="w-full text-sm font-medium text-primary hover:underline"
+              onClick={() => {
+                setShowPasskeyStep(true);
+                setStatusMessage(null);
+                setError(null);
+              }}
+            >
+              Already received an approval email or passkey?
+            </button>
+          ) : null}
+          {isRegister && showPasskeyStep ? (
             <Button
               className="h-11 w-full rounded-2xl bg-[linear-gradient(135deg,#0f766e,#14b8a6)] text-base font-semibold text-white shadow-[0_20px_34px_-20px_rgba(20,184,166,0.72)] hover:opacity-95"
               type="button"
-              disabled={isVerifyingOtp || otp.length !== 6}
-              onClick={() => void completeVerifiedRegistration()}
+              disabled={isCompletingRegistration || passkey.trim().length < 6}
+              onClick={() => void completeApprovedRegistration()}
             >
-              {isVerifyingOtp ? "Verifying code..." : "Verify & create account"}
+              {isCompletingRegistration ? "Completing registration..." : "Verify passkey & create account"}
               <ArrowRight className="size-4.5" />
             </Button>
           ) : (
             <Button className="h-11 w-full rounded-2xl bg-[linear-gradient(135deg,#0f766e,#14b8a6)] text-base font-semibold text-white shadow-[0_20px_34px_-20px_rgba(20,184,166,0.72)] hover:opacity-95" type="submit" disabled={form.formState.isSubmitting}>
-              {isRegister ? "Send verification code" : "Sign in"}
+              {isRegister ? "Request access" : "Sign in"}
               <ArrowRight className="size-4.5" />
             </Button>
           )}
@@ -518,14 +566,29 @@ export function AuthForm({ mode, provider }: AuthFormProps) {
               <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">
                 {inviteMode
                   ? isRegister
-                    ? "After email verification, sign in once and you will return to the invitation review page automatically."
+                    ? "After admin approval and passkey verification, sign in once and you will return to the invitation review page automatically."
                     : "After sign-in, you will be returned to the invitation review page to confirm joining the workspace."
                   : isRegister
-                    ? "We verify your work email with a one-time code first. After that, your account will be created and workspace setup will start."
+                    ? "A super admin must approve your request and issue a one-time access email. Use the secure link from that email for the easiest completion flow, or use the fallback passkey manually."
                     : "Use your work email to continue where your leads, meetings, and next steps are already organized."}
               </p>
             </div>
           </div>
+          {isRegister ? (
+            <div className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 dark:border-amber-500/20 dark:bg-amber-500/10">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Need an access key faster?</p>
+              <p className="mt-1 text-sm leading-6 text-amber-800/90 dark:text-amber-100/90">
+                Send your correct business details and access request information to{" "}
+                <a className="font-semibold underline underline-offset-4" href={`mailto:${ACCESS_SUPPORT_EMAIL}`}>
+                  {ACCESS_SUPPORT_EMAIL}
+                </a>{" "}
+                or WhatsApp{" "}
+                <a className="font-semibold underline underline-offset-4" href="https://wa.me/8801958645415" target="_blank" rel="noreferrer">
+                  {ACCESS_SUPPORT_WHATSAPP}
+                </a>.
+              </p>
+            </div>
+          ) : null}
           <p className="text-center text-sm text-muted-foreground dark:text-slate-400">
             {isRegister ? "Already have an account?" : "New to the CRM?"}{" "}
             <Link className="font-medium text-primary hover:underline" href={isRegister ? buildAuthHref("/auth/login") : buildAuthHref("/auth/register")}>

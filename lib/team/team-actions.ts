@@ -11,10 +11,9 @@ import {
   requirePermission,
 } from "@/lib/auth/session";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
-import { createNotification } from "@/lib/notifications/notifications";
+import { createWorkspaceNotification } from "@/lib/notifications/notifications";
 import { prisma } from "@/lib/prisma";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
-import { checkUserLimit } from "@/lib/subscription/subscription-queries";
 import { sendTeamInviteEmail } from "./invite-email";
 import { getPermissions, getRoleById, getRoles } from "./team-queries";
 
@@ -115,18 +114,6 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
 
   const parsedInput = parsedInputResult.data;
   const email = normalizeEmail(parsedInput.email);
-  const userLimit = await checkUserLimit(1);
-
-  if (!userLimit.allowed) {
-    await logActivity(organization.id, "subscription.limit_reached", "organization", organization.id, {
-      limit_type: "users",
-      current: userLimit.current,
-      projected: userLimit.projected,
-      max: userLimit.max,
-    });
-    throw new Error(userLimit.message ?? "Your current plan has no room for more team members.");
-  }
-
   const role = await getRoleOrThrow(parsedInput.roleId, organization.id);
 
   const [existingInvitation, existingProfile] = await Promise.all([
@@ -217,7 +204,7 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
     email_delivery_method: emailDelivery.ok ? emailDelivery.method : "manual_fallback",
   });
 
-  await createNotification({
+  await createWorkspaceNotification({
     userId: user.id,
     type: "team.invitation.created",
     title: "Invitation created",

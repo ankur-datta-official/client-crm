@@ -209,10 +209,6 @@ export const PERMISSION_GROUPS = {
     label: "Settings",
     permissions: ["settings.view", "settings.manage"],
   },
-  subscription: {
-    label: "Subscription",
-    permissions: ["subscription.view", "subscription.manage"],
-  },
   scoring: {
     label: "Scoring",
     permissions: [

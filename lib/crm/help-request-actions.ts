@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAuth, requireOrganization } from "@/lib/auth/session";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
 import { helpRequestSchema, helpRequestUpdateSchema } from "@/lib/crm/schemas";
-import { createNotification } from "@/lib/notifications/notifications";
+import { createWorkspaceNotification } from "@/lib/notifications/notifications";
 import { prisma } from "@/lib/prisma";
 import type { CrmActionState } from "./actions";
 
@@ -224,7 +224,7 @@ export async function assignHelpRequest(helpRequestId: string, assignedTo: strin
     });
 
     if (assignedTo && assignedTo !== user.id) {
-      await createNotification({
+      await createWorkspaceNotification({
         userId: assignedTo,
         type: "help_request.assigned",
         title: "Help request assigned",
@@ -266,7 +266,7 @@ export async function resolveHelpRequest(helpRequestId: string, resolutionNote?:
     });
 
     if (helpRequest.requested_by && helpRequest.requested_by !== user.id) {
-      await createNotification({
+      await createWorkspaceNotification({
         userId: helpRequest.requested_by,
         type: "help_request.resolved",
         title: "Help request resolved",

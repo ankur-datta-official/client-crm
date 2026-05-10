@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   Trophy,
   Users,
-  WalletCards,
 } from "lucide-react";
 
 export const sidebarItems = [
@@ -28,7 +27,6 @@ export const sidebarItems = [
   { title: "Rewards", href: "/rewards", icon: Gift, section: "Performance" },
   { title: "Reports", href: "/reports", icon: BarChart3, section: "Performance" },
   { title: "Team", href: "/team", icon: ShieldCheck, section: "Admin" },
-  { title: "Subscription", href: "/subscription", icon: WalletCards, section: "Admin" },
   { title: "Settings", href: "/settings", icon: Settings, section: "Admin" },
 ] as const;
 

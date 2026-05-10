@@ -13,26 +13,20 @@ export default async function ProtectedAppLayout({ children }: { children: React
     getWorkspaceSwitcherState(),
   ]);
 
-  const [notificationCenterData, walletSummary, productTourState] = organization
-    ? await Promise.all([
-        getNotificationCenterData(),
-        getCurrentUserWalletSummary(),
-        getCurrentProductTourState(),
-      ])
-    : [
-        {
-          notifications: [],
-          unreadCount: 0,
-        },
-        null,
-        {
+  const [notificationCenterData, walletSummary, productTourState] = await Promise.all([
+    getNotificationCenterData(),
+    organization ? getCurrentUserWalletSummary() : Promise.resolve(null),
+    organization
+      ? getCurrentProductTourState()
+      : Promise.resolve({
           version: PRODUCT_TOUR_VERSION,
+          audienceKey: profile?.id ?? "anonymous",
           lastCompletedVersion: null,
           lastSkippedVersion: null,
           lastStartedAt: null,
           shouldAutoStart: false,
-        },
-      ];
+        }),
+  ]);
 
   return (
     <ThemeProvider>

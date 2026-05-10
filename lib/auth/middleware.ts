@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getAuthProvider } from "@/lib/auth/provider";
 import { canAccessRoute, PROTECTED_ROUTE_RULES } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { resolveSuperAdminAccess } from "@/lib/auth/super-admin";
 import { resolveActiveWorkspaceIdForUser } from "@/lib/workspace/service";
 
 const protectedPrefixes = PROTECTED_ROUTE_RULES.map((rule) => rule.prefix);
@@ -12,6 +13,7 @@ const authPrefixes = ["/auth/login", "/auth/register"];
 type SessionState = {
   organizationId: string | null;
   isActive: boolean;
+  isSuperAdmin: boolean;
   permissions: string[];
 };
 
@@ -43,6 +45,7 @@ async function getSessionState(request: NextRequest): Promise<SessionState | nul
       id: userId,
     },
     select: {
+      email: true,
       is_active: true,
       is_super_admin: true,
     },
@@ -53,11 +56,16 @@ async function getSessionState(request: NextRequest): Promise<SessionState | nul
   }
 
   const organizationId = await resolveActiveWorkspaceIdForUser(userId);
+  const isSuperAdmin = resolveSuperAdminAccess({
+    email: profile.email,
+    isSuperAdmin: profile.is_super_admin,
+  });
 
-  if (profile.is_super_admin) {
+  if (isSuperAdmin) {
     return {
       organizationId,
       isActive: profile.is_active,
+      isSuperAdmin,
       permissions: ["*"],
     };
   }
@@ -90,6 +98,7 @@ async function getSessionState(request: NextRequest): Promise<SessionState | nul
     return {
       organizationId,
       isActive: profile.is_active,
+      isSuperAdmin: false,
       permissions: ["*"],
     };
   }
@@ -115,6 +124,7 @@ async function getSessionState(request: NextRequest): Promise<SessionState | nul
   return {
     organizationId,
     isActive: profile.is_active,
+    isSuperAdmin: false,
     permissions: Array.from(
       new Set(
         rolePermissions
@@ -143,22 +153,36 @@ export async function updateAuthSession(request: NextRequest) {
     const url = request.nextUrl.clone();
 
     if (!sessionState.isActive) {
-      url.pathname = "/unauthorized";
+      url.pathname = "/account-inactive";
       return NextResponse.redirect(url);
     }
 
-    url.pathname = sessionState.organizationId ? "/dashboard" : "/onboarding/workspace";
+    url.pathname = sessionState.isSuperAdmin
+      ? "/admin"
+      : sessionState.organizationId
+        ? "/dashboard"
+        : sessionState.permissions.includes("*")
+          ? "/settings/access-requests"
+          : "/onboarding/workspace";
     return NextResponse.redirect(url);
   }
 
   if (sessionState && isProtected) {
     if (!sessionState.isActive) {
       const url = request.nextUrl.clone();
+      url.pathname = "/account-inactive";
+      return NextResponse.redirect(url);
+    }
+
+    if (pathname.startsWith("/admin") && !sessionState.isSuperAdmin) {
+      const url = request.nextUrl.clone();
       url.pathname = "/unauthorized";
       return NextResponse.redirect(url);
     }
 
-    if (!sessionState.organizationId && !isOnboardingRoute) {
+    const allowWithoutOrganization = (sessionState.permissions.includes("*") && pathname.startsWith("/settings/access-requests")) || sessionState.isSuperAdmin;
+
+    if (!sessionState.organizationId && !isOnboardingRoute && !allowWithoutOrganization) {
       const url = request.nextUrl.clone();
       url.pathname = "/onboarding/workspace";
       return NextResponse.redirect(url);

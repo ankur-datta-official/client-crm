@@ -2,23 +2,41 @@
 
 import { useState } from "react";
 import type React from "react";
-import { Info, Sparkles, X } from "lucide-react";
+import { ChevronDown, Info, Sparkles, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export function FormRequiredNote({
   message,
+  dismissible = false,
 }: {
   message: string;
+  dismissible?: boolean;
 }) {
+  const [isVisible, setIsVisible] = useState(true);
+
+  if (!isVisible) {
+    return null;
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-soft dark:border-slate-800/90 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.92),rgba(9,14,28,0.96))] dark:text-slate-300 dark:shadow-[0_20px_45px_-30px_rgba(2,6,23,0.95)]">
       <div className="flex items-start gap-3">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-teal-700 dark:text-teal-300" />
-        <div className="space-y-1">
+        <div className="flex-1 space-y-1">
           <p className="font-medium text-slate-900 dark:text-slate-100">Required fields are marked with <span className="text-rose-600">*</span>.</p>
           <p>{message}</p>
         </div>
+        {dismissible ? (
+          <button
+            type="button"
+            onClick={() => setIsVisible(false)}
+            className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            aria-label="Close note"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -80,6 +98,8 @@ export function FormSection({
   className,
   contentClassName,
   optional = false,
+  collapsible = false,
+  defaultCollapsed = false,
 }: {
   title: string;
   description: string;
@@ -87,7 +107,11 @@ export function FormSection({
   className?: string;
   contentClassName?: string;
   optional?: boolean;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }) {
+  const [isCollapsed, setIsCollapsed] = useState(collapsible ? defaultCollapsed : false);
+
   return (
     <Card className={className}>
       <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -95,15 +119,30 @@ export function FormSection({
           <CardTitle>{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </div>
-        {optional ? (
-          <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
-            Optional
-          </span>
-        ) : null}
+        <div className="flex items-center gap-2 self-start">
+          {optional ? (
+            <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
+              Optional
+            </span>
+          ) : null}
+          {collapsible ? (
+            <button
+              type="button"
+              onClick={() => setIsCollapsed((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100"
+              aria-expanded={!isCollapsed}
+            >
+              {isCollapsed ? "Expand" : "Collapse"}
+              <ChevronDown className={cn("h-4 w-4 transition-transform", isCollapsed ? "" : "rotate-180")} />
+            </button>
+          ) : null}
+        </div>
       </CardHeader>
-      <CardContent className={cn("grid gap-4 md:grid-cols-2 xl:grid-cols-4", contentClassName)}>
-        {children}
-      </CardContent>
+      {!isCollapsed ? (
+        <CardContent className={cn("grid gap-4 md:grid-cols-2 xl:grid-cols-4", contentClassName)}>
+          {children}
+        </CardContent>
+      ) : null}
     </Card>
   );
 }

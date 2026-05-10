@@ -6,6 +6,7 @@ import { getCurrentUser, requireAuth, requireOrganization } from "@/lib/auth/ses
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { removePrivateUpload, savePrivateUpload, validateUploadMetadata, validateUploadSize } from "@/lib/storage/local";
+import { resolveSuperAdminAccess } from "@/lib/auth/super-admin";
 import {
   buildProfileAvatarPath,
   isStoredProfileAvatarPath,
@@ -209,8 +210,14 @@ export async function getCurrentProfileSettings(): Promise<CurrentProfileSetting
     department: profile.department,
     phone: profile.phone,
     isActive: profile.is_active,
-    isSuperAdmin: profile.is_super_admin,
-    roleName: profile.is_super_admin ? "Super Admin" : roleInfo.roleName,
+    isSuperAdmin: resolveSuperAdminAccess({
+      email: profile.email,
+      isSuperAdmin: profile.is_super_admin,
+    }),
+    roleName: resolveSuperAdminAccess({
+      email: profile.email,
+      isSuperAdmin: profile.is_super_admin,
+    }) ? "Super Admin" : roleInfo.roleName,
     roleSlug: roleInfo.roleSlug,
   };
 }

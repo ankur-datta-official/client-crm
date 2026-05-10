@@ -14,10 +14,9 @@ import {
 } from "@/lib/crm/schemas";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
 import { slugify } from "@/lib/crm/utils";
-import { createNotification } from "@/lib/notifications/notifications";
+import { createWorkspaceNotification } from "@/lib/notifications/notifications";
 import { prisma } from "@/lib/prisma";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
-import { checkCompanyLimit, requireFeature } from "@/lib/subscription/subscription-queries";
 import { ensureCanAssignUser, ensureCanWorkWithCompany, notifyDirectManagerOfActivity } from "@/lib/team/hierarchy";
 
 export type CrmActionState = {
@@ -590,15 +589,6 @@ export async function createPipelineStageAction(values: unknown): Promise<CrmAct
   if (!parsed.success) return getValidationState(parsed.error);
 
   try {
-    await requireFeature("custom_pipeline");
-  } catch (error) {
-    await insertActivityLog("subscription.feature_blocked", "organization", organization.id, {
-      feature: "custom_pipeline",
-    });
-    return { ok: false, error: error instanceof Error ? error.message : "Upgrade required to customize pipeline stages." };
-  }
-
-  try {
     await prisma.$executeRaw`
       insert into public.pipeline_stages (
         organization_id,
@@ -638,15 +628,6 @@ export async function updatePipelineStageAction(id: string, values: unknown): Pr
   if (!parsed.success) return getValidationState(parsed.error);
 
   try {
-    await requireFeature("custom_pipeline");
-  } catch (error) {
-    await insertActivityLog("subscription.feature_blocked", "organization", organization.id, {
-      feature: "custom_pipeline",
-    });
-    return { ok: false, error: error instanceof Error ? error.message : "Upgrade required to customize pipeline stages." };
-  }
-
-  try {
     await prisma.$executeRaw`
       update public.pipeline_stages
       set
@@ -673,15 +654,6 @@ export async function archivePipelineStageAction(id: string): Promise<CrmActionS
   const organization = await requireOrganization();
 
   try {
-    await requireFeature("custom_pipeline");
-  } catch (error) {
-    await insertActivityLog("subscription.feature_blocked", "organization", organization.id, {
-      feature: "custom_pipeline",
-    });
-    return { ok: false, error: error instanceof Error ? error.message : "Upgrade required to customize pipeline stages." };
-  }
-
-  try {
     await prisma.$executeRaw`
       update public.pipeline_stages
       set is_active = false
@@ -703,17 +675,6 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
 
   if (!parsed.success) return getValidationState(parsed.error);
 
-  const companyLimit = await checkCompanyLimit(1);
-  if (!companyLimit.allowed) {
-    await insertActivityLog("subscription.limit_reached", "organization", organization.id, {
-      limit_type: "companies",
-      current: companyLimit.current,
-      projected: companyLimit.projected,
-      max: companyLimit.max,
-    });
-    return { ok: false, error: companyLimit.message ?? "Company limit reached for the current plan." };
-  }
-
   const relationErrors = await validateCompanyRelations(organization.id, parsed.data);
   if (Object.keys(relationErrors).length > 0) {
     return {
@@ -722,6 +683,8 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
       fieldErrors: relationErrors,
     };
   }
+
+  const leadTemperature = parsed.data.lead_temperature ?? temperatureFromRating(parsed.data.success_rating);
 
   try {
     const rows = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -741,10 +704,10 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
         email,
         website,
         address,
-        city,
-        country,
-        success_rating,
-        lead_temperature,
+          city,
+          country,
+          success_rating,
+          lead_temperature,
         estimated_value,
         expected_closing_date,
         notes,
@@ -767,13 +730,13 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
         ${parsed.data.email},
         ${parsed.data.website},
         ${parsed.data.address},
-        ${parsed.data.city},
-        ${parsed.data.country},
-        ${parsed.data.success_rating},
-        ${parsed.data.lead_temperature},
-        ${parsed.data.estimated_value},
-        ${parsed.data.expected_closing_date}::date,
-        ${parsed.data.notes},
+          ${parsed.data.city},
+          ${parsed.data.country},
+          ${parsed.data.success_rating},
+          ${leadTemperature},
+          ${parsed.data.estimated_value},
+          ${parsed.data.expected_closing_date}::date,
+          ${parsed.data.notes},
         ${user.id}::uuid,
         ${user.id}::uuid
       )
@@ -865,6 +828,8 @@ export async function updateCompanyAction(id: string, values: unknown): Promise<
     };
   }
 
+  const leadTemperature = parsed.data.lead_temperature ?? temperatureFromRating(parsed.data.success_rating);
+
   try {
     const existing = await getExistingCompanyStage(id, organization.id);
 
@@ -885,11 +850,11 @@ export async function updateCompanyAction(id: string, values: unknown): Promise<
         email = ${parsed.data.email},
         website = ${parsed.data.website},
         address = ${parsed.data.address},
-        city = ${parsed.data.city},
-        country = ${parsed.data.country},
-        success_rating = ${parsed.data.success_rating},
-        lead_temperature = ${parsed.data.lead_temperature},
-        estimated_value = ${parsed.data.estimated_value},
+          city = ${parsed.data.city},
+          country = ${parsed.data.country},
+          success_rating = ${parsed.data.success_rating},
+          lead_temperature = ${leadTemperature},
+          estimated_value = ${parsed.data.estimated_value},
         expected_closing_date = ${parsed.data.expected_closing_date}::date,
         notes = ${parsed.data.notes}
       where id = ${id}::uuid
@@ -1225,7 +1190,7 @@ export async function createInteractionAction(values: unknown): Promise<CrmActio
     }
 
     if (parsed.data.assigned_user_id && parsed.data.assigned_user_id !== user.id) {
-      await createNotification({
+      await createWorkspaceNotification({
         userId: parsed.data.assigned_user_id,
         type: "meeting.assigned",
         title: "New meeting assigned",

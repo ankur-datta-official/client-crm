@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, LifeBuoy, Menu, Settings, User, Wallet2, LogOut } from "lucide-react";
+import { ChevronDown, LifeBuoy, Menu, Settings, User, Wallet2, LogOut, KeyRound, LayoutDashboard } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { NotificationCenter } from "@/components/notifications/notification-center";
@@ -164,6 +164,26 @@ export function AppTopbar({
                   <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100">Organization</span>
                 </Link>
               </DropdownMenuItem>
+              {profile?.is_super_admin ? (
+                <DropdownMenuItem asChild className="rounded-xl focus:bg-primary/5 focus:text-primary cursor-pointer transition-colors group">
+                  <Link href="/admin" className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-slate-50 text-slate-500 transition-colors group-focus:bg-primary/10 group-focus:text-primary dark:bg-slate-900 dark:text-slate-400">
+                      <LayoutDashboard className="size-4" />
+                    </div>
+                    <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100">Admin Console</span>
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
+              {profile?.is_super_admin ? (
+                <DropdownMenuItem asChild className="rounded-xl focus:bg-primary/5 focus:text-primary cursor-pointer transition-colors group">
+                  <Link href="/settings/access-requests" className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-slate-50 text-slate-500 transition-colors group-focus:bg-primary/10 group-focus:text-primary dark:bg-slate-900 dark:text-slate-400">
+                      <KeyRound className="size-4" />
+                    </div>
+                    <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100">Access Requests</span>
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 onClick={() => startTour("manual")}
                 disabled={isActive}

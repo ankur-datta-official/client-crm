@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
+  KeyRound,
+  LayoutDashboard,
   ArrowRight,
   BriefcaseBusiness,
   Building2,
@@ -21,15 +23,17 @@ import { requireAnyPermission } from "@/lib/auth/session";
 import { getCurrentProfileSettings } from "@/lib/profile/profile-actions";
 import { getCompanyCategories, getIndustries, getPipelineStages } from "@/lib/crm/queries";
 import { getAccessibleWorkspaceCount } from "@/lib/workspace/queries";
+import { getPendingSignupRequestCountForSuperAdmin } from "@/lib/auth/access-requests";
 
 export default async function SettingsPage() {
   await requireAnyPermission(["settings.view", "settings.manage"]);
-  const [profile, industries, categories, pipelineStages, workspaceCount] = await Promise.all([
+  const [profile, industries, categories, pipelineStages, workspaceCount, pendingSignupRequests] = await Promise.all([
     getCurrentProfileSettings(),
     getIndustries(),
     getCompanyCategories(),
     getPipelineStages(),
     getAccessibleWorkspaceCount(),
+    getPendingSignupRequestCountForSuperAdmin(),
   ]);
 
   const setupChecklist = [
@@ -57,6 +61,7 @@ export default async function SettingsPage() {
 
   const completedCount = setupChecklist.filter((item) => item.done).length;
   const firstPending = setupChecklist.find((item) => !item.done)?.label ?? "Everything is ready";
+  const isSetupComplete = completedCount === setupChecklist.length;
 
   return (
     <div className="space-y-8">
@@ -80,86 +85,88 @@ export default async function SettingsPage() {
         Start from top to bottom. First set up your profile, then your CRM labels, then your sales workflow.
       </GuidanceStrip>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Card className="border-teal-200/80 bg-gradient-to-br from-white via-teal-50/40 to-emerald-50/60 shadow-[0_24px_80px_-56px_rgba(13,148,136,0.45)] dark:border-teal-500/20 dark:bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(15,23,42,0.95),rgba(6,78,59,0.18))] dark:shadow-[0_28px_80px_-48px_rgba(2,6,23,0.98)]">
-          <CardContent className="p-6 lg:p-8">
-            <div className="space-y-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-100">
-                  Simple setup guide
-                </Badge>
-                <Badge variant="success" className="rounded-full px-3 py-1.5 text-xs font-semibold">
-                  {completedCount}/{setupChecklist.length} done
-                </Badge>
-              </div>
+      {!isSetupComplete ? (
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <Card className="border-teal-200/80 bg-gradient-to-br from-white via-teal-50/40 to-emerald-50/60 shadow-[0_24px_80px_-56px_rgba(13,148,136,0.45)] dark:border-teal-500/20 dark:bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(15,23,42,0.95),rgba(6,78,59,0.18))] dark:shadow-[0_28px_80px_-48px_rgba(2,6,23,0.98)]">
+            <CardContent className="p-6 lg:p-8">
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-100">
+                    Simple setup guide
+                  </Badge>
+                  <Badge variant="success" className="rounded-full px-3 py-1.5 text-xs font-semibold">
+                    {completedCount}/{setupChecklist.length} done
+                  </Badge>
+                </div>
 
+                <div className="space-y-3">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/90 bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-teal-700 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/95 dark:text-teal-200 dark:shadow-[0_12px_24px_-18px_rgba(15,23,42,0.95)]">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Easy for new users
+                  </div>
+                  <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
+                    Set up your CRM in a simple order, without guessing what to do next.
+                  </h2>
+                  <p className="max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300">
+                    Each section below has one clear job. Finish them one by one and your workspace will be ready for daily use.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <QuickStartCard
+                    step="Step 1"
+                    title="Update your profile"
+                    detail="Set your name, avatar, and contact details so your account is ready."
+                  />
+                  <QuickStartCard
+                    step="Step 2"
+                    title="Add your CRM labels"
+                    detail="Create industries and company categories so data stays organized."
+                  />
+                  <QuickStartCard
+                    step="Step 3"
+                    title="Set your workflow"
+                    detail="Configure pipeline stages and scoring so your team can follow one process."
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="h-fit border-slate-200/80 bg-white shadow-[0_20px_70px_-56px_rgba(15,23,42,0.45)] dark:border-slate-800/80 dark:bg-[linear-gradient(180deg,rgba(2,6,23,0.96),rgba(15,23,42,0.92))] dark:shadow-[0_20px_70px_-56px_rgba(2,6,23,0.92)]">
+            <CardHeader className="pb-4">
               <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/90 bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-teal-700 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/95 dark:text-teal-200 dark:shadow-[0_12px_24px_-18px_rgba(15,23,42,0.95)]">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Easy for new users
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <CardTitle className="text-xl">What to do next</CardTitle>
+                    <CardDescription className="dark:text-slate-300">Follow this small checklist if you are setting things up for the first time.</CardDescription>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-right dark:border-emerald-400/35 dark:bg-emerald-950 dark:shadow-[0_12px_24px_-18px_rgba(16,185,129,0.35)]">
+                    <p className="text-lg font-semibold text-emerald-700 dark:text-emerald-200">{completedCount}/{setupChecklist.length}</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-100">Done</p>
+                  </div>
                 </div>
-                <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
-                  Set up your CRM in a simple order, without guessing what to do next.
-                </h2>
-                <p className="max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-                  Each section below has one clear job. Finish them one by one and your workspace will be ready for daily use.
-                </p>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <QuickStartCard
-                  step="Step 1"
-                  title="Update your profile"
-                  detail="Set your name, avatar, and contact details so your account is ready."
-                />
-                <QuickStartCard
-                  step="Step 2"
-                  title="Add your CRM labels"
-                  detail="Create industries and company categories so data stays organized."
-                />
-                <QuickStartCard
-                  step="Step 3"
-                  title="Set your workflow"
-                  detail="Configure pipeline stages and scoring so your team can follow one process."
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="h-fit border-slate-200/80 bg-white shadow-[0_20px_70px_-56px_rgba(15,23,42,0.45)] dark:border-slate-800/80 dark:bg-[linear-gradient(180deg,rgba(2,6,23,0.96),rgba(15,23,42,0.92))] dark:shadow-[0_20px_70px_-56px_rgba(2,6,23,0.92)]">
-          <CardHeader className="pb-4">
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-2">
-                  <CardTitle className="text-xl">What to do next</CardTitle>
-                  <CardDescription className="dark:text-slate-300">Follow this small checklist if you are setting things up for the first time.</CardDescription>
-                </div>
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-right dark:border-emerald-400/35 dark:bg-emerald-950 dark:shadow-[0_12px_24px_-18px_rgba(16,185,129,0.35)]">
-                  <p className="text-lg font-semibold text-emerald-700 dark:text-emerald-200">{completedCount}/{setupChecklist.length}</p>
-                  <p className="text-xs font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-100">Done</p>
+                <div className="rounded-2xl border border-teal-100 bg-teal-50/80 p-3 text-sm text-teal-800 dark:border-teal-400/35 dark:bg-teal-950 dark:text-white dark:shadow-[0_12px_24px_-18px_rgba(20,184,166,0.35)]">
+                  <span className="font-semibold">Next focus:</span> {firstPending}
                 </div>
               </div>
-              <div className="rounded-2xl border border-teal-100 bg-teal-50/80 p-3 text-sm text-teal-800 dark:border-teal-400/35 dark:bg-teal-950 dark:text-white dark:shadow-[0_12px_24px_-18px_rgba(20,184,166,0.35)]">
-                <span className="font-semibold">Next focus:</span> {firstPending}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {setupChecklist.map((item, index) => (
-              <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-700/80 dark:bg-slate-900/85">
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-500 shadow-sm dark:bg-slate-950 dark:text-slate-300">
-                  {item.done ? <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-300" /> : index + 1}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {setupChecklist.map((item, index) => (
+                <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-700/80 dark:bg-slate-900/85">
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-500 shadow-sm dark:bg-slate-950 dark:text-slate-300">
+                    {item.done ? <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-300" /> : index + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.label}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-300">{item.detail}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.label}</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-300">{item.detail}</p>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
 
       <div className="space-y-8">
         <SettingsSection
@@ -185,6 +192,28 @@ export default async function SettingsPage() {
             badge="Admin"
             meta={`${workspaceCount} workspace${workspaceCount === 1 ? "" : "s"} available`}
           />
+          {profile.isSuperAdmin ? (
+            <CrmSettingsCard
+              title="Admin Console"
+              description="Open the global super admin console for platform-wide users, workspaces, access requests, and analytics."
+              href="/admin"
+              icon={LayoutDashboard}
+              ctaLabel="Open Console"
+              badge="Super Admin"
+              meta="Global control center"
+            />
+          ) : null}
+          {profile.isSuperAdmin ? (
+            <CrmSettingsCard
+              title="Access Requests"
+              description="Review pending signup requests and issue one-time account access passkeys."
+              href="/settings/access-requests"
+              icon={KeyRound}
+              ctaLabel="Open Access Requests"
+              badge="Super Admin"
+              meta={`${pendingSignupRequests} pending request${pendingSignupRequests === 1 ? "" : "s"}`}
+            />
+          ) : null}
         </SettingsSection>
 
         <SettingsSection

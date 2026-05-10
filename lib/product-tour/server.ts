@@ -11,6 +11,7 @@ type ProductTourProfileRow = {
 function getDefaultProductTourState(): ProductTourState {
   return {
     version: PRODUCT_TOUR_VERSION,
+    audienceKey: "anonymous",
     lastCompletedVersion: null,
     lastSkippedVersion: null,
     lastStartedAt: null,
@@ -20,9 +21,13 @@ function getDefaultProductTourState(): ProductTourState {
 
 export async function getCurrentProductTourState(): Promise<ProductTourState> {
   const { user, organization } = await getCurrentAppContext();
+  const audienceKey = organization ? `${user.id}:${organization.id}` : user.id;
 
   if (!organization) {
-    return getDefaultProductTourState();
+    return {
+      ...getDefaultProductTourState(),
+      audienceKey,
+    };
   }
 
   const data = await prisma.user.findFirst({
@@ -45,6 +50,7 @@ export async function getCurrentProductTourState(): Promise<ProductTourState> {
 
   return {
     ...getDefaultProductTourState(),
+    audienceKey,
     lastCompletedVersion: row.product_tour_last_completed_version,
     lastSkippedVersion: row.product_tour_last_skipped_version,
     lastStartedAt: row.product_tour_last_started_at?.toISOString() ?? null,

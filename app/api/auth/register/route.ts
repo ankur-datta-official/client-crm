@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import {
+  createSignupRequest,
+  markSignupRequestCompleted,
+  validateSignupPasskey,
+} from "@/lib/auth/access-requests";
 import { createRegisteredUser, ensureRegistrationEmailAvailable } from "@/lib/auth/register";
-import { consumeRegistrationOtp, createRegistrationOtp } from "@/lib/auth/register-otp";
-import { sendRegistrationOtpEmail } from "@/lib/auth/register-otp-email";
 import { getAuthProvider } from "@/lib/auth/provider";
-import { getSmtpAvailability } from "@/lib/email/smtp";
 
 const registerSchema = z.object({
   email: z.string().email("Enter a valid work email."),
@@ -12,9 +14,9 @@ const registerSchema = z.object({
   fullName: z.string().trim().max(120).optional().or(z.literal("")),
 });
 
-const verifyOtpSchema = z.object({
+const verifyPasskeySchema = z.object({
   email: z.string().email("Enter a valid work email."),
-  otp: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit verification code."),
+  passkey: z.string().trim().min(6, "Enter the access passkey."),
 });
 
 export async function POST(request: Request) {
@@ -28,66 +30,38 @@ export async function POST(request: Request) {
     );
   }
 
-  const availability = await ensureRegistrationEmailAvailable(parsed.data.email);
-
-  if (!availability.ok) {
-    return NextResponse.json({ error: availability.error }, { status: 409 });
-  }
-
   try {
-    const otpPayload = await createRegistrationOtp({
-      email: availability.email,
+    const result = await createSignupRequest({
+      email: parsed.data.email,
       password: parsed.data.password,
       fullName: parsed.data.fullName,
     });
 
-    const smtp = getSmtpAvailability();
-
-    if (!smtp.ok) {
-      if (process.env.NODE_ENV !== "production") {
-        return NextResponse.json({
-          ok: true,
-          requiresOtp: true,
-          devOtp: otpPayload.otp,
-          message: "SMTP is not configured locally, so the verification code is shown below for development testing.",
-        });
-      }
-
-      return NextResponse.json(
-        { error: "Email delivery is not configured yet. Set SMTP credentials before enabling signup verification." },
-        { status: 500 },
-      );
-    }
-
-    await sendRegistrationOtpEmail({
-      email: otpPayload.email,
-      otp: otpPayload.otp,
-      fullName: parsed.data.fullName,
-      expiresInMinutes: otpPayload.expiresInMinutes,
+    return NextResponse.json({
+      ok: true,
+      requiresApproval: true,
+      email: result.email,
+      message: result.message,
     });
   } catch (error) {
-    console.error("Failed to issue registration OTP:", error);
+    console.error("Failed to submit signup request:", error);
+    const message = error instanceof Error ? error.message : "We could not submit your access request right now.";
+    const status = message.toLowerCase().includes("account") || message.toLowerCase().includes("email") ? 409 : 500;
     return NextResponse.json(
-      { error: "We could not send the verification code right now. Please try again shortly." },
-      { status: 500 },
+      { error: message },
+      { status },
     );
   }
-
-  return NextResponse.json({
-    ok: true,
-    requiresOtp: true,
-    message: "We sent a 6-digit verification code to your work email.",
-  });
 }
 
 export async function PATCH(request: Request) {
   const provider = getAuthProvider();
   const body = await request.json().catch(() => null);
-  const parsed = verifyOtpSchema.safeParse(body);
+  const parsed = verifyPasskeySchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.errors[0]?.message ?? "Invalid verification request." },
+      { error: parsed.error.errors[0]?.message ?? "Invalid access passkey request." },
       { status: 400 },
     );
   }
@@ -98,36 +72,35 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: availability.error }, { status: 409 });
   }
 
-  const verification = await consumeRegistrationOtp({
-    email: availability.email,
-    otp: parsed.data.otp,
-  });
+  let verification: Awaited<ReturnType<typeof validateSignupPasskey>>;
 
-  if (!verification) {
+  try {
+    verification = await validateSignupPasskey({
+      email: availability.email,
+      passkey: parsed.data.passkey,
+    });
+  } catch (error) {
     return NextResponse.json(
-      { error: "The verification code is invalid. Please check the code and try again." },
-      { status: 400 },
-    );
-  }
-
-  if (verification.expired) {
-    return NextResponse.json(
-      { error: "This verification code has expired. Request a new code to continue." },
+      { error: error instanceof Error ? error.message : "Could not validate the access passkey." },
       { status: 400 },
     );
   }
 
   try {
     await createRegisteredUser({
-      email: verification.email,
-      fullName: verification.fullName,
-      passwordHash: verification.passwordHash,
+      email: availability.email,
+      fullName: verification.full_name,
+      passwordHash: verification.password_hash,
       provider,
     });
+    await markSignupRequestCompleted({
+      requestId: verification.request_id,
+      passkeyId: verification.passkey_id,
+    });
   } catch (error) {
-    console.error("Failed to complete verified registration:", error);
+    console.error("Failed to complete approved registration:", error);
     return NextResponse.json(
-      { error: "We could not finish creating your account. Please request a new code and try again." },
+      { error: "We could not finish creating your account. Ask the administrator for a fresh passkey and try again." },
       { status: 500 },
     );
   }

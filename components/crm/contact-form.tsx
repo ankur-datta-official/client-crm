@@ -33,6 +33,15 @@ export function ContactForm({ contact, companies, defaultCompanyId }: ContactFor
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
+  const hasContactInfo = Boolean(contact?.mobile || contact?.whatsapp || contact?.email || contact?.linkedin);
+  const hasRelationshipInfo = Boolean(
+    contact?.decision_role ||
+      contact?.relationship_level ||
+      (contact?.preferred_contact_method && contact.preferred_contact_method !== "Phone") ||
+      contact?.is_primary ||
+      (contact?.status && contact.status !== "active"),
+  );
+  const hasRemarks = Boolean(contact?.remarks);
   const form = useForm<ContactPersonFormValues>({
     resolver: zodResolver(contactPersonSchema),
     defaultValues: {
@@ -94,7 +103,7 @@ export function ContactForm({ contact, companies, defaultCompanyId }: ContactFor
 
   return (
     <form className="space-y-5" onSubmit={form.handleSubmit((values) => onSubmit(values, "save"))}>
-      <FormRequiredNote message="Add the contact name and linked company first. You can fill in communication preferences, relationship details, and remarks later." />
+      <FormRequiredNote message="Add the contact name and linked company first. You can fill in communication preferences, relationship details, and remarks later." dismissible />
       {defaultCompanyId && !contact ? (
         <FormContextHint message="This contact is being added from a company context, so the company is preselected for faster entry." />
       ) : null}
@@ -108,14 +117,14 @@ export function ContactForm({ contact, companies, defaultCompanyId }: ContactFor
         <Field label="Department"><Input {...form.register("department")} /></Field>
       </FormSection>
 
-      <FormSection title="Contact Information" description="Communication channels for this person." optional>
+      <FormSection title="Contact Information" description="Communication channels for this person." optional collapsible defaultCollapsed={!hasContactInfo}>
         <Field label="Mobile"><Input {...form.register("mobile")} /></Field>
         <Field label="WhatsApp"><Input {...form.register("whatsapp")} /></Field>
         <Field label="Email" error={form.formState.errors.email?.message ?? fieldErrors.email}><Input {...form.register("email")} /></Field>
         <Field label="LinkedIn" error={form.formState.errors.linkedin?.message ?? fieldErrors.linkedin}><Input {...form.register("linkedin")} placeholder="https://linkedin.com/in/name" /></Field>
       </FormSection>
 
-      <FormSection title="Relationship Information" description="Decision role, relationship strength, and preferred outreach." optional>
+      <FormSection title="Relationship Information" description="Decision role, relationship strength, and preferred outreach." optional collapsible defaultCollapsed={!hasRelationshipInfo}>
         <SelectField label="Decision role" {...form.register("decision_role")}>
           <option value="">Select role</option>
           {decisionRoleOptions.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -138,8 +147,8 @@ export function ContactForm({ contact, companies, defaultCompanyId }: ContactFor
         </label>
       </FormSection>
 
-      <FormSection title="Remarks" description="Internal notes about the relationship and communication style." optional contentClassName="grid-cols-1">
-        <div className="space-y-2">
+      <FormSection title="Remarks" description="Internal notes about the relationship and communication style." optional collapsible defaultCollapsed={!hasRemarks} contentClassName="grid-cols-1 md:grid-cols-1 xl:grid-cols-1">
+        <div className="w-full min-w-0 space-y-2">
           <Label htmlFor="remarks">Remarks</Label>
           <textarea id="remarks" {...form.register("remarks")} className="mt-2 min-h-28 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm" />
         </div>
