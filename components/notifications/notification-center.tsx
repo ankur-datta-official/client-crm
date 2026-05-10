@@ -18,6 +18,8 @@ import {
   markNotificationAsRead,
   type NotificationRow,
 } from "@/lib/notifications/notifications";
+import { useBrowserTimeZone } from "@/lib/format/browser-timezone";
+import { formatDateTimeForTimeZone } from "@/lib/format/datetime";
 import { cn } from "@/lib/utils";
 
 type NotificationCenterProps = {
@@ -30,6 +32,7 @@ export function NotificationCenter({
   initialUnreadCount,
 }: NotificationCenterProps) {
   const router = useRouter();
+  const timeZone = useBrowserTimeZone();
   const [notifications, setNotifications] = useState(initialNotifications);
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [isPending, startTransition] = useTransition();
@@ -160,7 +163,7 @@ export function NotificationCenter({
           <span className="sr-only">Notifications</span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={10} className="w-[min(22rem,calc(100vw-1rem))] rounded-2xl border-slate-200 p-0 shadow-xl dark:border-slate-800 dark:bg-slate-950">
+      <DropdownMenuContent align="end" sideOffset={10} className="w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border-slate-200 p-0 shadow-xl dark:border-slate-800 dark:bg-slate-950">
         <div className="flex items-center justify-between px-3 py-3">
           <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
           <Button type="button" variant="ghost" size="sm" className="h-auto px-2 text-xs" disabled={isPending || unreadCount === 0} onClick={handleMarkAllAsRead}>
@@ -185,7 +188,7 @@ export function NotificationCenter({
                     ) : null}
                   </div>
                   <p className="mt-2 text-[11px] text-muted-foreground">
-                    {new Date(notification.created_at).toLocaleString()}
+                    {formatDateTimeForTimeZone(notification.occurred_at, timeZone)}
                   </p>
                 </Link>
               </DropdownMenuItem>

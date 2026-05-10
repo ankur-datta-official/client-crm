@@ -8,6 +8,7 @@ import { LeadTemperatureBadge } from "@/components/crm/lead-temperature-badge";
 import { RatingBadge } from "@/components/crm/rating-badge";
 import { DocumentCard } from "@/components/crm/document-card";
 import { EmptyState } from "@/components/shared/empty-state";
+import { formatDateBD, formatDateTimeBD } from "@/lib/format/datetime";
 import { getInteractionById } from "@/lib/crm/queries";
 import { getDocumentsByInteraction } from "@/lib/crm/document-queries";
 
@@ -26,13 +27,13 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <Info label="Company" value={interaction.companies?.name} />
           <Info label="Contact person" value={interaction.contact_persons?.name} />
-          <Info label="Date/time" value={new Date(interaction.meeting_datetime).toLocaleString()} />
+          <Info label="Date/time" value={formatDateTimeBD(interaction.meeting_datetime)} />
           <Info label="Location" value={interaction.location} />
           <Info label="Online link" value={interaction.online_meeting_link} />
           <div className="rounded-md border p-3"><p className="text-xs font-medium uppercase text-muted-foreground">Rating</p><div className="mt-2"><RatingBadge rating={interaction.success_rating} /></div></div>
           <div className="rounded-md border p-3"><p className="text-xs font-medium uppercase text-muted-foreground">Temperature</p><div className="mt-2">{interaction.lead_temperature ? <LeadTemperatureBadge temperature={interaction.lead_temperature} /> : "-"}</div></div>
           <Info label="Next action" value={interaction.next_action} />
-          <Info label="Next follow-up" value={interaction.next_followup_at ? new Date(interaction.next_followup_at).toLocaleString() : null} />
+          <Info label="Next follow-up" value={interaction.next_followup_at ? formatDateTimeBD(interaction.next_followup_at) : null} />
           <Info label="Client requirement" value={interaction.client_requirement} />
           <Info label="Pain point" value={interaction.pain_point} />
           <Info label="Proposed solution" value={interaction.proposed_solution} />
@@ -41,7 +42,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
           <Info label="Decision timeline" value={interaction.decision_timeline} />
           <Info label="Need help" value={interaction.need_help ? "Yes" : "No"} />
           <Info label="Created by" value={interaction.created_profile?.full_name ?? interaction.created_profile?.email} />
-          <Info label="Created date" value={new Date(interaction.created_at).toLocaleDateString()} />
+          <Info label="Created date" value={formatDateBD(interaction.created_at)} />
           <div className="md:col-span-2 xl:col-span-3"><Info label="Discussion details" value={interaction.discussion_details} /></div>
           <div className="md:col-span-2 xl:col-span-3"><Info label="Internal note" value={interaction.internal_note} /></div>
         </CardContent>

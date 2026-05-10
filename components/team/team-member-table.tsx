@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { deactivateTeamMember, reactivateTeamMember, updateTeamMemberRole } from "@/lib/team/team-actions";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import type { RoleRow, TeamMember } from "@/lib/team/types";
 import { getDisplayName } from "@/lib/utils";
 import { RoleBadge } from "./role-badge";
@@ -251,7 +252,7 @@ export function TeamMemberTable({
                         <TableCell className="max-w-[160px] truncate">{member.department ?? "-"}</TableCell>
                         <TableCell className="max-w-[180px] truncate">{member.manager_name ?? member.manager_email ?? "-"}</TableCell>
                         <TableCell><UserStatusBadge active={member.is_active} /></TableCell>
-                        <TableCell className="max-w-[180px] truncate">{member.last_login_at ? new Date(member.last_login_at).toLocaleString() : "Never recorded"}</TableCell>
+                        <TableCell className="max-w-[180px] truncate">{member.last_login_at ? formatDateTimeBD(member.last_login_at) : "Never recorded"}</TableCell>
                         <TableCell className="text-right">
                           {(canUpdateRole || canDeactivate) && member.id !== currentUserId ? (
                             <DropdownMenu>

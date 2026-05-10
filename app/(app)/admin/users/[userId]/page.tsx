@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReportMetricCard } from "@/components/crm/reports/report-visuals";
 import { getFixedSuperAdminEmail } from "@/lib/auth/super-admin";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { getAdminUserDetail } from "@/lib/admin/queries";
 
 export default async function AdminUserDetailPage({
@@ -54,7 +55,7 @@ export default async function AdminUserDetailPage({
               <InfoPill label="Job title" value={user.job_title ?? "-"} />
               <InfoPill label="Department" value={user.department ?? "-"} />
               <InfoPill label="Phone" value={user.phone ?? "-"} />
-              <InfoPill label="Last login" value={user.last_login_at ? new Date(user.last_login_at).toLocaleString() : "Never"} />
+              <InfoPill label="Last login" value={user.last_login_at ? formatDateTimeBD(user.last_login_at) : "Never"} />
             </div>
             <AdminUserActions
               userId={user.id}
@@ -90,7 +91,7 @@ export default async function AdminUserDetailPage({
             <div key={item.id} className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/70">
               <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.action}</p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {item.organization_name ?? "No workspace"} - {new Date(item.created_at).toLocaleString()}
+                {item.organization_name ?? "No workspace"} - {formatDateTimeBD(item.created_at)}
               </p>
             </div>
           ))}

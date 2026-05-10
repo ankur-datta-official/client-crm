@@ -10,6 +10,7 @@ import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FollowupStatusBadge, FollowupPriorityBadge, FollowupTypeBadge } from "@/components/crm/followup-badges";
 import { completeFollowup, cancelFollowup, archiveFollowup } from "@/lib/crm/followup-actions";
+import { formatDateBD, formatDateTimeBD } from "@/lib/format/datetime";
 import { followupTypeOptions, followupPriorityOptions, followupStatusOptions } from "@/lib/crm/schemas";
 import type { Company, Followup, TeamMemberOption } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
@@ -148,7 +149,7 @@ export function FollowupTable({
                 <FollowupPriorityBadge priority={f.priority} />
                 <span className="text-xs text-muted-foreground flex items-center">
                   <Calendar className="mr-1 h-3 w-3" />
-                  {new Date(f.scheduled_at).toLocaleString()}
+                  {formatDateTimeBD(f.scheduled_at)}
                 </span>
               </div>
               <div className="mt-3 flex items-center gap-2">
@@ -214,7 +215,7 @@ export function FollowupTable({
                       <td className="px-4 py-3">
                         <div className="flex flex-col">
                           <span className={cn("font-medium", isOverdue(f) && "text-destructive")}>
-                            {new Date(f.scheduled_at).toLocaleDateString()}
+                            {formatDateBD(f.scheduled_at)}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {new Date(f.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}

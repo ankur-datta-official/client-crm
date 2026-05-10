@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { DocumentTypeBadge, DocumentStatusBadge, FileSizeBadge } from "./document-badges";
 import { archiveDocument, deleteDocument } from "@/lib/crm/document-actions";
+import { formatDateBD } from "@/lib/format/datetime";
 import { useDocumentDownload } from "./document-download";
 import type { Document } from "@/lib/crm/types";
 import { 
@@ -130,12 +131,12 @@ export function DocumentDetailHeader({ document }: { document: Document }) {
         <HeaderCard 
           icon={<Calendar className="w-4 h-4" />} 
           label="Submitted Date" 
-          value={document.submitted_at ? new Date(document.submitted_at).toLocaleDateString() : "Not submitted"} 
+          value={document.submitted_at ? formatDateBD(document.submitted_at) : "Not submitted"} 
         />
         <HeaderCard 
           icon={<Clock className="w-4 h-4" />} 
           label="Created At" 
-          value={new Date(document.created_at).toLocaleDateString()} 
+          value={formatDateBD(document.created_at)} 
         />
       </div>
 

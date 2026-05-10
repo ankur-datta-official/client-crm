@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { formatDateBD, formatDateTimeBD } from "@/lib/format/datetime";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -66,7 +67,7 @@ export default async function HelpRequestDetailPage({ params }: { params: Promis
                 </div>
                 {helpRequest.resolved_profile && (
                   <p className="mt-3 text-xs text-muted-foreground">
-                    Resolved by {helpRequest.resolved_profile.full_name ?? helpRequest.resolved_profile.email} on {new Date(helpRequest.resolved_at ?? "").toLocaleString()}
+                    Resolved by {helpRequest.resolved_profile.full_name ?? helpRequest.resolved_profile.email} on {formatDateTimeBD(helpRequest.resolved_at ?? "")}
                   </p>
                 )}
               </CardContent>
@@ -140,7 +141,7 @@ export default async function HelpRequestDetailPage({ params }: { params: Promis
                         href={`/meetings/${helpRequest.interaction_id}`}
                         className="text-sm font-medium hover:text-primary hover:underline"
                       >
-                        {helpRequest.interactions.interaction_type} - {new Date(helpRequest.interactions.meeting_datetime).toLocaleDateString()}
+                        {helpRequest.interactions.interaction_type} - {formatDateBD(helpRequest.interactions.meeting_datetime)}
                       </Link>
                     ) : (
                       <p className="text-sm text-muted-foreground italic">None</p>
@@ -225,7 +226,7 @@ export default async function HelpRequestDetailPage({ params }: { params: Promis
               <Separator />
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Created</span>
-                <span className="font-medium">{new Date(helpRequest.created_at).toLocaleDateString()}</span>
+                <span className="font-medium">{formatDateBD(helpRequest.created_at)}</span>
               </div>
             </CardContent>
           </Card>

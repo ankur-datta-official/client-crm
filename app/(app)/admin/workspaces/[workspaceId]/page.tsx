@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ReportMetricCard } from "@/components/crm/reports/report-visuals";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { formatCurrency } from "@/lib/crm/utils";
 import { getAdminWorkspaceDetail } from "@/lib/admin/queries";
 
@@ -50,8 +51,8 @@ export default async function AdminWorkspaceDetailPage({
             <div className="grid gap-3 md:grid-cols-2">
               <InfoPill label="Company size" value={workspace.company_size ?? "-"} />
               <InfoPill label="Members" value={`${workspace.member_count} total - ${workspace.active_member_count} active`} />
-              <InfoPill label="Created" value={new Date(workspace.created_at).toLocaleString()} />
-              <InfoPill label="Last activity" value={workspace.last_activity_at ? new Date(workspace.last_activity_at).toLocaleString() : "No activity yet"} />
+              <InfoPill label="Created" value={formatDateTimeBD(workspace.created_at)} />
+              <InfoPill label="Last activity" value={workspace.last_activity_at ? formatDateTimeBD(workspace.last_activity_at) : "No activity yet"} />
             </div>
             <AdminWorkspaceOwnerForm
               workspaceId={workspace.id}
@@ -124,7 +125,7 @@ export default async function AdminWorkspaceDetailPage({
               <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {(item.actor_name?.trim() || item.actor_email || "System")} - {item.action}
               </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{new Date(item.created_at).toLocaleString()}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDateTimeBD(item.created_at)}</p>
             </div>
           ))}
         </CardContent>

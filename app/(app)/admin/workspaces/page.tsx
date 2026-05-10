@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { formatCurrency } from "@/lib/crm/utils";
 import { getAdminFilterOptions, listAdminWorkspaces, resolveAdminFilters } from "@/lib/admin/queries";
 
@@ -89,7 +90,7 @@ export default async function AdminWorkspacesPage({
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{workspace.last_activity_at ? new Date(workspace.last_activity_at).toLocaleString() : "No activity yet"}</TableCell>
+                  <TableCell>{workspace.last_activity_at ? formatDateTimeBD(workspace.last_activity_at) : "No activity yet"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

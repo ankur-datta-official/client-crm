@@ -11,6 +11,7 @@ import { TeamHierarchyManager } from "@/components/team/team-hierarchy-manager";
 import { TeamMemberTable } from "@/components/team/team-member-table";
 import { TeamTargetManager } from "@/components/team/team-target-manager";
 import { hasPermission, requirePermission } from "@/lib/auth/session";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { getManagedActivityReport, getPerformanceTargetsForOrganization } from "@/lib/team/performance-queries";
 import {
   getCurrentUserId,
@@ -83,7 +84,7 @@ export default async function TeamPage() {
                   <div key={item.id} className="rounded-xl border bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900/85">
                     <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                       <div className="font-medium text-foreground">{item.actor_name}</div>
-                      <div className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">{formatDateTimeBD(item.created_at)}</div>
                     </div>
                     <div className="mt-2 text-sm text-muted-foreground">
                       {formatManagedActivity(item.action, item.entity_type)}

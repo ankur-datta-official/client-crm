@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatMonthDayBD } from "@/lib/format/datetime";
 
 export function DashboardDateRangePicker() {
   const router = useRouter();
@@ -66,11 +67,7 @@ export function DashboardDateRangePicker() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return null;
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", {
-      day: "numeric",
-      month: "short",
-    });
+    return formatMonthDayBD(dateStr);
   };
 
   const getYear = (dateStr: string | null) => {

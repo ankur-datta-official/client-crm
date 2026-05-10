@@ -5,6 +5,7 @@ import { SwitchAccountButton } from "@/components/auth/switch-account-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentProfile, getCurrentUser } from "@/lib/auth/session";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { prisma } from "@/lib/prisma";
 import { acceptTeamInvitation } from "@/lib/team/team-actions";
 import { getInvitationPreview } from "@/lib/team/team-queries";
@@ -130,7 +131,7 @@ export default async function AcceptInvitePage({ searchParams }: AcceptInvitePag
               <p><span className="font-medium">Invited email:</span> {invitation.email}</p>
               <p><span className="font-medium">Workspace:</span> {invitation.organization_name}</p>
               <p><span className="font-medium">Role:</span> {invitation.role_name ?? "Assigned on accept"}</p>
-              <p><span className="font-medium">Expires:</span> {new Date(invitation.expires_at).toLocaleString()}</p>
+              <p><span className="font-medium">Expires:</span> {formatDateTimeBD(invitation.expires_at)}</p>
             </div>
           </div>
         </div>

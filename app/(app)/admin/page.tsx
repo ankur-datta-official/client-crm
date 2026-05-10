@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { ReportMetricCard } from "@/components/crm/reports/report-visuals";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { formatCurrency } from "@/lib/crm/utils";
 import { getAdminOverviewData, resolveAdminFilters } from "@/lib/admin/queries";
 
@@ -81,7 +82,7 @@ export default async function AdminOverviewPage({
                       {(item.actor_name?.trim() || item.actor_email || "System")} - {item.action}
                     </p>
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      {item.organization_name ?? "No workspace"} - {new Date(item.created_at).toLocaleString()}
+                      {item.organization_name ?? "No workspace"} - {formatDateTimeBD(item.created_at)}
                     </p>
                   </div>
                   <Badge variant="outline">{item.entity_type ?? "activity"}</Badge>

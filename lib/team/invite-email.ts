@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sendTransactionalEmail } from "@/lib/email/smtp";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 
 type SendTeamInviteEmailInput = {
   email: string;
@@ -49,7 +50,7 @@ function buildInviteEmailContent(input: SendTeamInviteEmailInput) {
   const inviteUrl = buildInviteAcceptUrl(input.token);
   const inviteeName = input.fullName?.trim() || "there";
   const expiresAtLabel = input.expiresAt
-    ? new Date(input.expiresAt).toLocaleString()
+    ? formatDateTimeBD(input.expiresAt)
     : null;
   const roleLine = input.roleName ? `Your invited role: ${input.roleName}` : null;
   const expiryLine = expiresAtLabel ? `Invitation expires: ${expiresAtLabel}` : null;

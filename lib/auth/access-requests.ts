@@ -43,6 +43,12 @@ function buildPlainPasskey() {
   return `${token.slice(0, 4)}-${token.slice(4, 8)}-${token.slice(8, 12)}`;
 }
 
+function runDetached(label: string, task: Promise<unknown>) {
+  void task.catch((error) => {
+    console.error(`${label}:`, error);
+  });
+}
+
 async function requireSuperAdmin() {
   const [user, profile] = await Promise.all([requireAuth(), getCurrentProfile()]);
 
@@ -181,13 +187,13 @@ export async function createSignupRequest(input: {
         full_name = ${fullName},
         password_hash = ${passwordHash},
         status = 'pending',
-        requested_at = ${now}::timestamptz,
+        requested_at = now(),
         approved_at = null,
         rejected_at = null,
         completed_at = null,
         reviewed_by = null,
         notes = null,
-        updated_at = ${now}::timestamptz
+        updated_at = now()
       where id = ${existing.id}::uuid
     `;
 
@@ -212,9 +218,9 @@ export async function createSignupRequest(input: {
         ${fullName},
         ${passwordHash},
         'pending',
-        ${now}::timestamptz,
-        ${now}::timestamptz,
-        ${now}::timestamptz
+        now(),
+        now(),
+        now()
       )
     `;
   }
@@ -236,25 +242,23 @@ export async function createSignupRequest(input: {
     },
   });
 
-  const emailDelivery = await sendSignupRequestSubmittedEmails({
-    recipients: recipients.map((recipient) => ({
-      email: recipient.email,
-      fullName: recipient.full_name,
-    })),
-    requesterEmail: email,
-    requesterName: fullName,
-    requestedAt: now,
-  }).catch((error) => ({
-    ok: false as const,
-    reason: error instanceof Error ? error.message : "Unable to notify super admins.",
-  }));
+  runDetached(
+    "Failed to send signup request notification emails",
+    sendSignupRequestSubmittedEmails({
+      recipients: recipients.map((recipient) => ({
+        email: recipient.email,
+        fullName: recipient.full_name,
+      })),
+      requesterEmail: email,
+      requesterName: fullName,
+      requestedAt: now,
+    }),
+  );
 
   return {
     ok: true as const,
     email,
-    message: emailDelivery.ok
-      ? "Your access request has been submitted. An administrator will review it and issue a passkey."
-      : "Your access request has been submitted. An administrator will review it soon.",
+    message: "Your access request has been submitted. An administrator will review it soon.",
   };
 }
 
@@ -307,20 +311,20 @@ export async function issueAccessPasskeyForSignupRequest(requestId: string) {
         ${request.id}::uuid,
         ${request.email},
         ${tokenHash},
-        ${expiresAt}::timestamptz,
+        now() + interval '24 hours',
         ${user.id}::uuid,
-        ${now}::timestamptz
+        now()
       )
     `,
     prisma.$executeRaw`
       update public.signup_requests
       set
         status = 'approved',
-        approved_at = ${now}::timestamptz,
+        approved_at = now(),
         rejected_at = null,
         reviewed_by = ${user.id}::uuid,
-        last_passkey_issued_at = ${now}::timestamptz,
-        updated_at = ${now}::timestamptz
+        last_passkey_issued_at = now(),
+        updated_at = now()
       where id = ${request.id}::uuid
     `,
   ]);
@@ -336,6 +340,7 @@ export async function issueAccessPasskeyForSignupRequest(requestId: string) {
       email: request.email,
       requestId: request.id,
       issuedBy: user.id,
+      issuedAt: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
     },
   });
@@ -385,9 +390,9 @@ export async function rejectSignupRequest(requestId: string) {
       update public.signup_requests
       set
         status = 'rejected',
-        rejected_at = ${now}::timestamptz,
+        rejected_at = now(),
         reviewed_by = ${user.id}::uuid,
-        updated_at = ${now}::timestamptz
+        updated_at = now()
       where id = ${requestId}::uuid
     `,
     prisma.$executeRaw`
@@ -471,12 +476,10 @@ export async function validateSignupPasskey(input: { email: string; passkey: str
 }
 
 export async function markSignupRequestCompleted(input: { requestId: string; passkeyId: string }) {
-  const now = new Date();
-
   await prisma.$transaction([
     prisma.$executeRaw`
       update public.access_passkeys
-      set used_at = ${now}::timestamptz
+      set used_at = now()
       where id = ${input.passkeyId}::uuid
         and used_at is null
     `,
@@ -484,8 +487,8 @@ export async function markSignupRequestCompleted(input: { requestId: string; pas
       update public.signup_requests
       set
         status = 'completed',
-        completed_at = ${now}::timestamptz,
-        updated_at = ${now}::timestamptz
+        completed_at = now(),
+        updated_at = now()
       where id = ${input.requestId}::uuid
     `,
   ]);

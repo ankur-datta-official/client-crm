@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app/app-sidebar";
 import { AppTopbar } from "@/components/app/app-topbar";
+import { BrowserTimeZoneSync } from "@/components/providers/browser-timezone-sync";
 import { ProductTourProvider } from "@/components/providers/product-tour-provider";
 import type { NotificationRow } from "@/lib/notifications/notifications";
 import type { Profile } from "@/lib/auth/session";
@@ -48,6 +49,7 @@ export function AppShell({
 
   return (
     <ProductTourProvider initialState={initialProductTourState}>
+      <BrowserTimeZoneSync />
       <div data-app-shell-root className="flex h-dvh min-h-dvh overflow-hidden bg-background">
         <AppSidebar
           open={sidebarOpen}

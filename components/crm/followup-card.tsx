@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FollowupStatusBadge, FollowupPriorityBadge, FollowupTypeBadge } from "@/components/crm/followup-badges";
 import type { Followup } from "@/lib/crm/types";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { cn } from "@/lib/utils";
 import { completeFollowup, archiveFollowup, cancelFollowup } from "@/lib/crm/followup-actions";
 
@@ -43,7 +44,7 @@ export function FollowupCard({ followup }: { followup: Followup }) {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
                 <CalendarClock className="h-3.5 w-3.5" />
-                {new Date(followup.scheduled_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                {formatDateTimeBD(followup.scheduled_at)}
               </div>
               <div className="flex items-center gap-1.5">
                 <FollowupTypeBadge type={followup.followup_type} className="h-5 py-0" />

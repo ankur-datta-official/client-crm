@@ -5,6 +5,8 @@ import { CheckCircle2, Copy, KeyRound, Mail, OctagonX, RefreshCw } from "lucide-
 import { issueSignupAccessPasskeyAction, rejectSignupRequestAction } from "@/lib/auth/access-request-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useBrowserTimeZone } from "@/lib/format/browser-timezone";
+import { formatDateTimeForTimeZone } from "@/lib/format/datetime";
 import { cn } from "@/lib/utils";
 import type { SignupRequestRow } from "@/lib/auth/access-requests";
 import { useRouter } from "next/navigation";
@@ -15,6 +17,7 @@ type AccessRequestManagerProps = {
 
 export function AccessRequestManager({ requests }: AccessRequestManagerProps) {
   const router = useRouter();
+  const timeZone = useBrowserTimeZone();
   const [isPending, startTransition] = useTransition();
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
   const [generatedPasskeys, setGeneratedPasskeys] = useState<Record<string, string>>({});
@@ -98,14 +101,14 @@ export function AccessRequestManager({ requests }: AccessRequestManagerProps) {
                     <CardDescription>{request.email}</CardDescription>
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">
-                    Requested {new Date(request.requested_at).toLocaleString()}
+                    Requested {formatDateTimeForTimeZone(request.requested_at, timeZone)}
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-3">
-                  <InfoPill label="Requested" value={new Date(request.requested_at).toLocaleString()} />
-                  <InfoPill label="Last passkey" value={request.latest_passkey_created_at ? new Date(request.latest_passkey_created_at).toLocaleString() : "Not issued"} />
+                  <InfoPill label="Requested" value={formatDateTimeForTimeZone(request.requested_at, timeZone)} />
+                  <InfoPill label="Last passkey" value={request.latest_passkey_created_at ? formatDateTimeForTimeZone(request.latest_passkey_created_at, timeZone) : "Not issued"} />
                   <InfoPill
                     label="Passkey status"
                     value={
@@ -114,7 +117,7 @@ export function AccessRequestManager({ requests }: AccessRequestManagerProps) {
                         : request.latest_passkey_expires_at
                           ? latestPasskeyExpired
                             ? "Expired"
-                            : `Valid until ${new Date(request.latest_passkey_expires_at).toLocaleString()}`
+                            : `Valid until ${formatDateTimeForTimeZone(request.latest_passkey_expires_at, timeZone)}`
                           : "No active passkey"
                     }
                   />

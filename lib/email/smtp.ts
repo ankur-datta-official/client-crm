@@ -53,6 +53,10 @@ export async function sendTransactionalEmail(input: {
     host: smtp.env.host,
     port: smtp.env.port,
     secure: smtp.env.port === 465,
+    requireTLS: smtp.env.port === 587,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth:
       smtp.env.user && smtp.env.password
         ? {
@@ -60,6 +64,9 @@ export async function sendTransactionalEmail(input: {
             pass: smtp.env.password,
           }
         : undefined,
+    tls: {
+      servername: smtp.env.host,
+    },
   });
 
   await transport.sendMail({
