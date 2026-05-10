@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormActionBar, FormContextHint, FormRequiredNote, FormSection } from "@/components/shared/form-helpers";
+import { formatDateBD } from "@/lib/format/datetime";
 import { createHelpRequest, updateHelpRequest } from "@/lib/crm/help-request-actions";
 import { helpRequestSchema, helpRequestTypeOptions, helpRequestPriorityOptions, helpRequestStatusOptions, type HelpRequestFormValues } from "@/lib/crm/schemas";
 import type { Company, ContactPerson, Interaction, Followup, Document, HelpRequest, TeamMemberOption } from "@/lib/crm/types";
@@ -198,7 +199,7 @@ export function HelpRequestForm({
           <option value="">No meeting selected</option>
           {availableInteractions.map((i) => (
             <option key={i.id} value={i.id}>
-              {i.interaction_type} - {new Date(i.meeting_datetime).toLocaleDateString()}
+              {i.interaction_type} - {formatDateBD(i.meeting_datetime)}
             </option>
           ))}
         </SelectField>

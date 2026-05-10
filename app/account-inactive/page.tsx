@@ -2,7 +2,7 @@ import { CircleOff, Mail, MessageCircleMore } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-const SUPPORT_EMAIL = "support@crm.mugnee.com";
+const SUPPORT_EMAIL = "support@mugnee.com";
 const SUPPORT_WHATSAPP_LABEL = "+8801958645415";
 const SUPPORT_WHATSAPP_LINK = "https://wa.me/8801958645415";
 

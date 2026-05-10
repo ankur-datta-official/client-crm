@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { addHelpRequestComment } from "@/lib/crm/help-request-actions";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import type { HelpRequestComment } from "@/lib/crm/types";
 import { MessageSquare } from "lucide-react";
 
@@ -52,7 +53,7 @@ export function HelpRequestComments({ helpRequestId, comments }: HelpRequestComm
                     {comment.user_profile?.full_name ?? comment.user_profile?.email ?? "Unknown"}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {new Date(comment.created_at).toLocaleString()}
+                    {formatDateTimeBD(comment.created_at)}
                   </span>
                 </div>
                 <p className="text-sm whitespace-pre-wrap">{comment.comment}</p>

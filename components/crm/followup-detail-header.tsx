@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FollowupStatusBadge, FollowupTypeBadge, FollowupPriorityBadge } from "@/components/crm/followup-badges";
 import type { Followup } from "@/lib/crm/types";
 import { completeFollowup, archiveFollowup } from "@/lib/crm/followup-actions";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 
 export function FollowupDetailHeader({ followup }: { followup: Followup }) {
   return (
@@ -20,7 +21,7 @@ export function FollowupDetailHeader({ followup }: { followup: Followup }) {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
             <p className="flex items-center gap-1.5">
               <CalendarClock className="h-4 w-4" />
-              {new Date(followup.scheduled_at).toLocaleString()}
+              {formatDateTimeBD(followup.scheduled_at)}
             </p>
             {followup.companies && (
               <Link 

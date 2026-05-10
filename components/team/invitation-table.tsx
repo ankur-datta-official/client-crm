@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { cancelTeamInvitation, resendTeamInvitation } from "@/lib/team/team-actions";
 import type { TeamInvitation } from "@/lib/team/types";
 import { InvitationStatusBadge, RoleBadge } from "./role-badge";
@@ -69,7 +70,7 @@ export function InvitationTable({ invitations, canManage }: InvitationTableProps
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Expires</span>
-                <span>{new Date(invitation.expires_at).toLocaleString()}</span>
+                <span>{formatDateTimeBD(invitation.expires_at)}</span>
               </div>
             </div>
             <div className="mt-4 flex items-center gap-2">
@@ -122,7 +123,7 @@ export function InvitationTable({ invitations, canManage }: InvitationTableProps
                 <TableCell><RoleBadge name={invitation.role_name ?? "Unassigned"} /></TableCell>
                 <TableCell>{invitation.invited_by_name ?? "Unknown"}</TableCell>
                 <TableCell><InvitationStatusBadge status={invitation.status} /></TableCell>
-                <TableCell className="max-w-[180px] truncate">{new Date(invitation.expires_at).toLocaleString()}</TableCell>
+                <TableCell className="max-w-[180px] truncate">{formatDateTimeBD(invitation.expires_at)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     <Button type="button" variant="outline" size="sm" onClick={() => copyInviteLink(invitation.token)}>

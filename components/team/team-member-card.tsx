@@ -2,6 +2,7 @@
 
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { getDisplayName } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -62,7 +63,7 @@ export function TeamMemberCard({
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Last Login</span>
-          <span>{member.last_login_at ? new Date(member.last_login_at).toLocaleString() : "Never recorded"}</span>
+          <span>{member.last_login_at ? formatDateTimeBD(member.last_login_at) : "Never recorded"}</span>
         </div>
       </div>
       {(canUpdateRole || canDeactivate) ? (

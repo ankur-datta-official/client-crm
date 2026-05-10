@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Target, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatDateBD } from "@/lib/format/datetime";
 import { deletePerformanceTarget, upsertPerformanceTarget } from "@/lib/team/performance-actions";
 import {
   PERFORMANCE_TARGET_METRICS,
@@ -164,7 +165,7 @@ export function TeamTargetManager({ members, targets, canManage }: TeamTargetMan
                   {target.profile?.full_name ?? target.profile?.email ?? "Unknown user"} • {PERFORMANCE_TARGET_METRICS[target.metric_key]} • {target.period_type}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Target {target.target_value} from {new Date(target.effective_date).toLocaleDateString()}
+                  Target {target.target_value} from {formatDateBD(target.effective_date)}
                 </div>
               </div>
               <Button

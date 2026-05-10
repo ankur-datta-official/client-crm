@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getFixedSuperAdminEmail } from "@/lib/auth/super-admin";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { getAdminFilterOptions, listAdminUsers, resolveAdminFilters } from "@/lib/admin/queries";
 
 export default async function AdminUsersPage({
@@ -93,7 +94,7 @@ export default async function AdminUsersPage({
                     <TableCell className="text-xs text-slate-500 dark:text-slate-400">
                       {user.companies_count} companies · {user.meetings_count} meetings · {user.followups_count} follow-ups
                     </TableCell>
-                    <TableCell>{user.last_login_at ? new Date(user.last_login_at).toLocaleString() : "Never"}</TableCell>
+                    <TableCell>{user.last_login_at ? formatDateTimeBD(user.last_login_at) : "Never"}</TableCell>
                     <TableCell className="text-right">
                       <AdminUserActions
                         userId={user.id}

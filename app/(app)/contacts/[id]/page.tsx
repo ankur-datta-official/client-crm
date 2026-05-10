@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ContactDetailHeader } from "@/components/crm/contact-detail-header";
+import { formatDateBD } from "@/lib/format/datetime";
 import { getContactById } from "@/lib/crm/queries";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -31,7 +32,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           <Info label="Relationship level" value={contact.relationship_level} />
           <Info label="Preferred method" value={contact.preferred_contact_method} />
           <Info label="Created by" value={contact.created_profile?.full_name ?? contact.created_profile?.email} />
-          <Info label="Created date" value={new Date(contact.created_at).toLocaleDateString()} />
+          <Info label="Created date" value={formatDateBD(contact.created_at)} />
           <div className="md:col-span-2 xl:col-span-3">
             <Info label="Remarks" value={contact.remarks} />
           </div>

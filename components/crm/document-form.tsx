@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormActionBar, FormContextHint, FormRequiredNote, FormSection } from "@/components/shared/form-helpers";
+import { formatDateBD } from "@/lib/format/datetime";
 import { documentSchema, type DocumentFormValues, documentTypeOptions, documentStatusOptions } from "@/lib/crm/schemas";
 import type { Document, Company, ContactPerson, Interaction, Followup } from "@/lib/crm/types";
 import { createDocument, updateDocument } from "@/lib/crm/document-actions";
@@ -234,7 +235,7 @@ export function DocumentForm({
           <option value="">No Meeting</option>
           {filteredInteractions.map((interaction) => (
             <option key={interaction.id} value={interaction.id}>
-              {new Date(interaction.meeting_datetime).toLocaleDateString()} - {interaction.interaction_type}
+              {formatDateBD(interaction.meeting_datetime)} - {interaction.interaction_type}
             </option>
           ))}
         </SelectField>

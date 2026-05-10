@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserAvatar } from "@/components/shared/user-avatar";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import {
   adjustWalletBalanceAction,
   archiveChallengeTemplateAction,
@@ -56,10 +57,7 @@ import type {
 
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatDateTimeBD(value);
 }
 
 function scoreTone(points: number) {

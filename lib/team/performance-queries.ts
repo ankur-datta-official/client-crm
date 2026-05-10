@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireOrganization } from "@/lib/auth/session";
+import { formatMonthDayBD } from "@/lib/format/datetime";
 import {
   PERFORMANCE_TARGET_METRICS,
   type CurrentUserPerformanceSnapshot,
@@ -64,7 +65,7 @@ function startOfMonth(date: Date) {
 }
 
 function formatTrendLabel(date: Date) {
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return formatMonthDayBD(date);
 }
 
 function formatDateOnly(value: Date | string) {

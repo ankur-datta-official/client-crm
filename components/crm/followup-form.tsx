@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormActionBar, FormContextHint, FormRequiredNote, FormSection } from "@/components/shared/form-helpers";
+import { formatDateBD } from "@/lib/format/datetime";
 import { createFollowup, updateFollowup } from "@/lib/crm/followup-actions";
 import { followupSchema, followupTypeOptions, followupPriorityOptions, followupStatusOptions, type FollowupFormValues } from "@/lib/crm/schemas";
 import type { Company, ContactPerson, Interaction, Followup, TeamMemberOption } from "@/lib/crm/types";
@@ -180,7 +181,7 @@ export function FollowupForm({
           <option value="">No meeting selected</option>
           {availableInteractions.map((i) => (
             <option key={i.id} value={i.id}>
-              {i.interaction_type} - {new Date(i.meeting_datetime).toLocaleDateString()}
+              {i.interaction_type} - {formatDateBD(i.meeting_datetime)}
             </option>
           ))}
         </SelectField>

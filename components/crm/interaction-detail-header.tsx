@@ -3,6 +3,7 @@ import { Building2, Edit, CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InteractionTypeBadge } from "@/components/crm/interaction-type-badge";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import type { Interaction } from "@/lib/crm/types";
 
 export function InteractionDetailHeader({ interaction }: { interaction: Interaction }) {
@@ -14,7 +15,7 @@ export function InteractionDetailHeader({ interaction }: { interaction: Interact
             <h1 className="text-2xl font-semibold tracking-normal">{interaction.companies?.name ?? "Meeting"}</h1>
             <InteractionTypeBadge type={interaction.interaction_type} />
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">{new Date(interaction.meeting_datetime).toLocaleString()}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{formatDateTimeBD(interaction.meeting_datetime)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">

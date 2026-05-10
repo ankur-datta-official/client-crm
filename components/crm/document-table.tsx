@@ -25,6 +25,7 @@ import { archiveDocument } from "@/lib/crm/document-actions";
 import { useDocumentDownload } from "./document-download";
 import type { Document, Company, TeamMemberOption } from "@/lib/crm/types";
 import { documentTypeOptions, documentStatusOptions } from "@/lib/crm/schemas";
+import { formatDateBD } from "@/lib/format/datetime";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -251,7 +252,7 @@ export function DocumentTable({ documents, companies, teamMembers, totalCount }:
                         <div className="flex flex-col text-xs">
                           <span className="font-medium">{document.uploaded_profile?.full_name || "Unknown"}</span>
                           <span className="text-muted-foreground">
-                            {new Date(document.created_at).toLocaleDateString()}
+                            {formatDateBD(document.created_at)}
                           </span>
                         </div>
                       </td>
@@ -395,7 +396,7 @@ function DocumentCard({
       <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground pt-2 border-t">
         <div className="flex items-center gap-1">
           <Calendar className="w-3 h-3" />
-          {new Date(document.created_at).toLocaleDateString()}
+          {formatDateBD(document.created_at)}
         </div>
         <div className="flex items-center gap-1 truncate">
           <User className="w-3 h-3" />

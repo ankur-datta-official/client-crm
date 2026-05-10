@@ -33,7 +33,7 @@ type PendingApproval = {
   email: string;
 };
 
-const ACCESS_SUPPORT_EMAIL = "support@crm.mugnee.com";
+const ACCESS_SUPPORT_EMAIL = "support@mugnee.com";
 const ACCESS_SUPPORT_WHATSAPP = "+8801958645415";
 
 function normalizeEmail(email: string) {

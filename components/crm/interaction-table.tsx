@@ -13,6 +13,7 @@ import { LeadTemperatureBadge } from "@/components/crm/lead-temperature-badge";
 import { RatingBadge } from "@/components/crm/rating-badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { archiveInteractionAction } from "@/lib/crm/actions";
+import { formatDateBD } from "@/lib/format/datetime";
 import { interactionTypeOptions } from "@/lib/crm/schemas";
 import type { Company, ContactPerson, Interaction } from "@/lib/crm/types";
 
@@ -174,7 +175,7 @@ export function InteractionTable({
                 <tbody>
                   {visibleInteractions.map((item) => (
                     <tr key={item.id} className="border-b border-border/80 last:border-0 transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-900/90">
-                      <td className="crm-table-cell truncate">{new Date(item.meeting_datetime).toLocaleDateString()}</td>
+                      <td className="crm-table-cell truncate">{formatDateBD(item.meeting_datetime)}</td>
                       <td className="crm-table-cell truncate font-medium text-slate-900 dark:text-slate-50">{item.companies?.name ?? "-"}</td>
                       <td className="crm-table-cell truncate">{item.contact_persons?.name ?? "-"}</td>
                       <td className="crm-table-cell"><InteractionTypeBadge type={item.interaction_type} /></td>

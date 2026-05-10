@@ -21,6 +21,7 @@ export type NotificationRow = {
   is_read: boolean;
   read_at: string | null;
   created_at: string;
+  occurred_at: string;
 };
 
 type NotificationCenterData = {
@@ -64,6 +65,47 @@ type NotificationViewer = {
   isSuperAdmin: boolean;
 };
 
+function getPayloadDateValue(payload: NotificationPayload, key: string) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const value = payload[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function getNotificationOccurredAt(row: NotificationDbRow) {
+  const requestedAt = getPayloadDateValue(row.payload, "requestedAt");
+
+  if (row.type === "admin.access_request.submitted" && requestedAt) {
+    return requestedAt;
+  }
+
+  const rejectedAt = getPayloadDateValue(row.payload, "rejectedAt");
+
+  if (row.type === "admin.access_request.rejected" && rejectedAt) {
+    return rejectedAt;
+  }
+
+  const issuedAt = getPayloadDateValue(row.payload, "issuedAt");
+
+  if (row.type === "admin.access_request.passkey_issued" && issuedAt) {
+    return issuedAt;
+  }
+
+  const expiresAt = getPayloadDateValue(row.payload, "expiresAt");
+
+  if (row.type === "admin.access_request.passkey_issued" && expiresAt) {
+    const expiresAtDate = new Date(expiresAt);
+
+    if (!Number.isNaN(expiresAtDate.getTime())) {
+      return new Date(expiresAtDate.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    }
+  }
+
+  return row.created_at.toISOString();
+}
+
 function mapNotificationRow(row: NotificationDbRow): NotificationRow {
   return {
     id: row.id,
@@ -78,6 +120,7 @@ function mapNotificationRow(row: NotificationDbRow): NotificationRow {
     is_read: row.is_read,
     read_at: row.read_at?.toISOString() ?? null,
     created_at: row.created_at.toISOString(),
+    occurred_at: getNotificationOccurredAt(row),
   };
 }
 

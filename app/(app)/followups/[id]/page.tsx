@@ -18,6 +18,7 @@ import { FollowupDetailHeader } from "@/components/crm/followup-detail-header";
 import { DocumentCard } from "@/components/crm/document-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
+import { formatDateBD, formatDateTimeBD } from "@/lib/format/datetime";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
@@ -81,7 +82,7 @@ export default async function FollowupDetailPage({ params }: { params: Promise<{
                     <div>
                       <p className="text-sm font-medium text-emerald-900">Completed</p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(followup.completed_at).toLocaleString()}
+                        {formatDateTimeBD(followup.completed_at)}
                       </p>
                     </div>
                   </div>
@@ -94,7 +95,7 @@ export default async function FollowupDetailPage({ params }: { params: Promise<{
                     <div>
                       <p className="text-sm font-medium text-amber-900">Rescheduled from</p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(followup.rescheduled_from).toLocaleString()}
+                        {formatDateTimeBD(followup.rescheduled_from)}
                       </p>
                     </div>
                   </div>
@@ -205,7 +206,7 @@ export default async function FollowupDetailPage({ params }: { params: Promise<{
                         href={`/meetings/${followup.interaction_id}`}
                         className="text-sm font-medium hover:text-primary hover:underline"
                       >
-                        {followup.interactions.interaction_type} - {new Date(followup.interactions.meeting_datetime).toLocaleDateString()}
+                        {followup.interactions.interaction_type} - {formatDateBD(followup.interactions.meeting_datetime)}
                       </Link>
                     ) : (
                       <p className="text-sm text-muted-foreground italic">None</p>
@@ -236,7 +237,7 @@ export default async function FollowupDetailPage({ params }: { params: Promise<{
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Created At:</span>
-                <span className="text-xs">{new Date(followup.created_at).toLocaleDateString()}</span>
+                <span className="text-xs">{formatDateBD(followup.created_at)}</span>
               </div>
             </CardContent>
           </Card>

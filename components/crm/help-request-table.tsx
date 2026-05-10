@@ -10,6 +10,7 @@ import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { EmptyState } from "@/components/shared/empty-state";
 import { HelpRequestStatusBadge, HelpRequestPriorityBadge, HelpRequestTypeBadge } from "@/components/crm/help-request-badges";
 import { assignHelpRequest, resolveHelpRequest, rejectHelpRequest, reopenHelpRequest, archiveHelpRequest } from "@/lib/crm/help-request-actions";
+import { formatDateBD } from "@/lib/format/datetime";
 import { helpRequestTypeOptions, helpRequestPriorityOptions } from "@/lib/crm/schemas";
 import type { Company, HelpRequest, TeamMemberOption } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
@@ -199,7 +200,7 @@ export function HelpRequestTable({
                 <HelpRequestTypeBadge type={request.help_type} />
                 <HelpRequestPriorityBadge priority={request.priority} />
                 <span className="text-xs text-muted-foreground">
-                  {new Date(request.created_at).toLocaleDateString()}
+                  {formatDateBD(request.created_at)}
                 </span>
               </div>
               <div className="mt-3 flex items-center gap-2">
@@ -277,7 +278,7 @@ export function HelpRequestTable({
                       </td>
                       <td className="px-4 py-3"><HelpRequestStatusBadge status={request.status} /></td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(request.created_at).toLocaleDateString()}
+                        {formatDateBD(request.created_at)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">

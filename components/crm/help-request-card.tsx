@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { HelpRequestStatusBadge, HelpRequestPriorityBadge, HelpRequestTypeBadge } from "@/components/crm/help-request-badges";
+import { formatDateBD } from "@/lib/format/datetime";
 import type { HelpRequest } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 
@@ -60,7 +61,7 @@ export function HelpRequestCard({ helpRequest }: { helpRequest: HelpRequest }) {
             )}
 
             <div className="text-xs text-muted-foreground">
-              {new Date(helpRequest.created_at).toLocaleDateString()}
+              {formatDateBD(helpRequest.created_at)}
             </div>
           </div>
 

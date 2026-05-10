@@ -41,6 +41,7 @@ import { getInteractions, getPipelineCompanies, getPipelineStagesForBoard, getPi
 import type { Followup, HelpRequest, Interaction, PipelineBoardCompany, PipelineStage } from "@/lib/crm/types";
 import { formatCurrency } from "@/lib/crm/utils";
 import { getCurrentUserPerformanceSnapshot } from "@/lib/team/performance-queries";
+import { formatDateTimeBD } from "@/lib/format/datetime";
 import { getDisplayName } from "@/lib/utils";
 
 type DashboardTaskItem = {
@@ -607,12 +608,7 @@ function isBeforeDay(value: string, dayStart: Date) {
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatDateTimeBD(value);
 }
 
 function toSentenceCase(value: string) {

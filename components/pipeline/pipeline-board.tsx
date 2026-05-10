@@ -26,6 +26,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { markCompanyLost, markCompanyWon, moveCompanyToPipelineStage } from "@/lib/crm/actions";
 import { formatCurrency } from "@/lib/crm/utils";
+import { formatShortDateBD } from "@/lib/format/datetime";
 import type { PipelineBoardCompany, PipelineBoardData, PipelineBoardSummary, PipelineStage } from "@/lib/crm/types";
 import { cn, getDisplayName } from "@/lib/utils";
 
@@ -907,11 +908,7 @@ function formatDate(value: string | null) {
     return "Not scheduled";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
+  return formatShortDateBD(value);
 }
 
 function calculatePipelineSummary(companies: PipelineBoardCompany[]): PipelineBoardSummary {

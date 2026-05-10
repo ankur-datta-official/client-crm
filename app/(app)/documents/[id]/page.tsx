@@ -14,6 +14,7 @@ import { DocumentDetailHeader } from "@/components/crm/document-detail-header";
 import { DocumentPreviewCard } from "@/components/crm/document-preview-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { formatDateBD } from "@/lib/format/datetime";
 import Link from "next/link";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -105,7 +106,7 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
                 {document.interactions && (
                   <ContextItem 
                     label="Meeting / Interaction" 
-                    value={`${new Date(document.interactions.meeting_datetime).toLocaleDateString()} - ${document.interactions.interaction_type}`} 
+                    value={`${formatDateBD(document.interactions.meeting_datetime)} - ${document.interactions.interaction_type}`} 
                     href={`/meetings/${document.interaction_id}`}
                     icon={<MessageSquare className="w-4 h-4" />}
                   />
@@ -140,11 +141,11 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
               />
               <InfoRow 
                 label="Submitted Date" 
-                value={document.submitted_at ? new Date(document.submitted_at).toLocaleDateString() : "N/A"} 
+                value={document.submitted_at ? formatDateBD(document.submitted_at) : "N/A"} 
               />
               <InfoRow 
                 label="Expiry Date" 
-                value={document.expiry_date ? new Date(document.expiry_date).toLocaleDateString() : "No expiry"} 
+                value={document.expiry_date ? formatDateBD(document.expiry_date) : "No expiry"} 
               />
             </CardContent>
           </Card>
