@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ensureDefaultCompanyCategories } from "@/lib/crm/default-company-categories";
 import { slugify } from "@/lib/crm/utils";
 import { resolveSuperAdminAccess } from "@/lib/auth/super-admin";
 import { PERMISSION_GROUPS } from "@/lib/team/types";
@@ -488,6 +489,12 @@ export async function createWorkspaceForUser(userId: string, input: { name: stri
         )
       `;
     }
+
+    await ensureDefaultCompanyCategories({
+      db: tx,
+      organizationId: organization.id,
+      userId,
+    });
 
     return organization.id;
   });

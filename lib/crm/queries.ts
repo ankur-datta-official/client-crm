@@ -3,6 +3,7 @@ import { requireOrganization } from "@/lib/auth/session";
 import { resolvePagination, type PaginatedResult } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { getAssignableTeamMembers } from "@/lib/team/hierarchy";
+import { ensureDefaultCompanyCategories } from "@/lib/crm/default-company-categories";
 import { getFollowups } from "./followup-queries";
 import { getDocuments } from "./document-queries";
 import type {
@@ -230,6 +231,14 @@ export async function getIndustries(includeArchived = false) {
 
 export async function getCompanyCategories(includeArchived = false) {
   const organization = await requireOrganization();
+  const ownerUserId = organization.owner_user_id;
+  if (ownerUserId) {
+    await ensureDefaultCompanyCategories({
+      db: prisma,
+      organizationId: organization.id,
+      userId: ownerUserId,
+    });
+  }
   const statusFilter = includeArchived ? Prisma.sql`` : Prisma.sql` and status <> 'archived'`;
 
   const rows = await prisma.$queryRaw<Array<{ payload: CompanyCategory }>>(Prisma.sql`

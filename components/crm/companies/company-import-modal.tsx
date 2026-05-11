@@ -126,9 +126,8 @@ export function CompanyImportModal() {
             Bulk Import Companies &amp; Contacts
           </DialogTitle>
           <DialogDescription className="font-medium text-slate-500 dark:text-slate-400">
-            Use an Excel workbook with two sheets - <span className="font-semibold text-slate-700 dark:text-slate-200">Companies</span> and{" "}
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Contacts</span> - or a CSV file with the Companies columns only
-            (row 1 headers exactly as in the template).
+            Use the new single-sheet Excel template for the fastest import. One row can create one company plus up to two contacts, blank
+            optional cells are allowed, and the older two-sheet Excel or companies-only CSV formats still work.
           </DialogDescription>
         </DialogHeader>
 
@@ -166,11 +165,10 @@ export function CompanyImportModal() {
                     <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => void handleFileUpload(e)} />
                   </label>
                   <p className="mt-4 text-center text-[11px] font-bold uppercase leading-relaxed tracking-widest text-slate-400 dark:text-slate-500">
-                    Sheet &quot;Companies&quot;: industry, sl, company_name, address, city, primary_phone, phone_2, phone_3,
-                    primary_email, email_2, website, notes
+                    Single sheet template: keep row 1 headers unchanged, start data from row 2, and use one row per company with
+                    optional Contact Person 1 and Contact Person 2 details.
                     <br />
-                    Sheet &quot;Contacts&quot;: company_name, contact_name, designation, primary_phone, phone_2, primary_email,
-                    email_2, is_primary_contact
+                    Legacy support remains available for the older two-sheet Excel workbook and the companies-only CSV format.
                   </p>
                 </>
               )}

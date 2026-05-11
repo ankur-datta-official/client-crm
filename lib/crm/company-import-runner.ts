@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { temperatureFromRating } from "@/lib/crm/schemas";
+import { slugify } from "@/lib/crm/utils";
 import {
   type CompanyImportRow,
   type ContactImportRow,
@@ -17,7 +18,11 @@ export type CompanyImportResult = {
   errors: string[];
 };
 
-type IndustryRow = { id: string; name: string };
+const DEFAULT_IMPORTED_CATEGORY_NAME = "Imported Companies";
+const DEFAULT_IMPORTED_CATEGORY_DESCRIPTION = "Default category automatically assigned to companies created through bulk import.";
+
+type IndustryRow = { id: string; name: string; status?: string };
+type CategoryRow = { id: string; name: string; code: string; status?: string };
 
 function phonesFromCompanyRow(row: CompanyImportRow): string[] {
   return [row.primary_phone, row.phone_2, row.phone_3]
@@ -49,6 +54,70 @@ function appendNote(base: string | null | undefined, extra: string) {
   return `${b}\n\n${extra}`;
 }
 
+async function ensureDefaultImportCategory(params: {
+  organizationId: string;
+  userId: string;
+  existingCategories: CategoryRow[];
+}) {
+  const normalizedTargetName = normalizeCompanyKey(DEFAULT_IMPORTED_CATEGORY_NAME);
+  const existing = params.existingCategories.find((row) => normalizeCompanyKey(row.name) === normalizedTargetName);
+
+  if (existing) {
+    if (existing.status === "archived") {
+      await prisma.$executeRaw`
+        update public.company_categories
+        set
+          status = 'active',
+          updated_by = null,
+          updated_at = now()
+        where id = ${existing.id}::uuid
+      `;
+    }
+
+    return existing.id;
+  }
+
+  const baseCode = slugify(DEFAULT_IMPORTED_CATEGORY_NAME).toUpperCase().replace(/-/g, "_") || "IMPORTED_COMPANIES";
+  let nextCode = baseCode;
+  let suffix = 2;
+
+  const usedCodes = new Set(params.existingCategories.map((row) => row.code.trim().toUpperCase()));
+  while (usedCodes.has(nextCode)) {
+    nextCode = `${baseCode}_${suffix}`;
+    suffix += 1;
+  }
+
+  const createdRows = await prisma.$queryRaw<Array<{ id: string }>>`
+    insert into public.company_categories (
+      organization_id,
+      name,
+      code,
+      description,
+      priority_level,
+      status,
+      created_by,
+      updated_by,
+      created_at,
+      updated_at
+    )
+    values (
+      ${params.organizationId}::uuid,
+      ${DEFAULT_IMPORTED_CATEGORY_NAME},
+      ${nextCode},
+      ${DEFAULT_IMPORTED_CATEGORY_DESCRIPTION},
+      3,
+      'active',
+      null,
+      null,
+      now(),
+      now()
+    )
+    returning id::text as id
+  `;
+
+  return createdRows[0]?.id ?? null;
+}
+
 export async function runCompanyContactImport(params: {
   organizationId: string;
   userId: string;
@@ -60,7 +129,7 @@ export async function runCompanyContactImport(params: {
   let companiesImported = 0;
   let contactsImported = 0;
 
-  const [stageRows, industryRows, existingCompanies] = await Promise.all([
+  const [stageRows, industryRows, categoryRows, existingCompanies] = await Promise.all([
     prisma.$queryRaw<Array<{ id: string }>>`
       select id
       from public.pipeline_stages
@@ -70,10 +139,14 @@ export async function runCompanyContactImport(params: {
       limit 1
     `,
     prisma.$queryRaw<IndustryRow[]>`
-      select id, name
+      select id, name, status
       from public.industries
       where organization_id = ${organizationId}::uuid
-        and status <> 'archived'
+    `,
+    prisma.$queryRaw<CategoryRow[]>`
+      select id, name, code, status
+      from public.company_categories
+      where organization_id = ${organizationId}::uuid
     `,
     prisma.$queryRaw<Array<{ id: string; name: string }>>`
       select id, name
@@ -89,10 +162,16 @@ export async function runCompanyContactImport(params: {
     return { companiesImported: 0, contactsImported: 0, errors };
   }
 
-  const industryByKey = new Map<string, string>();
+  const industryByKey = new Map<string, IndustryRow>();
   for (const row of industryRows) {
-    industryByKey.set(normalizeCompanyKey(row.name), row.id);
+    industryByKey.set(normalizeCompanyKey(row.name), row);
   }
+
+  const defaultCategoryId = await ensureDefaultImportCategory({
+    organizationId,
+    userId,
+    existingCategories: categoryRows,
+  });
 
   const companyNameToId = new Map<string, string>();
   for (const company of existingCompanies) {
@@ -103,13 +182,16 @@ export async function runCompanyContactImport(params: {
   const pipelineStageId = stageRow.id;
 
   for (let i = 0; i < params.companies.length; i++) {
-    const excelRow = i + 2;
+    const excelRow = params.companies[i]?.__rowNum ?? i + 2;
     const row = params.companies[i]!;
     const label = `Row ${excelRow} Companies`;
 
     try {
       const rawName = row.company_name?.trim() ?? "";
-      if (!rawName) continue;
+      if (!rawName) {
+        errors.push(`${label}: company_name is required.`);
+        continue;
+      }
 
       const key = normalizeCompanyKey(rawName);
       if (processedCompanyKeysFromFile.has(key)) {
@@ -117,11 +199,6 @@ export async function runCompanyContactImport(params: {
         continue;
       }
       processedCompanyKeysFromFile.add(key);
-
-      if (rawName.length < 2) {
-        errors.push(`${label}: company_name must be at least 2 characters.`);
-        continue;
-      }
 
       if (companyNameToId.has(key)) {
         errors.push(`${label}: company '${rawName}' already exists in this workspace.`);
@@ -135,11 +212,52 @@ export async function runCompanyContactImport(params: {
 
       if (industryCell) {
         const found = industryByKey.get(normalizeCompanyKey(industryCell));
-        if (!found) {
-          errors.push(`${label}: industry '${industryCell}' was not found.`);
-          continue;
+        if (found) {
+          if (found.status === "archived") {
+            await prisma.$executeRaw`
+              update public.industries
+              set
+                status = 'active',
+                updated_by = null,
+                updated_at = now()
+              where id = ${found.id}::uuid
+            `;
+          }
+          industryId = found.id;
+        } else {
+          const createdIndustryRows = await prisma.$queryRaw<Array<{ id: string }>>`
+            insert into public.industries (
+              organization_id,
+              name,
+              description,
+              status,
+              created_by,
+              updated_by,
+              created_at,
+              updated_at
+            )
+            values (
+              ${organizationId}::uuid,
+              ${industryCell},
+              ${`Automatically created during bulk import on row ${excelRow}.`},
+              'active',
+              null,
+              null,
+              now(),
+              now()
+            )
+            returning id::text as id
+          `;
+
+          industryId = createdIndustryRows[0]?.id ?? null;
+          if (industryId) {
+            industryByKey.set(normalizeCompanyKey(industryCell), {
+              id: industryId,
+              name: industryCell,
+              status: "active",
+            });
+          }
         }
-        industryId = found;
       }
 
       const website = normalizeWebsite(row.website);
@@ -151,12 +269,13 @@ export async function runCompanyContactImport(params: {
         notes = appendNote(notes, `Additional emails: ${emails.slice(1).join(", ")}`);
       }
 
-      const leadSource = row.sl?.trim() || null;
+      const leadSource = row.lead_source?.trim() || row.sl?.trim() || null;
       const insertedRows = await prisma.$queryRaw<Array<{ id: string }>>`
         insert into public.companies (
           organization_id,
           name,
           industry_id,
+          category_id,
           pipeline_stage_id,
           status,
           phone,
@@ -166,16 +285,19 @@ export async function runCompanyContactImport(params: {
           city,
           notes,
           lead_source,
-          assigned_user_id,
-          success_rating,
-          lead_temperature,
-          created_by,
-          updated_by
-        )
-        values (
-          ${organizationId}::uuid,
+        assigned_user_id,
+        success_rating,
+        lead_temperature,
+        created_by,
+        updated_by,
+        created_at,
+        updated_at
+      )
+      values (
+        ${organizationId}::uuid,
           ${rawName},
           ${industryId}::uuid,
+          ${defaultCategoryId}::uuid,
           ${pipelineStageId}::uuid,
           'active',
           ${phones[0] ?? null},
@@ -188,8 +310,10 @@ export async function runCompanyContactImport(params: {
           ${userId}::uuid,
           5,
           ${temperatureFromRating(5)},
-          ${userId}::uuid,
-          ${userId}::uuid
+          null,
+          null,
+          now(),
+          now()
         )
         returning id
       `;
@@ -234,6 +358,7 @@ export async function runCompanyContactImport(params: {
     companyId: string;
     name: string;
     designation: string | null;
+    department: string | null;
     mobile: string | null;
     whatsapp: string | null;
     email: string | null;
@@ -244,18 +369,13 @@ export async function runCompanyContactImport(params: {
   const contactQueue: ContactWork[] = [];
 
   for (let i = 0; i < params.contacts.length; i++) {
-    const excelRow = i + 2;
+    const excelRow = params.contacts[i]?.__rowNum ?? i + 2;
     const row = params.contacts[i]!;
     const label = `Row ${excelRow} Contacts`;
 
     try {
       const contactName = row.contact_name?.trim() ?? "";
       if (!contactName) continue;
-
-      if (contactName.length < 2) {
-        errors.push(`${label}: contact_name must be at least 2 characters.`);
-        continue;
-      }
 
       const companyNameRaw = row.company_name?.trim() ?? "";
       const companyKey = normalizeCompanyKey(companyNameRaw);
@@ -286,6 +406,7 @@ export async function runCompanyContactImport(params: {
         companyId,
         name: contactName,
         designation: row.designation?.trim() || null,
+        department: row.department?.trim() || null,
         mobile: phones[0] ?? null,
         whatsapp: phones[1] ?? null,
         email: emails[0] ?? null,
@@ -335,6 +456,7 @@ export async function runCompanyContactImport(params: {
           company_id,
           name,
           designation,
+          department,
           mobile,
           whatsapp,
           email,
@@ -349,6 +471,7 @@ export async function runCompanyContactImport(params: {
           ${contact.companyId}::uuid,
           ${contact.name},
           ${contact.designation},
+          ${contact.department},
           ${contact.mobile},
           ${contact.whatsapp},
           ${contact.email},

@@ -64,6 +64,13 @@ type ExistingCompanyStage = {
   previous_is_lost: boolean | null;
 };
 
+function resolveCompanyLeadTemperature(
+  explicitTemperature: string | null | undefined,
+  successRating: number | null | undefined,
+): string {
+  return explicitTemperature ?? temperatureFromRating(successRating) ?? "warm";
+}
+
 function getFirstError(error: z.ZodError) {
   return error.errors[0]?.message ?? "Please check the form and try again.";
 }
@@ -107,24 +114,34 @@ async function insertActivityLog(action: string, entityType: string, entityId: s
   const user = await requireAuth();
   const organization = await requireOrganization();
 
-  await prisma.$executeRaw`
-    insert into public.activity_logs (
-      organization_id,
-      actor_user_id,
+  try {
+    await prisma.$executeRaw`
+      insert into public.activity_logs (
+        organization_id,
+        actor_user_id,
+        action,
+        entity_type,
+        entity_id,
+        metadata
+      )
+      values (
+        ${organization.id}::uuid,
+        ${user.id}::uuid,
+        ${action},
+        ${entityType},
+        ${entityId}::uuid,
+        ${JSON.stringify(metadata)}::jsonb
+      )
+    `;
+  } catch (error) {
+    logServerError("activity_log.insert", error, {
+      organizationId: organization.id,
+      actorUserId: user.id,
       action,
-      entity_type,
-      entity_id,
-      metadata
-    )
-    values (
-      ${organization.id}::uuid,
-      ${user.id}::uuid,
-      ${action},
-      ${entityType},
-      ${entityId}::uuid,
-      ${JSON.stringify(metadata)}::jsonb
-    )
-  `;
+      entityType,
+      entityId,
+    });
+  }
 }
 
 async function requireCompanyInOrganization(companyId: string) {
@@ -438,15 +455,19 @@ export async function createIndustryAction(values: unknown): Promise<CrmActionSt
         description,
         status,
         created_by,
-        updated_by
+        updated_by,
+        created_at,
+        updated_at
       )
       values (
         ${organization.id}::uuid,
         ${parsed.data.name},
         ${parsed.data.description},
         ${parsed.data.status},
-        ${user.id}::uuid,
-        ${user.id}::uuid
+        null,
+        null,
+        now(),
+        now()
       )
     `;
   } catch (error) {
@@ -517,7 +538,9 @@ export async function createCompanyCategoryAction(values: unknown): Promise<CrmA
         priority_level,
         status,
         created_by,
-        updated_by
+        updated_by,
+        created_at,
+        updated_at
       )
       values (
         ${organization.id}::uuid,
@@ -526,8 +549,10 @@ export async function createCompanyCategoryAction(values: unknown): Promise<CrmA
         ${parsed.data.description},
         ${parsed.data.priority_level},
         ${parsed.data.status},
-        ${user.id}::uuid,
-        ${user.id}::uuid
+        null,
+        null,
+        now(),
+        now()
       )
     `;
   } catch (error) {
@@ -684,7 +709,10 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
     };
   }
 
-  const leadTemperature = parsed.data.lead_temperature ?? temperatureFromRating(parsed.data.success_rating);
+  const leadTemperature = resolveCompanyLeadTemperature(
+    parsed.data.lead_temperature,
+    parsed.data.success_rating,
+  );
 
   try {
     const rows = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -712,7 +740,9 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
         expected_closing_date,
         notes,
         created_by,
-        updated_by
+        updated_by,
+        created_at,
+        updated_at
       )
       values (
         ${organization.id}::uuid,
@@ -737,8 +767,10 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
           ${parsed.data.estimated_value},
           ${parsed.data.expected_closing_date}::date,
           ${parsed.data.notes},
-        ${user.id}::uuid,
-        ${user.id}::uuid
+        null,
+        null,
+        now(),
+        now()
       )
       returning id::text as id
     `;
@@ -750,27 +782,11 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
 
     await insertActivityLog("company.created", "company", companyId, { name: parsed.data.name });
 
-    await applyScoringEvent({
-      organizationId: organization.id,
-      userId: user.id,
-      actionKey: "lead_created",
-      companyId,
-      sourceRecordId: companyId,
-      sourceRecordType: "company",
-      metadata: {
-        company_name: parsed.data.name,
-        lead_source: parsed.data.lead_source,
-      },
-      actorUserId: user.id,
-      addToLeadScore: true,
-      idempotencyKey: buildScoreIdempotencyKey(["lead_created", companyId]),
-    });
-
-    if (parsed.data.lead_source) {
+    try {
       await applyScoringEvent({
         organizationId: organization.id,
         userId: user.id,
-        actionKey: "lead_source_bonus",
+        actionKey: "lead_created",
         companyId,
         sourceRecordId: companyId,
         sourceRecordType: "company",
@@ -780,8 +796,41 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
         },
         actorUserId: user.id,
         addToLeadScore: true,
-        idempotencyKey: buildScoreIdempotencyKey(["lead_source_bonus", companyId, parsed.data.lead_source]),
+        idempotencyKey: buildScoreIdempotencyKey(["lead_created", companyId]),
       });
+    } catch (error) {
+      logServerError("company.create.scoring", error, {
+        organizationId: organization.id,
+        companyId,
+        userId: user.id,
+      });
+    }
+
+    if (parsed.data.lead_source) {
+      try {
+        await applyScoringEvent({
+          organizationId: organization.id,
+          userId: user.id,
+          actionKey: "lead_source_bonus",
+          companyId,
+          sourceRecordId: companyId,
+          sourceRecordType: "company",
+          metadata: {
+            company_name: parsed.data.name,
+            lead_source: parsed.data.lead_source,
+          },
+          actorUserId: user.id,
+          addToLeadScore: true,
+          idempotencyKey: buildScoreIdempotencyKey(["lead_source_bonus", companyId, parsed.data.lead_source]),
+        });
+      } catch (error) {
+        logServerError("company.create.lead_source_scoring", error, {
+          organizationId: organization.id,
+          companyId,
+          leadSource: parsed.data.lead_source,
+          userId: user.id,
+        });
+      }
     }
 
     if (parsed.data.referred_by_user_id && parsed.data.referred_by_user_id !== user.id) {
@@ -828,7 +877,10 @@ export async function updateCompanyAction(id: string, values: unknown): Promise<
     };
   }
 
-  const leadTemperature = parsed.data.lead_temperature ?? temperatureFromRating(parsed.data.success_rating);
+  const leadTemperature = resolveCompanyLeadTemperature(
+    parsed.data.lead_temperature,
+    parsed.data.success_rating,
+  );
 
   try {
     const existing = await getExistingCompanyStage(id, organization.id);
@@ -1346,7 +1398,7 @@ export async function moveCompanyToPipelineStage(companyId: string, stageId: str
       update public.companies
       set
         pipeline_stage_id = ${stage.id}::uuid,
-        updated_by = ${user.id}::uuid,
+        updated_by = null,
         updated_at = now()
       where id = ${companyId}::uuid
         and organization_id = ${organization.id}::uuid

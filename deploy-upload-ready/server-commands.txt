@@ -1,35 +1,34 @@
 Upload this file:
-- crm-next.zip
+- crm-next-deploy-2026-05-11.zip
 
-Windows upload command:
-scp .\deploy-upload-ready\crm-next.zip <your-server-user>@145.79.11.196:/home/crm.mugnee.com/public_html/
+Recommended upload target:
+- /home/crm.mugnee.com/
 
-Server deploy commands:
-cd /home/crm.mugnee.com/public_html
-unzip -o crm-next.zip -d /home/crm.mugnee.com/public_html
-npm install --include=dev --legacy-peer-deps
-cp .env.production .env
+Example upload from Windows PowerShell:
+scp .\deploy-upload-ready\crm-next-deploy-2026-05-11.zip <server-user>@<server-ip>:/home/crm.mugnee.com/
+
+PuTTY terminal commands after upload:
+cd /home/crm.mugnee.com
+mkdir -p app
+unzip -o crm-next-deploy-2026-05-11.zip -d /home/crm.mugnee.com/app
+cd /home/crm.mugnee.com/app
 mkdir -p public/uploads storage/private storage/tmp
+npm install --legacy-peer-deps
 npx prisma generate
 npx prisma migrate deploy
 npm run build
-pm2 delete crm-next || true
-PORT=3001 pm2 start npm --name crm-next -- start
+pm2 restart crm-next --update-env
 pm2 save
+pm2 status
 
-First-time env setup:
-cd /home/crm.mugnee.com/public_html
+If this is your first deploy and env file is not set yet:
+cd /home/crm.mugnee.com/app
 cp .env.production.example .env.production
 nano .env.production
-
-Rebuild/restart commands:
-cd /home/crm.mugnee.com/public_html
-npm install --include=dev --legacy-peer-deps
-cp .env.production .env
-mkdir -p public/uploads storage/private storage/tmp
-npx prisma generate
-npx prisma migrate deploy
-npm run build
-pm2 delete crm-next || true
-PORT=3001 pm2 start npm --name crm-next -- start
+pm2 start ecosystem.config.cjs
 pm2 save
+
+Useful check commands:
+pm2 logs crm-next --lines 50
+curl http://127.0.0.1:3001
+curl -I https://crm.mugnee.com
