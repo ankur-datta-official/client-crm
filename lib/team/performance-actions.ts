@@ -88,7 +88,9 @@ export async function upsertPerformanceTarget(input: unknown): Promise<Performan
         target_value,
         effective_date,
         notes,
-        assigned_by
+        assigned_by,
+        created_at,
+        updated_at
       )
       values (
         ${organization.id}::uuid,
@@ -98,7 +100,9 @@ export async function upsertPerformanceTarget(input: unknown): Promise<Performan
         ${parsed.data.targetValue},
         ${parsed.data.effectiveDate}::date,
         nullif(${parsed.data.notes ?? null}, ''),
-        ${user.id}::uuid
+        ${user.id}::uuid,
+        now(),
+        now()
       )
       on conflict (organization_id, user_id, metric_key, period_type, effective_date)
       do update set
