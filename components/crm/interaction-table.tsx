@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { EmptyState } from "@/components/shared/empty-state";
 import { InteractionTypeBadge } from "@/components/crm/interaction-type-badge";
+import { MeetingQuickDoneDialog } from "@/components/crm/meeting-quick-done-dialog";
 import { LeadTemperatureBadge } from "@/components/crm/lead-temperature-badge";
 import { RatingBadge } from "@/components/crm/rating-badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -115,8 +116,10 @@ export function InteractionTable({
               <div className="mt-3 flex flex-wrap gap-2">
                 <RatingBadge rating={item.success_rating} />
                 {item.lead_temperature ? <LeadTemperatureBadge temperature={item.lead_temperature} /> : null}
+                {item.completed_at ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">Completed</span> : null}
               </div>
               <div className="mt-3 flex items-center gap-2">
+                {!item.completed_at ? <MeetingQuickDoneDialog interaction={item} trigger={<Button size="sm" variant="outline" className="flex-1">Done</Button>} /> : null}
                 <Button asChild size="sm" variant="outline" className="flex-1"><Link href={`/meetings/${item.id}`}>Open</Link></Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -181,10 +184,11 @@ export function InteractionTable({
                       <td className="crm-table-cell"><InteractionTypeBadge type={item.interaction_type} /></td>
                       <td className="crm-table-cell truncate">{item.discussion_details}</td>
                       <td className="crm-table-cell"><RatingBadge rating={item.success_rating} /></td>
-                      <td className="crm-table-cell">{item.lead_temperature ? <LeadTemperatureBadge temperature={item.lead_temperature} /> : "-"}</td>
+                      <td className="crm-table-cell">{item.lead_temperature ? <LeadTemperatureBadge temperature={item.lead_temperature} /> : item.completed_at ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">Done</span> : "-"}</td>
                       <td className="crm-table-cell truncate">{item.next_action ?? "-"}</td>
                       <td className="crm-table-cell">
                         <div className="flex items-center gap-2">
+                          {!item.completed_at ? <MeetingQuickDoneDialog interaction={item} trigger={<Button size="sm" variant="outline">Done</Button>} /> : null}
                           <Button asChild size="sm" variant="outline"><Link href={`/meetings/${item.id}`}>Open</Link></Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

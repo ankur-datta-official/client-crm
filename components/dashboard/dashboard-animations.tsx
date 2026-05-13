@@ -2,6 +2,7 @@
 
 import { motion, type HTMLMotionProps } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   ArrowRight, 
   ChevronRight, 
@@ -14,7 +15,10 @@ import {
   CalendarClock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MeetingQuickDoneDialog } from "@/components/crm/meeting-quick-done-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { completeFollowup } from "@/lib/crm/followup-actions";
+import { assignHelpRequestToMe, resolveHelpRequest } from "@/lib/crm/help-request-actions";
 import { cn } from "@/lib/utils";
 import React from "react";
 
@@ -187,6 +191,8 @@ export function AlertCard({ alert, index = 0 }: { alert: any; index?: number }) 
 }
 
 export function TaskRow({ task }: { task: any }) {
+  const router = useRouter();
+  const [isPending, startTransition] = React.useTransition();
   const toneClasses = {
     rose: "bg-rose-50 text-rose-700 dark:border dark:border-rose-300/18 dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_58%),linear-gradient(180deg,rgba(136,19,55,0.92)_0%,rgba(103,12,42,0.96)_100%)] dark:text-rose-100 dark:shadow-[0_10px_24px_-16px_rgba(225,29,72,0.55)]",
     amber: "bg-amber-50 text-amber-700 dark:border dark:border-amber-300/18 dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_58%),linear-gradient(180deg,rgba(133,77,14,0.92)_0%,rgba(113,63,18,0.96)_100%)] dark:text-amber-100 dark:shadow-[0_10px_24px_-16px_rgba(245,158,11,0.5)]",
@@ -196,9 +202,29 @@ export function TaskRow({ task }: { task: any }) {
   // Use icon mapping to avoid passing function from server
   const Icon = ICON_MAP[task.iconName as keyof typeof ICON_MAP] || TimerOff;
 
+  function navigateToTask() {
+    router.push(task.href);
+  }
+
+  function runQuickAction(event: React.MouseEvent<HTMLButtonElement>, action: () => Promise<unknown>) {
+    event.stopPropagation();
+    startTransition(async () => {
+      await action();
+      router.refresh();
+    });
+  }
+
   return (
-    <Link
-      href={task.href}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={navigateToTask}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          navigateToTask();
+        }
+      }}
       className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)]"
     >
       <div className="flex min-w-0 items-center gap-3">
@@ -210,7 +236,76 @@ export function TaskRow({ task }: { task: any }) {
           <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-300">{task.subtitle}</p>
         </div>
       </div>
-      <StatusPill tone={task.tone}>{task.badge}</StatusPill>
+      <div className="flex shrink-0 items-center gap-2">
+        {task.actionKind === "complete_meeting" && task.canQuickComplete ? (
+          <MeetingQuickDoneDialog
+            interaction={{
+              id: task.sourceRecordId,
+              interaction_type: task.interactionType,
+              discussion_details: task.discussionDetails,
+              next_action: task.nextActionValue,
+              next_followup_at: task.nextFollowupAtValue,
+              need_help: task.needHelpValue,
+              completed_at: null,
+            }}
+            trigger={
+              <Button size="sm" variant="outline" onClick={(event) => event.stopPropagation()}>
+                Quick Done
+              </Button>
+            }
+          />
+        ) : null}
+        {task.actionKind === "complete_followup" && task.canQuickComplete ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isPending}
+            onClick={(event) => runQuickAction(event, () => completeFollowup(task.sourceRecordId))}
+          >
+            Complete
+          </Button>
+        ) : null}
+        {task.actionKind === "resolve_help_request" && task.canResolve ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isPending}
+            onClick={(event) => runQuickAction(event, () => resolveHelpRequest(task.sourceRecordId))}
+          >
+            Resolve
+          </Button>
+        ) : null}
+        {task.actionKind === "assign_help_request" && task.canAssignToMe ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isPending}
+            onClick={(event) => runQuickAction(event, () => assignHelpRequestToMe(task.sourceRecordId))}
+          >
+            Assign to Me
+          </Button>
+        ) : null}
+        <StatusPill tone={task.tone}>{task.badge}</StatusPill>
+      </div>
+    </div>
+  );
+}
+
+export function CompletedTaskRow({ task }: { task: any }) {
+  return (
+    <Link
+      href={task.href}
+      className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)]"
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{task.title}</p>
+          <StatusPill tone={task.tone}>{task.badge}</StatusPill>
+        </div>
+        <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-300">{task.context}</p>
+        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{task.completedAtLabel}</p>
+      </div>
+      <ChevronRight className="mt-1 size-4 shrink-0 text-slate-400 dark:text-slate-500" />
     </Link>
   );
 }

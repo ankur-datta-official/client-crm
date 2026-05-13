@@ -1,0 +1,185 @@
+{
+  "startedAt": "2026-05-13T07:51:55.621Z",
+  "finishedAt": "2026-05-13T07:51:55.928Z",
+  "targetEmail": "ankur.mugnee@gmail.com",
+  "workspace": {
+    "id": "feff9577-d8ee-4608-a9d5-a0bbd9cadbf2",
+    "name": "QA Launch Validation Workspace"
+  },
+  "seeded": false,
+  "counts": {
+    "companies": 6,
+    "contacts": 8,
+    "interactions": 5,
+    "followups": 5,
+    "documents": 3,
+    "helpRequests": 4
+  },
+  "automated": {
+    "passed": 19,
+    "failed": 7,
+    "blocked": 10
+  },
+  "commandResults": [
+    {
+      "name": "Prisma migrate status",
+      "command": "npx prisma migrate status",
+      "ok": false,
+      "exitCode": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "Schema parity",
+      "command": "npm run db:check-schema-parity",
+      "ok": false,
+      "exitCode": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "Local data status",
+      "command": "npm run data:check:local",
+      "ok": false,
+      "exitCode": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "Typecheck",
+      "command": "npm run typecheck",
+      "ok": false,
+      "exitCode": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "Lint",
+      "command": "npm run lint",
+      "ok": false,
+      "exitCode": null,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "dataAssertions": [
+    {
+      "key": "seeded-companies",
+      "ok": true,
+      "details": "Companies: 6"
+    },
+    {
+      "key": "seeded-contacts",
+      "ok": true,
+      "details": "Contacts: 8"
+    },
+    {
+      "key": "seeded-interactions",
+      "ok": true,
+      "details": "Meetings: 5"
+    },
+    {
+      "key": "seeded-followups",
+      "ok": true,
+      "details": "Follow-ups: 5"
+    },
+    {
+      "key": "seeded-documents",
+      "ok": true,
+      "details": "Documents: 3"
+    },
+    {
+      "key": "seeded-help-requests",
+      "ok": true,
+      "details": "Help requests: 4"
+    },
+    {
+      "key": "completed-meetings-present",
+      "ok": false,
+      "details": "Completed meetings: 0"
+    },
+    {
+      "key": "completed-meetings-have-actor",
+      "ok": true,
+      "details": "Missing completed_by: 0"
+    },
+    {
+      "key": "no-future-completed-meetings",
+      "ok": true,
+      "details": "Future meetings already completed: 0"
+    },
+    {
+      "key": "overdue-followups-present",
+      "ok": true,
+      "details": "Overdue pending follow-ups: 1"
+    },
+    {
+      "key": "today-followups-present",
+      "ok": true,
+      "details": "Today pending follow-ups: 1"
+    },
+    {
+      "key": "upcoming-followups-present",
+      "ok": true,
+      "details": "Upcoming pending follow-ups: 1"
+    },
+    {
+      "key": "completed-followups-present",
+      "ok": false,
+      "details": "Completed follow-ups: 0"
+    },
+    {
+      "key": "open-help-present",
+      "ok": true,
+      "details": "Open help requests: 1"
+    },
+    {
+      "key": "in-progress-help-present",
+      "ok": true,
+      "details": "In-progress help requests: 1"
+    },
+    {
+      "key": "resolved-help-present",
+      "ok": true,
+      "details": "Resolved help requests: 1"
+    },
+    {
+      "key": "contact-links-intact",
+      "ok": true,
+      "details": "Orphan contacts: 0"
+    },
+    {
+      "key": "interaction-links-intact",
+      "ok": true,
+      "details": "Orphan meetings: 0"
+    },
+    {
+      "key": "followup-links-intact",
+      "ok": true,
+      "details": "Orphan follow-ups: 0"
+    },
+    {
+      "key": "document-links-intact",
+      "ok": true,
+      "details": "Orphan documents: 0"
+    },
+    {
+      "key": "help-request-links-intact",
+      "ok": true,
+      "details": "Orphan help requests: 0"
+    }
+  ],
+  "manualChecks": [
+    "Auth login/logout and workspace switching in browser",
+    "Protected-route redirect behavior with real authenticated session",
+    "Dashboard quick actions from visible task cards",
+    "Meeting quick-done modal submission and UI refresh",
+    "Document download/open flow against real stored files",
+    "Global search UI results and keyboard behavior",
+    "Export modal and downloaded file inspection",
+    "Mobile layout sanity on dashboard, company, contact, meeting, and follow-up pages",
+    "Role restriction checks using multiple real users",
+    "Live-like deployment smoke checks outside the local environment"
+  ],
+  "recommendation": "No-Go"
+}

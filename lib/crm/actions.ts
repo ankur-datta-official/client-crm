@@ -10,10 +10,17 @@ import {
   interactionSchema,
   industrySchema,
   pipelineStageSchema,
+  quickCompleteInteractionSchema,
   temperatureFromRating,
 } from "@/lib/crm/schemas";
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
+import { hasInteractionCompletionSupport } from "@/lib/crm/interaction-completion-support";
 import { slugify } from "@/lib/crm/utils";
+import {
+  buildContactValues,
+  buildEmailValues,
+  getPrimaryContactValue,
+} from "@/lib/crm/contact-channels";
 import { createWorkspaceNotification } from "@/lib/notifications/notifications";
 import { prisma } from "@/lib/prisma";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
@@ -53,6 +60,14 @@ type ContactLookup = {
 type InteractionLookup = {
   id: string;
   company_id: string;
+  contact_person_id: string | null;
+  assigned_user_id: string | null;
+  interaction_type: string;
+  discussion_details: string;
+  next_action: string | null;
+  next_followup_at: string | null;
+  need_help: boolean;
+  completed_at: string | null;
   success_rating: number | null;
   lead_temperature: string | null;
 };
@@ -372,6 +387,14 @@ async function requireInteractionInOrganization(interactionId: string) {
     select
       id::text as id,
       company_id::text as company_id,
+      contact_person_id::text as contact_person_id,
+      assigned_user_id::text as assigned_user_id,
+      interaction_type,
+      discussion_details,
+      next_action,
+      next_followup_at::text as next_followup_at,
+      need_help,
+      completed_at::text as completed_at,
       success_rating,
       lead_temperature
     from public.interactions
@@ -386,6 +409,46 @@ async function requireInteractionInOrganization(interactionId: string) {
   }
 
   return { organization, interaction };
+}
+
+function mapInteractionToFollowupType(interactionType: string) {
+  const supportedTypes = new Set([
+    "Phone Call",
+    "Email",
+    "WhatsApp",
+    "Physical Meeting",
+    "Online Meeting",
+    "Quotation Follow-up",
+    "Payment Follow-up",
+    "Technical Follow-up",
+    "Demo Follow-up",
+    "Decision Follow-up",
+    "Other",
+  ]);
+
+  const mappedType = interactionType === "WhatsApp Discussion"
+    ? "WhatsApp"
+    : interactionType === "Email Follow-up"
+      ? "Email"
+      : interactionType === "Physical Meeting"
+        ? "Physical Meeting"
+        : interactionType === "Online Meeting"
+          ? "Online Meeting"
+          : interactionType === "Phone Call"
+            ? "Phone Call"
+            : interactionType === "Technical Meeting"
+              ? "Technical Follow-up"
+              : interactionType === "Demo Meeting"
+                ? "Demo Follow-up"
+                : interactionType === "Quotation Discussion"
+                  ? "Quotation Follow-up"
+                  : interactionType === "Payment Discussion"
+                    ? "Payment Follow-up"
+                    : interactionType === "Closing Meeting"
+                      ? "Decision Follow-up"
+                      : "Other";
+
+  return supportedTypes.has(mappedType) ? mappedType : "Other";
 }
 
 async function updateCompanyRatingFromInteraction(companyId: string, rating: number | null, temperature: string | null) {
@@ -713,6 +776,10 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
     parsed.data.lead_temperature,
     parsed.data.success_rating,
   );
+  const phoneNumbers = buildContactValues(parsed.data.phone, parsed.data.phone_numbers);
+  const emailAddresses = buildEmailValues(parsed.data.email, parsed.data.email_addresses);
+  const primaryPhone = getPrimaryContactValue(phoneNumbers);
+  const primaryEmail = getPrimaryContactValue(emailAddresses);
 
   try {
     const rows = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -728,8 +795,10 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
         pipeline_stage_id,
         status,
         phone,
+        phone_numbers,
         whatsapp,
         email,
+        email_addresses,
         website,
         address,
           city,
@@ -755,9 +824,11 @@ export async function createCompanyAction(values: unknown): Promise<CrmActionSta
         ${parsed.data.assigned_user_id}::uuid,
         ${parsed.data.pipeline_stage_id}::uuid,
         ${parsed.data.status},
-        ${parsed.data.phone},
+        ${primaryPhone},
+        ${JSON.stringify(phoneNumbers)}::jsonb,
         ${parsed.data.whatsapp},
-        ${parsed.data.email},
+        ${primaryEmail},
+        ${JSON.stringify(emailAddresses)}::jsonb,
         ${parsed.data.website},
         ${parsed.data.address},
           ${parsed.data.city},
@@ -881,6 +952,10 @@ export async function updateCompanyAction(id: string, values: unknown): Promise<
     parsed.data.lead_temperature,
     parsed.data.success_rating,
   );
+  const phoneNumbers = buildContactValues(parsed.data.phone, parsed.data.phone_numbers);
+  const emailAddresses = buildEmailValues(parsed.data.email, parsed.data.email_addresses);
+  const primaryPhone = getPrimaryContactValue(phoneNumbers);
+  const primaryEmail = getPrimaryContactValue(emailAddresses);
 
   try {
     const existing = await getExistingCompanyStage(id, organization.id);
@@ -897,9 +972,11 @@ export async function updateCompanyAction(id: string, values: unknown): Promise<
         assigned_user_id = ${parsed.data.assigned_user_id}::uuid,
         pipeline_stage_id = ${parsed.data.pipeline_stage_id}::uuid,
         status = ${parsed.data.status},
-        phone = ${parsed.data.phone},
+        phone = ${primaryPhone},
+        phone_numbers = ${JSON.stringify(phoneNumbers)}::jsonb,
         whatsapp = ${parsed.data.whatsapp},
-        email = ${parsed.data.email},
+        email = ${primaryEmail},
+        email_addresses = ${JSON.stringify(emailAddresses)}::jsonb,
         website = ${parsed.data.website},
         address = ${parsed.data.address},
           city = ${parsed.data.city},
@@ -1006,6 +1083,11 @@ export async function createContactAction(values: unknown): Promise<CrmActionSta
 
   if (!parsed.success) return getValidationState(parsed.error);
 
+  const mobileNumbers = buildContactValues(parsed.data.mobile, parsed.data.mobile_numbers);
+  const emailAddresses = buildEmailValues(parsed.data.email, parsed.data.email_addresses);
+  const primaryMobile = getPrimaryContactValue(mobileNumbers);
+  const primaryEmail = getPrimaryContactValue(emailAddresses);
+
   try {
     const { organization } = await requireCompanyInOrganization(parsed.data.company_id);
     const rows = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -1016,8 +1098,10 @@ export async function createContactAction(values: unknown): Promise<CrmActionSta
         designation,
         department,
         mobile,
+        mobile_numbers,
         whatsapp,
         email,
+        email_addresses,
         linkedin,
         decision_role,
         relationship_level,
@@ -1034,9 +1118,11 @@ export async function createContactAction(values: unknown): Promise<CrmActionSta
         ${parsed.data.name},
         ${parsed.data.designation},
         ${parsed.data.department},
-        ${parsed.data.mobile},
+        ${primaryMobile},
+        ${JSON.stringify(mobileNumbers)}::jsonb,
         ${parsed.data.whatsapp},
-        ${parsed.data.email},
+        ${primaryEmail},
+        ${JSON.stringify(emailAddresses)}::jsonb,
         ${parsed.data.linkedin},
         ${parsed.data.decision_role},
         ${parsed.data.relationship_level},
@@ -1080,6 +1166,11 @@ export async function updateContactAction(id: string, values: unknown): Promise<
 
   if (!parsed.success) return getValidationState(parsed.error);
 
+  const mobileNumbers = buildContactValues(parsed.data.mobile, parsed.data.mobile_numbers);
+  const emailAddresses = buildEmailValues(parsed.data.email, parsed.data.email_addresses);
+  const primaryMobile = getPrimaryContactValue(mobileNumbers);
+  const primaryEmail = getPrimaryContactValue(emailAddresses);
+
   try {
     const { organization, contact } = await requireContactInOrganization(id);
     await requireCompanyInOrganization(parsed.data.company_id);
@@ -1091,9 +1182,11 @@ export async function updateContactAction(id: string, values: unknown): Promise<
         name = ${parsed.data.name},
         designation = ${parsed.data.designation},
         department = ${parsed.data.department},
-        mobile = ${parsed.data.mobile},
+        mobile = ${primaryMobile},
+        mobile_numbers = ${JSON.stringify(mobileNumbers)}::jsonb,
         whatsapp = ${parsed.data.whatsapp},
-        email = ${parsed.data.email},
+        email = ${primaryEmail},
+        email_addresses = ${JSON.stringify(emailAddresses)}::jsonb,
         linkedin = ${parsed.data.linkedin},
         decision_role = ${parsed.data.decision_role},
         relationship_level = ${parsed.data.relationship_level},
@@ -1347,6 +1440,136 @@ export async function archiveInteractionAction(id: string): Promise<CrmActionSta
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Unable to archive meeting." };
+  }
+}
+
+export async function completeInteractionAction(id: string, values: unknown): Promise<CrmActionState> {
+  const parsed = quickCompleteInteractionSchema.safeParse(values);
+  if (!parsed.success) return getValidationState(parsed.error);
+
+  try {
+    const interactionCompletionEnabled = await hasInteractionCompletionSupport();
+    if (!interactionCompletionEnabled) {
+      return {
+        ok: false,
+        error: "Meeting quick completion needs the latest database update. Please refresh after applying the latest migration.",
+      };
+    }
+
+    const user = await requireAuth();
+    const { organization, interaction } = await requireInteractionInOrganization(id);
+    await ensureCanWorkWithCompany(interaction.company_id);
+
+    const leadTemperature = temperatureFromRating(interaction.success_rating) ?? interaction.lead_temperature;
+
+    await prisma.$executeRaw`
+      update public.interactions
+      set
+        discussion_details = ${parsed.data.discussion_details},
+        next_action = ${parsed.data.next_action},
+        next_followup_at = ${parsed.data.next_followup_at}::timestamptz,
+        need_help = ${parsed.data.need_help},
+        completed_at = coalesce(completed_at, now()),
+        completed_by = coalesce(completed_by, ${user.id}::uuid),
+        updated_by = ${user.id}::uuid,
+        updated_at = now()
+      where id = ${id}::uuid
+        and organization_id = ${organization.id}::uuid
+    `;
+
+    if (parsed.data.create_followup_now && parsed.data.next_followup_at) {
+      const followupTitle =
+        parsed.data.next_action?.trim() || `${interaction.interaction_type} follow-up`;
+
+      await prisma.$executeRaw`
+        insert into public.followups (
+          organization_id,
+          company_id,
+          contact_person_id,
+          interaction_id,
+          assigned_user_id,
+          followup_type,
+          title,
+          description,
+          scheduled_at,
+          reminder_before_minutes,
+          status,
+          priority,
+          created_by,
+          updated_by
+        )
+        values (
+          ${organization.id}::uuid,
+          ${interaction.company_id}::uuid,
+          ${interaction.contact_person_id}::uuid,
+          ${id}::uuid,
+          ${interaction.assigned_user_id ?? user.id}::uuid,
+          ${mapInteractionToFollowupType(interaction.interaction_type)},
+          ${followupTitle},
+          ${parsed.data.discussion_details},
+          ${parsed.data.next_followup_at}::timestamptz,
+          60,
+          'pending',
+          'medium',
+          ${user.id}::uuid,
+          ${user.id}::uuid
+        )
+      `;
+
+      await insertActivityLog("meeting.followup_created_from_quick_done", "interaction", id, {
+        next_followup_at: parsed.data.next_followup_at,
+        title: followupTitle,
+      });
+    }
+
+    await insertActivityLog("meeting.completed", "interaction", id, {
+      next_action: parsed.data.next_action,
+      next_followup_at: parsed.data.next_followup_at,
+      need_help: parsed.data.need_help,
+      created_followup_now: parsed.data.create_followup_now,
+    });
+
+    await notifyDirectManagerOfActivity({
+      actorUserId: user.id,
+      title: "Junior completed a meeting",
+      message: "A direct junior team member closed out a meeting and captured the next step.",
+      link: `/meetings/${id}`,
+    });
+
+    await applyScoringEvent({
+      organizationId: organization.id,
+      userId: user.id,
+      actionKey: "meeting-done",
+      companyId: interaction.company_id,
+      sourceRecordId: id,
+      sourceRecordType: "interaction",
+      metadata: {
+        interaction_type: interaction.interaction_type,
+        company_id: interaction.company_id,
+        create_followup_now: parsed.data.create_followup_now,
+      },
+      actorUserId: user.id,
+      addToLeadScore: true,
+      idempotencyKey: buildScoreIdempotencyKey(["meeting-done", id]),
+    });
+
+    await updateCompanyRatingFromInteraction(interaction.company_id, interaction.success_rating, leadTemperature);
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/todo-tasks");
+    revalidatePath("/dashboard/completed-tasks");
+    revalidatePath("/meetings");
+    revalidatePath(`/meetings/${id}`);
+    revalidatePath(`/companies/${interaction.company_id}`);
+    if (interaction.contact_person_id) {
+      revalidatePath(`/contacts/${interaction.contact_person_id}`);
+    }
+    if (parsed.data.create_followup_now) {
+      revalidatePath("/followups");
+    }
+
+    return { ok: true, id };
+  } catch (error) {
+    return { ok: false, error: getSafeErrorMessage(error, "Unable to complete the meeting right now.") };
   }
 }
 

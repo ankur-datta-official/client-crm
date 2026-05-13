@@ -96,8 +96,10 @@ export type Company = {
   lead_score: number;
   status: RecordStatus;
   phone: string | null;
+  phone_numbers: string[];
   whatsapp: string | null;
   email: string | null;
+  email_addresses: string[];
   website: string | null;
   address: string | null;
   city: string | null;
@@ -135,8 +137,10 @@ export type ContactPerson = {
   designation: string | null;
   department: string | null;
   mobile: string | null;
+  mobile_numbers: string[];
   whatsapp: string | null;
   email: string | null;
+  email_addresses: string[];
   linkedin: string | null;
   decision_role: DecisionRole | null;
   relationship_level: RelationshipLevel | null;
@@ -225,6 +229,8 @@ export type Interaction = {
   lead_temperature: LeadTemperature | null;
   next_action: string | null;
   next_followup_at: string | null;
+  completed_at: string | null;
+  completed_by: string | null;
   need_help: boolean;
   internal_note: string | null;
   status: RecordStatus;

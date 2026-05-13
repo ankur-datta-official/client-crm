@@ -8,6 +8,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { RoleRow, TeamMember } from "@/lib/team/types";
@@ -19,7 +24,7 @@ type TeamMemberCardProps = {
   roles: RoleRow[];
   canUpdateRole: boolean;
   canDeactivate: boolean;
-  onRoleChange: (userId: string, roleId: string) => void;
+  onRoleChange: (member: TeamMember, roleId: string) => void;
   onDeactivate: (userId: string) => void;
   onReactivate: (userId: string, roleId?: string) => void;
 };
@@ -34,6 +39,11 @@ export function TeamMemberCard({
   onReactivate,
 }: TeamMemberCardProps) {
   const fallbackRoleId = member.role_id ?? roles.find((role) => role.slug === "viewer")?.id ?? roles[0]?.id;
+  const isProtectedMember = Boolean(member.is_fixed_super_admin || member.is_workspace_owner);
+  const assignableRoles = member.is_workspace_owner
+    ? roles.filter((role) => role.slug === "organization-admin")
+    : roles;
+  const selectedRoleName = roles.find((role) => role.id === member.role_id)?.name ?? member.role_name ?? "Unassigned";
 
   return (
     <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900/85">
@@ -76,28 +86,34 @@ export function TeamMemberCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {canUpdateRole ? (
-                <DropdownMenuItem onSelect={(event) => event.preventDefault()}>
-                  <select
-                    className="h-8 w-full rounded-md border bg-background px-2 text-sm"
-                    value={member.role_id ?? ""}
-                    onChange={(event) => onRoleChange(member.id, event.target.value)}
-                    disabled={!member.is_active}
-                  >
-                    {roles.map((role) => (
-                      <option key={role.id} value={role.id}>
+              {canUpdateRole && !member.is_fixed_super_admin ? (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger disabled={!member.is_active || isProtectedMember}>
+                    Change role
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-56">
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      Current: {selectedRoleName}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {assignableRoles.map((role) => (
+                      <DropdownMenuItem
+                        key={role.id}
+                        disabled={role.id === member.role_id}
+                        onSelect={() => onRoleChange(member, role.id)}
+                      >
                         {role.name}
-                      </option>
+                      </DropdownMenuItem>
                     ))}
-                  </select>
-                </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               ) : null}
-              {canDeactivate && member.is_active ? (
+              {canDeactivate && member.is_active && !member.is_fixed_super_admin ? (
                 <DropdownMenuItem onSelect={() => onDeactivate(member.id)}>
                   Deactivate user
                 </DropdownMenuItem>
               ) : null}
-              {canDeactivate && !member.is_active && fallbackRoleId ? (
+              {canDeactivate && !member.is_active && fallbackRoleId && !member.is_fixed_super_admin ? (
                 <DropdownMenuItem onSelect={() => onReactivate(member.id, fallbackRoleId)}>
                   Reactivate user
                 </DropdownMenuItem>

@@ -191,6 +191,7 @@ export async function updateHelpRequest(helpRequestId: string, formData: FormDat
 
     const nextCompanyId = validated.data.company_id ?? helpRequest.company_id;
     revalidatePath("/need-help");
+    revalidatePath("/dashboard");
     revalidatePath(`/need-help/${helpRequestId}`);
     revalidatePath(`/companies/${helpRequest.company_id}`);
     if (nextCompanyId !== helpRequest.company_id) {
@@ -234,6 +235,8 @@ export async function assignHelpRequest(helpRequestId: string, assignedTo: strin
     }
 
     revalidatePath("/need-help");
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/todo-tasks");
     revalidatePath(`/need-help/${helpRequestId}`);
     revalidatePath(`/companies/${helpRequest.company_id}`);
 
@@ -241,6 +244,11 @@ export async function assignHelpRequest(helpRequestId: string, assignedTo: strin
   } catch (error) {
     return { ok: false, error: getSafeErrorMessage(error, "Unable to assign the help request right now.") };
   }
+}
+
+export async function assignHelpRequestToMe(helpRequestId: string): Promise<CrmActionState> {
+  const user = await requireAuth();
+  return assignHelpRequest(helpRequestId, user.id, true);
 }
 
 export async function resolveHelpRequest(helpRequestId: string, resolutionNote?: string): Promise<CrmActionState> {
@@ -276,6 +284,9 @@ export async function resolveHelpRequest(helpRequestId: string, resolutionNote?:
     }
 
     revalidatePath("/need-help");
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/todo-tasks");
+    revalidatePath("/dashboard/completed-tasks");
     revalidatePath(`/need-help/${helpRequestId}`);
     revalidatePath(`/companies/${helpRequest.company_id}`);
 
@@ -306,6 +317,8 @@ export async function rejectHelpRequest(helpRequestId: string, reason?: string):
     });
 
     revalidatePath("/need-help");
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/todo-tasks");
     revalidatePath(`/need-help/${helpRequestId}`);
     revalidatePath(`/companies/${helpRequest.company_id}`);
 
@@ -336,6 +349,8 @@ export async function reopenHelpRequest(helpRequestId: string): Promise<CrmActio
     await insertActivityLog("reopened", "help_request", helpRequestId);
 
     revalidatePath("/need-help");
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/todo-tasks");
     revalidatePath(`/need-help/${helpRequestId}`);
     revalidatePath(`/companies/${helpRequest.company_id}`);
 
@@ -363,6 +378,8 @@ export async function archiveHelpRequest(helpRequestId: string): Promise<CrmActi
     await insertActivityLog("archived", "help_request", helpRequestId);
 
     revalidatePath("/need-help");
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/todo-tasks");
     revalidatePath(`/companies/${helpRequest.company_id}`);
 
     return { ok: true };

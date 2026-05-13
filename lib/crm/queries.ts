@@ -1,9 +1,10 @@
 import { Prisma } from "@prisma/client";
-import { requireOrganization } from "@/lib/auth/session";
+import { requireAuth, requireOrganization } from "@/lib/auth/session";
 import { resolvePagination, type PaginatedResult } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { getAssignableTeamMembers } from "@/lib/team/hierarchy";
 import { ensureDefaultCompanyCategories } from "@/lib/crm/default-company-categories";
+import { hasInteractionCompletionSupport } from "@/lib/crm/interaction-completion-support";
 import { getFollowups } from "./followup-queries";
 import { getDocuments } from "./document-queries";
 import type {
@@ -23,6 +24,41 @@ import type {
   TeamMemberOption,
 } from "@/lib/crm/types";
 
+export type DashboardCompletedTask = {
+  id: string;
+  title: string;
+  context: string;
+  completedAt: string;
+  href: string;
+  badge: string;
+  tone: "emerald" | "blue" | "amber";
+};
+
+export type DashboardTodoTask = {
+  id: string;
+  sourceType: "followup_overdue" | "followup_today" | "help_request" | "meeting_upcoming" | "interaction_next_followup";
+  sourceRecordId: string;
+  title: string;
+  subtitle: string;
+  dueAt: string | null;
+  severityBucket: number;
+  badge: string;
+  href: string;
+  tone: "rose" | "amber" | "blue";
+  iconName: "TimerOff" | "Clock3" | "CircleHelp" | "CalendarClock";
+  actionKind?: "complete_meeting" | "complete_followup" | "resolve_help_request" | "assign_help_request" | null;
+  canQuickComplete?: boolean;
+  canResolve?: boolean;
+  canAssignToMe?: boolean;
+  companyId?: string | null;
+  contactPersonId?: string | null;
+  interactionType?: string | null;
+  discussionDetails?: string | null;
+  nextActionValue?: string | null;
+  nextFollowupAtValue?: string | null;
+  needHelpValue?: boolean;
+};
+
 type JsonRow<T> = {
   payload: T | null;
   total_count?: bigint | number | null;
@@ -40,11 +76,14 @@ function normalizeCount(value: bigint | number | null | undefined) {
   return Number(value ?? 0);
 }
 
-function buildCompanyWhere(organizationId: string, filters: CompanyFilters) {
+function buildCompanyWhere(organizationId: string, filters: CompanyFilters, includeArchived = false) {
   const clauses: Prisma.Sql[] = [
     Prisma.sql`c.organization_id = ${organizationId}::uuid`,
-    Prisma.sql`c.status <> 'archived'`,
   ];
+
+  if (!includeArchived) {
+    clauses.push(Prisma.sql`c.status <> 'archived'`);
+  }
 
   if (filters.search?.trim()) {
     const search = `%${filters.search.trim()}%`;
@@ -53,6 +92,8 @@ function buildCompanyWhere(organizationId: string, filters: CompanyFilters) {
         c.name ilike ${search}
         or c.email ilike ${search}
         or c.phone ilike ${search}
+        or coalesce(c.email_addresses::text, '') ilike ${search}
+        or coalesce(c.phone_numbers::text, '') ilike ${search}
         or c.website ilike ${search}
       )`,
     );
@@ -68,11 +109,14 @@ function buildCompanyWhere(organizationId: string, filters: CompanyFilters) {
   return Prisma.join(clauses, " and ");
 }
 
-function buildContactWhere(organizationId: string, filters: ContactFilters) {
+function buildContactWhere(organizationId: string, filters: ContactFilters, includeArchived = false) {
   const clauses: Prisma.Sql[] = [
     Prisma.sql`cp.organization_id = ${organizationId}::uuid`,
-    Prisma.sql`cp.status <> 'archived'`,
   ];
+
+  if (!includeArchived) {
+    clauses.push(Prisma.sql`cp.status <> 'archived'`);
+  }
 
   if (filters.search?.trim()) {
     const search = `%${filters.search.trim()}%`;
@@ -81,6 +125,8 @@ function buildContactWhere(organizationId: string, filters: ContactFilters) {
         cp.name ilike ${search}
         or cp.mobile ilike ${search}
         or cp.email ilike ${search}
+        or coalesce(cp.mobile_numbers::text, '') ilike ${search}
+        or coalesce(cp.email_addresses::text, '') ilike ${search}
         or cp.designation ilike ${search}
       )`,
     );
@@ -95,11 +141,14 @@ function buildContactWhere(organizationId: string, filters: ContactFilters) {
   return Prisma.join(clauses, " and ");
 }
 
-function buildInteractionWhere(organizationId: string, filters: InteractionFilters) {
+function buildInteractionWhere(organizationId: string, filters: InteractionFilters, includeArchived = false) {
   const clauses: Prisma.Sql[] = [
     Prisma.sql`i.organization_id = ${organizationId}::uuid`,
-    Prisma.sql`i.status <> 'archived'`,
   ];
+
+  if (!includeArchived) {
+    clauses.push(Prisma.sql`i.status <> 'archived'`);
+  }
 
   if (filters.search?.trim()) {
     const search = `%${filters.search.trim()}%`;
@@ -282,9 +331,9 @@ export async function getTeamMembers() {
   `);
 }
 
-export async function getCompanies(filters: CompanyFilters = {}) {
+export async function getCompanies(filters: CompanyFilters = {}, includeArchived = false) {
   const organization = await requireOrganization();
-  const rows = await queryCompaniesRows(buildCompanyWhere(organization.id, filters));
+  const rows = await queryCompaniesRows(buildCompanyWhere(organization.id, filters, includeArchived));
   return rows.flatMap((row) => (row.payload ? [row.payload] : []));
 }
 
@@ -351,9 +400,9 @@ export async function getCompanyById(id: string): Promise<Company | null> {
   return normalizeJsonRecord(rows[0]?.payload ?? null);
 }
 
-export async function getContacts(filters: ContactFilters = {}): Promise<ContactPerson[]> {
+export async function getContacts(filters: ContactFilters = {}, includeArchived = false): Promise<ContactPerson[]> {
   const organization = await requireOrganization();
-  const rows = await queryContactRows(buildContactWhere(organization.id, filters));
+  const rows = await queryContactRows(buildContactWhere(organization.id, filters, includeArchived));
   return rows.flatMap((row) => (row.payload ? [row.payload] : []));
 }
 
@@ -431,9 +480,9 @@ export async function getContactById(contactId: string): Promise<ContactPerson |
   return normalizeJsonRecord(rows[0]?.payload ?? null);
 }
 
-export async function getInteractions(filters: InteractionFilters = {}) {
+export async function getInteractions(filters: InteractionFilters = {}, includeArchived = false) {
   const organization = await requireOrganization();
-  const rows = await queryInteractionRows(buildInteractionWhere(organization.id, filters));
+  const rows = await queryInteractionRows(buildInteractionWhere(organization.id, filters, includeArchived));
   return rows.flatMap((row) => (row.payload ? [row.payload] : []));
 }
 
@@ -695,6 +744,362 @@ export async function getDashboardSetupCounts() {
     meetings: normalizeCount(countsRow?.meetings),
     followups: normalizeCount(countsRow?.followups),
   };
+}
+
+export async function getDashboardCompletedTasks(
+  dateStart: string,
+  dateEnd: string,
+  options: { limit?: number } = {},
+) {
+  const organization = await requireOrganization();
+  const interactionCompletionEnabled = await hasInteractionCompletionSupport();
+  const limitSql = typeof options.limit === "number"
+    ? Prisma.sql` limit ${options.limit}`
+    : Prisma.sql``;
+
+  const [completedFollowups, resolvedHelpRequests, completedMeetings] = await Promise.all([
+    prisma.$queryRaw<Array<{
+      id: string;
+      title: string;
+      completed_at: Date;
+      company_name: string | null;
+    }>>(Prisma.sql`
+      select
+        f.id,
+        f.title,
+        f.completed_at,
+        c.name as company_name
+      from public.followups f
+      left join public.companies c on c.id = f.company_id
+      where f.organization_id = ${organization.id}::uuid
+        and f.status = 'completed'
+        and f.completed_at is not null
+        and f.completed_at >= ${dateStart}::timestamptz
+        and f.completed_at <= ${dateEnd}::timestamptz
+      order by f.completed_at desc
+      ${limitSql}
+    `),
+    prisma.$queryRaw<Array<{
+      id: string;
+      title: string;
+      resolved_at: Date;
+      company_name: string | null;
+    }>>(Prisma.sql`
+      select
+        hr.id,
+        hr.title,
+        hr.resolved_at,
+        c.name as company_name
+      from public.help_requests hr
+      left join public.companies c on c.id = hr.company_id
+      where hr.organization_id = ${organization.id}::uuid
+        and hr.status = 'resolved'
+        and hr.resolved_at is not null
+        and hr.resolved_at >= ${dateStart}::timestamptz
+        and hr.resolved_at <= ${dateEnd}::timestamptz
+      order by hr.resolved_at desc
+      ${limitSql}
+    `),
+    interactionCompletionEnabled ? prisma.$queryRaw<Array<{
+      id: string;
+      interaction_type: string;
+      completed_at: Date;
+      company_name: string | null;
+    }>>(Prisma.sql`
+      select
+        i.id,
+        i.interaction_type,
+        i.completed_at,
+        c.name as company_name
+      from public.interactions i
+      left join public.companies c on c.id = i.company_id
+      where i.organization_id = ${organization.id}::uuid
+        and i.completed_at is not null
+        and i.completed_at >= ${dateStart}::timestamptz
+        and i.completed_at <= ${dateEnd}::timestamptz
+      order by i.completed_at desc
+      ${limitSql}
+    `) : Promise.resolve([]),
+  ]);
+
+  return [
+    ...completedFollowups.map((item) => ({
+      id: `followup-${item.id}`,
+      title: item.title,
+      context: item.company_name ?? "No company",
+      completedAt: item.completed_at.toISOString(),
+      href: `/followups/${item.id}`,
+      badge: "Completed",
+      tone: "emerald" as const,
+    })),
+    ...resolvedHelpRequests.map((item) => ({
+      id: `help-${item.id}`,
+      title: item.title,
+      context: item.company_name ?? "No company",
+      completedAt: item.resolved_at.toISOString(),
+      href: `/need-help/${item.id}`,
+      badge: "Resolved",
+      tone: "blue" as const,
+    })),
+    ...completedMeetings.map((item) => ({
+      id: `meeting-${item.id}`,
+      title: item.company_name ?? item.interaction_type,
+      context: item.interaction_type,
+      completedAt: item.completed_at.toISOString(),
+      href: `/meetings/${item.id}`,
+      badge: "Meeting Done",
+      tone: "amber" as const,
+    })),
+  ].sort((left, right) => new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime());
+}
+
+export async function getDashboardTodoTasks(
+  dateStart: string,
+  dateEnd: string,
+  options: { limit?: number } = {},
+) {
+  const [organization, user] = await Promise.all([requireOrganization(), requireAuth()]);
+  const interactionCompletionEnabled = await hasInteractionCompletionSupport();
+  const dateStartIso = new Date(dateStart).toISOString();
+  const dateEndIso = new Date(dateEnd).toISOString();
+  const nowIso = new Date().toISOString();
+
+  const [followups, helpRequests, upcomingMeetings, interactionReminders] = await Promise.all([
+    prisma.$queryRaw<Array<{
+      id: string;
+      title: string;
+      scheduled_at: Date;
+      priority: string;
+      company_name: string | null;
+    }>>(Prisma.sql`
+      select
+        f.id,
+        f.title,
+        f.scheduled_at,
+        f.priority,
+        c.name as company_name
+      from public.followups f
+      left join public.companies c on c.id = f.company_id
+      where f.organization_id = ${organization.id}::uuid
+        and f.status = 'pending'
+        and f.scheduled_at <= ${dateEndIso}::timestamptz
+        and (
+          f.assigned_user_id = ${user.id}::uuid
+          or (f.assigned_user_id is null and f.created_by = ${user.id}::uuid)
+        )
+      order by f.scheduled_at asc
+    `),
+    prisma.$queryRaw<Array<{
+      id: string;
+      title: string;
+      priority: string | null;
+      status: string | null;
+      assigned_to: string | null;
+      company_name: string | null;
+    }>>(Prisma.sql`
+      select
+        hr.id,
+        hr.title,
+        hr.priority,
+        hr.status,
+        hr.assigned_to::text as assigned_to,
+        c.name as company_name
+      from public.help_requests hr
+      left join public.companies c on c.id = hr.company_id
+      where hr.organization_id = ${organization.id}::uuid
+        and hr.status in ('open', 'in_progress')
+        and (
+          hr.assigned_to = ${user.id}::uuid
+          or (hr.assigned_to is null and hr.requested_by = ${user.id}::uuid)
+        )
+      order by hr.created_at desc
+    `),
+    prisma.$queryRaw<Array<{
+      id: string;
+      interaction_type: string;
+      meeting_datetime: Date;
+      company_id: string;
+      contact_person_id: string | null;
+      company_name: string | null;
+      discussion_details: string;
+      next_action: string | null;
+      next_followup_at: Date | null;
+      need_help: boolean;
+    }>>(Prisma.sql`
+      select
+        i.id,
+        i.interaction_type,
+        i.meeting_datetime,
+        i.company_id::text as company_id,
+        i.contact_person_id::text as contact_person_id,
+        c.name as company_name,
+        i.discussion_details,
+        i.next_action,
+        i.next_followup_at,
+        i.need_help
+      from public.interactions i
+      left join public.companies c on c.id = i.company_id
+      where i.organization_id = ${organization.id}::uuid
+        and i.status <> 'archived'
+        ${interactionCompletionEnabled ? Prisma.sql`and i.completed_at is null` : Prisma.sql``}
+        and i.meeting_datetime >= ${nowIso}::timestamptz
+        and i.meeting_datetime >= ${dateStartIso}::timestamptz
+        and i.meeting_datetime <= ${dateEndIso}::timestamptz
+        and (
+          i.assigned_user_id = ${user.id}::uuid
+          or (i.assigned_user_id is null and i.created_by = ${user.id}::uuid)
+        )
+      order by i.meeting_datetime asc
+    `),
+    prisma.$queryRaw<Array<{
+      id: string;
+      interaction_type: string;
+      next_action: string | null;
+      next_followup_at: Date;
+      company_name: string | null;
+    }>>(Prisma.sql`
+      select
+        i.id,
+        i.interaction_type,
+        i.next_action,
+        i.next_followup_at,
+        c.name as company_name
+      from public.interactions i
+      left join public.companies c on c.id = i.company_id
+      where i.organization_id = ${organization.id}::uuid
+        and i.status <> 'archived'
+        and i.next_followup_at is not null
+        and i.next_followup_at <= ${dateEndIso}::timestamptz
+        and (
+          i.assigned_user_id = ${user.id}::uuid
+          or (i.assigned_user_id is null and i.created_by = ${user.id}::uuid)
+        )
+      order by i.next_followup_at asc
+    `),
+  ]);
+
+  const tasks: DashboardTodoTask[] = [
+    ...followups.map((followup) => {
+      const isOverdue = followup.scheduled_at.getTime() < new Date(dateStartIso).getTime();
+      const isUrgent = followup.priority === "urgent";
+
+      return {
+        id: `${isOverdue ? "overdue" : "today"}-${followup.id}`,
+        sourceType: isOverdue ? ("followup_overdue" as const) : ("followup_today" as const),
+        sourceRecordId: followup.id,
+        title: followup.title,
+        subtitle: `${followup.company_name ?? "No company"} | ${formatDashboardDateTime(followup.scheduled_at)}`,
+        dueAt: followup.scheduled_at.toISOString(),
+        severityBucket: isOverdue ? (isUrgent ? 10 : 20) : (isUrgent ? 40 : 50),
+        badge: isOverdue ? (isUrgent ? "Overdue Urgent" : "Overdue") : (isUrgent ? "Today Urgent" : "Today"),
+        href: `/followups/${followup.id}`,
+        tone: isOverdue || isUrgent ? ("rose" as const) : ("amber" as const),
+        iconName: isOverdue ? ("TimerOff" as const) : ("Clock3" as const),
+        actionKind: "complete_followup" as const,
+        canQuickComplete: true,
+      };
+    }),
+    ...helpRequests.map((request) => {
+      const isUrgent = request.priority === "urgent";
+      const isAssignedToMe = request.assigned_to === user.id;
+      const canResolve = request.status === "in_progress" || (request.status === "open" && isAssignedToMe);
+      const canAssignToMe = request.status === "open" && !request.assigned_to;
+
+      return {
+        id: `help-${request.id}`,
+        sourceType: "help_request" as const,
+        sourceRecordId: request.id,
+        title: request.title,
+        subtitle: `${request.company_name ?? "No company"} | ${toSentenceCase(request.priority ?? "medium")} | ${toSentenceCase(request.status ?? "open")}`,
+        dueAt: null,
+        severityBucket: isUrgent ? (isAssignedToMe ? 30 : 35) : (isAssignedToMe ? 60 : 65),
+        badge: isUrgent ? "Urgent Help" : "Help Request",
+        href: `/need-help/${request.id}`,
+        tone: isUrgent ? ("rose" as const) : ("blue" as const),
+        iconName: "CircleHelp" as const,
+        actionKind: canResolve ? ("resolve_help_request" as const) : canAssignToMe ? ("assign_help_request" as const) : null,
+        canResolve,
+        canAssignToMe,
+      };
+    }),
+    ...interactionReminders.map((interaction) => {
+      const isOverdue = interaction.next_followup_at.getTime() < new Date(dateStartIso).getTime();
+
+      return {
+        id: `reminder-${interaction.id}`,
+        sourceType: "interaction_next_followup" as const,
+        sourceRecordId: interaction.id,
+        title: interaction.next_action?.trim() || `${interaction.interaction_type} follow-up reminder`,
+        subtitle: `${interaction.company_name ?? "No company"} | ${formatDashboardDateTime(interaction.next_followup_at)}`,
+        dueAt: interaction.next_followup_at.toISOString(),
+        severityBucket: isOverdue ? 70 : 75,
+        badge: isOverdue ? "Reminder Overdue" : "Follow-up Reminder",
+        href: `/meetings/${interaction.id}`,
+        tone: "amber" as const,
+        iconName: isOverdue ? ("TimerOff" as const) : ("Clock3" as const),
+      };
+    }),
+    ...upcomingMeetings.map((meeting) => ({
+      id: `meeting-${meeting.id}`,
+      sourceType: "meeting_upcoming" as const,
+      sourceRecordId: meeting.id,
+      title: meeting.company_name ?? meeting.interaction_type,
+      subtitle: `${meeting.interaction_type} | ${formatDashboardDateTime(meeting.meeting_datetime)}`,
+      dueAt: meeting.meeting_datetime.toISOString(),
+      severityBucket: 80,
+      badge: "Upcoming Meeting",
+      href: `/meetings/${meeting.id}`,
+      tone: "blue" as const,
+      iconName: "CalendarClock" as const,
+      actionKind: interactionCompletionEnabled ? ("complete_meeting" as const) : null,
+      canQuickComplete: interactionCompletionEnabled,
+      companyId: meeting.company_id,
+      contactPersonId: meeting.contact_person_id,
+      interactionType: meeting.interaction_type,
+      discussionDetails: meeting.discussion_details,
+      nextActionValue: meeting.next_action,
+      nextFollowupAtValue: meeting.next_followup_at ? meeting.next_followup_at.toISOString() : null,
+      needHelpValue: meeting.need_help,
+    })),
+  ];
+
+  const sortedTasks = tasks.sort((left, right) => {
+    if (left.severityBucket !== right.severityBucket) {
+      return left.severityBucket - right.severityBucket;
+    }
+
+    if (left.dueAt && right.dueAt) {
+      return new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime();
+    }
+
+    if (left.dueAt && !right.dueAt) {
+      return -1;
+    }
+
+    if (!left.dueAt && right.dueAt) {
+      return 1;
+    }
+
+    return left.title.localeCompare(right.title);
+  });
+
+  return typeof options.limit === "number" ? sortedTasks.slice(0, options.limit) : sortedTasks;
+}
+
+function formatDashboardDateTime(value: Date) {
+  return new Intl.DateTimeFormat("en-BD", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function toSentenceCase(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export async function getPipelineStagesForBoard() {

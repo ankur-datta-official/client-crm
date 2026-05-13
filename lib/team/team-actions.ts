@@ -14,6 +14,7 @@ import { getSafeErrorMessage, logServerError } from "@/lib/errors";
 import { createWorkspaceNotification } from "@/lib/notifications/notifications";
 import { prisma } from "@/lib/prisma";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
+import { isFixedSuperAdminEmail } from "@/lib/auth/super-admin";
 import { sendTeamInviteEmail } from "./invite-email";
 import { getPermissions, getRoleById, getRoles } from "./team-queries";
 
@@ -492,11 +493,65 @@ export async function updateTeamMemberRole(userId: string, roleId: string) {
       email: true,
       organization_id: true,
       is_active: true,
+      userRoles: {
+        where: {
+          organization_id: organization.id,
+        },
+        orderBy: {
+          assigned_at: "desc",
+        },
+        take: 1,
+        select: {
+          role_id: true,
+          role: {
+            select: {
+              slug: true,
+              name: true,
+            },
+          },
+        },
+      },
     },
   });
 
   if (!targetProfile) {
     throw new Error("Team member not found.");
+  }
+
+  if (isFixedSuperAdminEmail(targetProfile.email)) {
+    throw new Error("The protected super admin account cannot be reassigned.");
+  }
+
+  const currentRoleAssignment = targetProfile.userRoles[0] ?? null;
+  const currentRoleSlug = currentRoleAssignment?.role.slug ?? null;
+
+  if (currentRoleAssignment?.role_id === roleId) {
+    return { success: true, unchanged: true };
+  }
+
+  if (targetProfile.id === organization.owner_user_id && role.slug !== "organization-admin") {
+    throw new Error("The workspace owner must remain an Organization Admin.");
+  }
+
+  if (currentRoleSlug === "organization-admin" && role.slug !== "organization-admin") {
+    const otherActiveAdminCount = await prisma.userRole.count({
+      where: {
+        organization_id: organization.id,
+        user_id: {
+          not: userId,
+        },
+        role: {
+          slug: "organization-admin",
+        },
+        user: {
+          is_active: true,
+        },
+      },
+    });
+
+    if (otherActiveAdminCount === 0) {
+      throw new Error("At least one active Organization Admin must remain in this workspace.");
+    }
   }
 
   await prisma.$transaction([
@@ -518,11 +573,14 @@ export async function updateTeamMemberRole(userId: string, roleId: string) {
 
   await logActivity(organization.id, "team.member.role_changed", "profile", userId, {
     email: targetProfile.email,
+    previous_role_id: currentRoleAssignment?.role_id ?? null,
+    previous_role_name: currentRoleAssignment?.role.name ?? null,
     role_id: roleId,
     role_name: role.name,
   });
 
   revalidatePath("/team");
+  revalidatePath("/settings");
   return { success: true };
 }
 

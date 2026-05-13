@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import type { ScoringEventResult } from "./types";
 
@@ -44,6 +45,13 @@ type RedeemRewardRow = {
   status: string;
 };
 
+type RewardRedemptionResult = {
+  redemption_id: string;
+  transaction_id: string;
+  remaining_balance: number;
+  status: string;
+};
+
 export function buildScoreIdempotencyKey(parts: Array<string | null | undefined>) {
   return parts.filter((value) => value && value.trim().length > 0).join(":");
 }
@@ -58,12 +66,26 @@ function isMissingScoringFunctionError(error: unknown) {
     && error.message.includes("does not exist");
 }
 
+function isMissingRewardRedemptionFunctionError(error: unknown) {
+  return error instanceof Error
+    && error.message.includes("function public.redeem_wallet_reward")
+    && error.message.includes("does not exist");
+}
+
 function humanizeActionKey(actionKey: string) {
   return actionKey
     .split("_")
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function buildRedemptionDescription(rewardName: string, status: RewardRedemptionResult["status"]) {
+  if (status === "fulfilled") {
+    return `${rewardName} redeemed and fulfilled.`;
+  }
+
+  return `${rewardName} redemption submitted for fulfillment.`;
 }
 
 async function applyScoringEventFallback(input: ApplyScoringEventInput): Promise<ScoringEventResult> {
@@ -276,13 +298,226 @@ export async function adjustWalletBalance(input: AdjustWalletInput) {
 }
 
 export async function redeemWalletReward(rewardId: string, metadata: Record<string, unknown> = {}) {
-  const rows = await prisma.$queryRaw<RedeemRewardRow[]>`
-    select *
-    from public.redeem_wallet_reward(
-      ${rewardId}::uuid,
-      ${JSON.stringify(metadata)}::jsonb
-    )
-  `;
+  try {
+    const rows = await prisma.$queryRaw<RedeemRewardRow[]>`
+      select *
+      from public.redeem_wallet_reward(
+        ${rewardId}::uuid,
+        ${JSON.stringify(metadata)}::jsonb
+      )
+    `;
 
-  return normalizeRpcSingle(rows);
+    return normalizeRpcSingle(rows);
+  } catch (error) {
+    if (!isMissingRewardRedemptionFunctionError(error)) {
+      throw error;
+    }
+
+    return redeemWalletRewardFallback(rewardId, metadata);
+  }
+}
+
+async function redeemWalletRewardFallback(
+  rewardId: string,
+  metadata: Record<string, unknown> = {},
+): Promise<RewardRedemptionResult | null> {
+  const user = await getCurrentUser();
+
+  if (!user?.id) {
+    throw new Error("Authentication required.");
+  }
+
+  const fallbackMetadata = metadata as Prisma.InputJsonValue;
+
+  return prisma.$transaction(async (tx) => {
+    const actor = await tx.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        organization_id: true,
+        wallet_balance: true,
+        wallet_lifetime_earned: true,
+      },
+    });
+
+    if (!actor?.organization_id) {
+      throw new Error("Workspace not available.");
+    }
+
+    const reward = await tx.rewardCatalog.findFirst({
+      where: {
+        id: rewardId,
+        organization_id: actor.organization_id,
+        is_active: true,
+      },
+      select: {
+        id: true,
+        organization_id: true,
+        name: true,
+        description: true,
+        reward_type: true,
+        cost_points: true,
+        feature_key: true,
+        inventory: true,
+        fulfillment_mode: true,
+      },
+    });
+
+    if (!reward) {
+      throw new Error("Reward not found.");
+    }
+
+    const existingRedemption = await tx.rewardRedemption.findFirst({
+      where: {
+        organization_id: actor.organization_id,
+        user_id: actor.id,
+        reward_id: reward.id,
+        status: {
+          in: ["pending", "fulfilled"],
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (existingRedemption) {
+      throw new Error(
+        existingRedemption.status === "fulfilled"
+          ? "This reward is already unlocked."
+          : "This reward is already pending fulfillment.",
+      );
+    }
+
+    if (actor.wallet_balance < reward.cost_points) {
+      throw new Error("You do not have enough points to redeem this reward.");
+    }
+
+    if (reward.inventory !== null && reward.inventory <= 0) {
+      throw new Error("This reward is currently out of stock.");
+    }
+
+    if (reward.reward_type === "badge") {
+      const existingBadge = await tx.userBadge.findFirst({
+        where: {
+          organization_id: actor.organization_id,
+          user_id: actor.id,
+          OR: [
+            { reward_id: reward.id },
+            ...(reward.feature_key ? [{ badge_key: reward.feature_key }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (existingBadge) {
+        throw new Error("This reward is already unlocked.");
+      }
+    }
+
+    const nextBalance = actor.wallet_balance - reward.cost_points;
+    const availableInventory = reward.inventory;
+    const nextInventory = availableInventory === null ? null : availableInventory - 1;
+    const redemptionStatus =
+      reward.fulfillment_mode === "automatic" || reward.reward_type === "badge"
+        ? "fulfilled"
+        : "pending";
+
+    const updatedUser = await tx.user.update({
+      where: { id: actor.id },
+      data: {
+        wallet_balance: nextBalance,
+      },
+      select: {
+        wallet_balance: true,
+      },
+    });
+
+    if (reward.inventory !== null) {
+      await tx.rewardCatalog.update({
+        where: { id: reward.id },
+        data: {
+          inventory: nextInventory,
+          updated_at: new Date(),
+        },
+      });
+    }
+
+    const redemption = await tx.rewardRedemption.create({
+      data: {
+        organization_id: actor.organization_id,
+        user_id: actor.id,
+        reward_id: reward.id,
+        points_spent: reward.cost_points,
+        status: redemptionStatus,
+        metadata: fallbackMetadata,
+        processed_by: redemptionStatus === "fulfilled" ? actor.id : null,
+        processed_at: redemptionStatus === "fulfilled" ? new Date() : null,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    const transaction = await tx.walletTransaction.create({
+      data: {
+        organization_id: actor.organization_id,
+        user_id: actor.id,
+        transaction_type: "redeem",
+        action_key: "reward_redemption",
+        points_delta: -reward.cost_points,
+        balance_after: updatedUser.wallet_balance,
+        reward_id: reward.id,
+        source_record_id: redemption.id,
+        source_record_type: "reward_redemption",
+        idempotency_key: `reward_redemption:${redemption.id}`,
+        metadata: fallbackMetadata,
+        created_by: actor.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (reward.reward_type === "badge") {
+      await tx.userBadge.create({
+        data: {
+          organization_id: actor.organization_id,
+          user_id: actor.id,
+          reward_id: reward.id,
+          badge_key: reward.feature_key?.trim() || `reward:${reward.id}`,
+          badge_name: reward.name,
+          badge_description: reward.description,
+          metadata: fallbackMetadata,
+          awarded_by: actor.id,
+        },
+      });
+    }
+
+    await tx.scoringActivityLog.create({
+      data: {
+        organization_id: actor.organization_id,
+        wallet_transaction_id: transaction.id,
+        user_id: actor.id,
+        actor_user_id: actor.id,
+        action_key: "reward_redemption",
+        title: `Redeemed ${reward.name}`,
+        description: buildRedemptionDescription(reward.name, redemption.status as RewardRedemptionResult["status"]),
+        points_delta: -reward.cost_points,
+        reward_id: reward.id,
+        source_record_id: redemption.id,
+        source_record_type: "reward_redemption",
+        metadata: fallbackMetadata,
+      },
+    });
+
+    return {
+      redemption_id: redemption.id,
+      transaction_id: transaction.id,
+      remaining_balance: updatedUser.wallet_balance,
+      status: redemption.status,
+    };
+  });
 }

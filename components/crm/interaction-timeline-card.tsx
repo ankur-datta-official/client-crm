@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Pencil, Trash2, CalendarPlus } from "lucide-react";
+import { Pencil, Trash2, CalendarPlus, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { InteractionTypeBadge } from "@/components/crm/interaction-type-badge";
+import { MeetingQuickDoneDialog } from "@/components/crm/meeting-quick-done-dialog";
 import { LeadTemperatureBadge } from "@/components/crm/lead-temperature-badge";
 import { RatingBadge } from "@/components/crm/rating-badge";
 import { archiveInteractionAction } from "@/lib/crm/actions";
@@ -23,13 +24,14 @@ export function InteractionTimelineCard({ interaction }: { interaction: Interact
       <CardContent className="p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <div className="flex flex-wrap gap-2"><InteractionTypeBadge type={interaction.interaction_type} /><RatingBadge rating={interaction.success_rating} />{interaction.lead_temperature ? <LeadTemperatureBadge temperature={interaction.lead_temperature} /> : null}</div>
+            <div className="flex flex-wrap gap-2"><InteractionTypeBadge type={interaction.interaction_type} /><RatingBadge rating={interaction.success_rating} />{interaction.lead_temperature ? <LeadTemperatureBadge temperature={interaction.lead_temperature} /> : null}{interaction.completed_at ? <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />Completed</span> : null}</div>
             <p className="mt-2 text-sm font-medium">{formatDateTimeBD(interaction.meeting_datetime)}</p>
             <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{interaction.discussion_details}</p>
             <p className="mt-2 text-xs text-muted-foreground">Contact: {interaction.contact_persons?.name ?? "No contact"} / Created by: {interaction.created_profile?.full_name ?? interaction.created_profile?.email ?? "-"}</p>
             {interaction.next_action ? <p className="mt-2 text-sm">Next: {interaction.next_action}</p> : null}
           </div>
           <div className="flex gap-1">
+            {!interaction.completed_at ? <MeetingQuickDoneDialog interaction={interaction} trigger={<Button size="sm" variant="outline">Done</Button>} /> : null}
             <Button asChild size="sm" variant="outline" title="Create Follow-up">
               <Link href={`/followups/new?company=${interaction.company_id}&contact=${interaction.contact_person_id || ""}&interaction=${interaction.id}`}>
                 <CalendarPlus className="h-4 w-4" />

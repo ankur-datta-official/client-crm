@@ -1,6 +1,7 @@
 "use server";
 
 import { getCurrentUser, getUserPermissions, requireOrganization } from "@/lib/auth/session";
+import { isFixedSuperAdminEmail } from "@/lib/auth/super-admin";
 import { prisma } from "@/lib/prisma";
 import type { Permission, RoleRow, RoleWithPermissions, TeamInvitation, TeamMember } from "./types";
 
@@ -127,6 +128,8 @@ export async function getTeamMembers(): Promise<TeamMember[]> {
       role_id: roleAssignment?.role_id ?? null,
       role_name: roleAssignment?.role.name ?? null,
       role_slug: roleAssignment?.role.slug ?? null,
+      is_workspace_owner: member.id === organization.owner_user_id,
+      is_fixed_super_admin: isFixedSuperAdminEmail(member.email),
       manager_user_id: member.manager_user_id,
       manager_name: member.manager?.name ?? null,
       manager_email: member.manager?.email ?? null,

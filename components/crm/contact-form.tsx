@@ -10,6 +10,7 @@ import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiValueInput } from "@/components/shared/multi-value-input";
 import { FormActionBar, FormContextHint, FormRequiredNote, FormSection } from "@/components/shared/form-helpers";
 import {
   contactPersonSchema,
@@ -19,6 +20,7 @@ import {
   type ContactPersonFormValues,
 } from "@/lib/crm/schemas";
 import { createContactAction, updateContactAction } from "@/lib/crm/actions";
+import { buildContactValues, buildEmailValues } from "@/lib/crm/contact-channels";
 import type { Company, ContactPerson } from "@/lib/crm/types";
 
 type ContactFormProps = {
@@ -50,8 +52,10 @@ export function ContactForm({ contact, companies, defaultCompanyId }: ContactFor
       designation: contact?.designation ?? "",
       department: contact?.department ?? "",
       mobile: contact?.mobile ?? "",
+      mobile_numbers: buildContactValues(contact?.mobile, contact?.mobile_numbers),
       whatsapp: contact?.whatsapp ?? "",
       email: contact?.email ?? "",
+      email_addresses: buildEmailValues(contact?.email, contact?.email_addresses),
       linkedin: contact?.linkedin ?? "",
       decision_role: contact?.decision_role ?? "",
       relationship_level: contact?.relationship_level ?? "",
@@ -61,6 +65,10 @@ export function ContactForm({ contact, companies, defaultCompanyId }: ContactFor
       status: contact?.status ?? "active",
     },
   });
+  const resolvedMobileNumbersError = getArrayFieldErrorMessage(form.formState.errors.mobile_numbers);
+  const resolvedEmailAddressesError = getArrayFieldErrorMessage(form.formState.errors.email_addresses);
+  const mobileNumbers = form.watch("mobile_numbers");
+  const emailAddresses = form.watch("email_addresses");
 
   function onSubmit(values: ContactPersonFormValues, mode: "save" | "addAnother" = "save") {
     setServerError(null);
@@ -82,8 +90,10 @@ export function ContactForm({ contact, companies, defaultCompanyId }: ContactFor
           designation: "",
           department: "",
           mobile: "",
+          mobile_numbers: [],
           whatsapp: "",
           email: "",
+          email_addresses: [],
           linkedin: "",
           decision_role: "",
           relationship_level: "",
@@ -118,9 +128,32 @@ export function ContactForm({ contact, companies, defaultCompanyId }: ContactFor
       </FormSection>
 
       <FormSection title="Contact Information" description="Communication channels for this person." optional collapsible defaultCollapsed={!hasContactInfo}>
-        <Field label="Mobile"><Input {...form.register("mobile")} /></Field>
+        <input type="hidden" {...form.register("mobile")} />
+        <input type="hidden" {...form.register("email")} />
+        <Field label="Mobile" error={resolvedMobileNumbersError}>
+          <MultiValueInput
+            values={Array.isArray(mobileNumbers) ? mobileNumbers : []}
+            onChange={(values) => {
+              form.setValue("mobile_numbers", values, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+              form.setValue("mobile", values[0] ?? "", { shouldDirty: true, shouldTouch: true });
+            }}
+            placeholder="Primary mobile number"
+            addLabel="Add another mobile"
+          />
+        </Field>
         <Field label="WhatsApp"><Input {...form.register("whatsapp")} /></Field>
-        <Field label="Email" error={form.formState.errors.email?.message ?? fieldErrors.email}><Input {...form.register("email")} /></Field>
+        <Field label="Email" error={resolvedEmailAddressesError ?? form.formState.errors.email?.message ?? fieldErrors.email}>
+          <MultiValueInput
+            type="email"
+            values={Array.isArray(emailAddresses) ? emailAddresses : []}
+            onChange={(values) => {
+              form.setValue("email_addresses", values, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+              form.setValue("email", values[0] ?? "", { shouldDirty: true, shouldTouch: true });
+            }}
+            placeholder="primary@email.com"
+            addLabel="Add another email"
+          />
+        </Field>
         <Field label="LinkedIn" error={form.formState.errors.linkedin?.message ?? fieldErrors.linkedin}><Input {...form.register("linkedin")} placeholder="https://linkedin.com/in/name" /></Field>
       </FormSection>
 
@@ -179,11 +212,25 @@ export function ContactForm({ contact, companies, defaultCompanyId }: ContactFor
   );
 }
 
-function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
+function getArrayFieldErrorMessage(
+  error:
+    | { message?: string }
+    | Array<{ message?: string } | undefined>
+    | undefined,
+) {
+  if (Array.isArray(error)) {
+    return error.find(Boolean)?.message;
+  }
+
+  return error?.message;
+}
+
+function Field({ label, required, error, helper, children }: { label: string; required?: boolean; error?: string; helper?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
       <Label>{label}{required ? <span className="text-destructive"> *</span> : null}</Label>
       {children}
+      {helper ? <p className="text-xs text-muted-foreground">{helper}</p> : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );

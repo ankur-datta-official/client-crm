@@ -5,6 +5,7 @@ import {
   Building2,
   MessageSquare,
   Clock,
+  FileText,
   Link as LinkIcon,
   Plus
 } from "lucide-react";
@@ -12,10 +13,10 @@ import { getDocumentById } from "@/lib/crm/document-queries";
 import { getSignedDocumentViewUrl } from "@/lib/crm/document-actions";
 import { DocumentDetailHeader } from "@/components/crm/document-detail-header";
 import { DocumentPreviewCard } from "@/components/crm/document-preview-card";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatDateBD } from "@/lib/format/datetime";
 import Link from "next/link";
+import { DetailRowList, RecordContextSidebar, RecordOverviewPanel, WorkspaceKpiCard, WorkspaceKpiGrid, WorkspaceSection } from "@/components/shared/workspace-primitives";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -44,16 +45,18 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
   return (
     <div className="space-y-6">
       <DocumentDetailHeader document={document} />
+      <WorkspaceKpiGrid>
+        <WorkspaceKpiCard title="Document Status" value={document.status.replaceAll("_", " ")} description="Current lifecycle state for this file." icon={FileText} tone={document.status === "revision_requested" ? "amber" : document.status === "approved" ? "teal" : "blue"} />
+        <WorkspaceKpiCard title="Document Type" value={document.document_type} description="Commercial file category attached to this record." icon={FileText} tone="teal" />
+        <WorkspaceKpiCard title="Submitted Date" value={document.submitted_at ? formatDateBD(document.submitted_at) : "Not submitted"} description="When the file was formally sent out." icon={Calendar} tone="blue" />
+        <WorkspaceKpiCard title="Expiry" value={document.expiry_date ? formatDateBD(document.expiry_date) : "No expiry"} description="Expiry tracking for time-sensitive commercial files." icon={Clock} tone={document.expiry_date ? "amber" : "slate"} />
+      </WorkspaceKpiGrid>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <DocumentPreviewCard document={document} signedViewUrl={signedViewUrl} />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Document Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <RecordOverviewPanel title="Document Details" description="Business meaning and internal notes around this file.">
               {document.description ? (
                 <div className="space-y-2">
                   <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Description</h4>
@@ -69,23 +72,20 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
                   <p className="text-sm whitespace-pre-wrap">{document.remarks}</p>
                 </div>
               )}
-            </CardContent>
-          </Card>
+          </RecordOverviewPanel>
 
-          <Card>
-            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle>CRM Context</CardTitle>
-                <CardDescription>Records linked to this document.</CardDescription>
-              </div>
+          <WorkspaceSection
+            title="CRM Context"
+            description="Records linked to this document."
+            actions={
               <Button asChild size="sm">
                 <Link href={`/need-help/new?company=${document.company_id}&contact=${document.contact_person_id}&document=${document.id}`}>
                   <Plus className="w-4 h-4 mr-2" />
                   Create Help Request
                 </Link>
               </Button>
-            </CardHeader>
-            <CardContent>
+            }
+          >
               <div className="space-y-4">
                 <ContextItem 
                   label="Company" 
@@ -125,42 +125,30 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
                   <p className="text-sm text-muted-foreground italic">No additional CRM records linked.</p>
                 )}
               </div>
-            </CardContent>
-          </Card>
+          </WorkspaceSection>
         </div>
 
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Submission Info</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <InfoRow 
-                label="Submitted To" 
-                value={document.submitted_to || "N/A"} 
-              />
-              <InfoRow 
-                label="Submitted Date" 
-                value={document.submitted_at ? formatDateBD(document.submitted_at) : "N/A"} 
-              />
-              <InfoRow 
-                label="Expiry Date" 
-                value={document.expiry_date ? formatDateBD(document.expiry_date) : "No expiry"} 
-              />
-            </CardContent>
-          </Card>
+          <RecordContextSidebar title="Submission Info">
+            <DetailRowList
+              rows={[
+                { label: "Submitted To", value: document.submitted_to || "N/A" },
+                { label: "Submitted Date", value: document.submitted_at ? formatDateBD(document.submitted_at) : "N/A" },
+                { label: "Expiry Date", value: document.expiry_date ? formatDateBD(document.expiry_date) : "No expiry" },
+              ]}
+            />
+          </RecordContextSidebar>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>File Properties</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <InfoRow label="File Name" value={document.file_name} />
-              <InfoRow label="Mime Type" value={document.mime_type || "Unknown"} />
-              <InfoRow label="File Extension" value={document.file_extension?.toUpperCase() || "N/A"} />
-              <InfoRow label="File Size" value={document.file_size_mb ? `${document.file_size_mb} MB` : "Unknown"} />
-            </CardContent>
-          </Card>
+          <RecordContextSidebar title="File Properties">
+            <DetailRowList
+              rows={[
+                { label: "File Name", value: document.file_name },
+                { label: "Mime Type", value: document.mime_type || "Unknown" },
+                { label: "File Extension", value: document.file_extension?.toUpperCase() || "N/A" },
+                { label: "File Size", value: document.file_size_mb ? `${document.file_size_mb} MB` : "Unknown" },
+              ]}
+            />
+          </RecordContextSidebar>
         </div>
       </div>
     </div>
@@ -182,15 +170,6 @@ function ContextItem({ label, value, href, icon }: { label: string; value: strin
           <ExternalLink className="w-4 h-4" />
         </Link>
       </Button>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string | React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-      <div className="text-sm font-medium">{value}</div>
     </div>
   );
 }

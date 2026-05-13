@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import { buildContactValues, buildEmailValues } from "@/lib/crm/contact-channels";
 import { temperatureFromRating } from "@/lib/crm/schemas";
 import { slugify } from "@/lib/crm/utils";
+import { findFirstWhatsAppMatch, verifyWhatsAppNumbers } from "@/lib/crm/whatsapp-verifier";
 import {
   type CompanyImportRow,
   type ContactImportRow,
@@ -46,12 +48,6 @@ function emailsFromContactRow(row: ContactImportRow): string[] {
   return [row.primary_email, row.email_2]
     .map((e) => normalizeEmail(e))
     .filter((e): e is string => Boolean(e));
-}
-
-function appendNote(base: string | null | undefined, extra: string) {
-  const b = (base ?? "").trim();
-  if (!b) return extra;
-  return `${b}\n\n${extra}`;
 }
 
 async function ensureDefaultImportCategory(params: {
@@ -180,6 +176,11 @@ export async function runCompanyContactImport(params: {
 
   const processedCompanyKeysFromFile = new Set<string>();
   const pipelineStageId = stageRow.id;
+  const allImportPhones = [
+    ...params.companies.flatMap((row) => phonesFromCompanyRow(row)),
+    ...params.contacts.flatMap((row) => phonesFromContactRow(row)),
+  ];
+  const verifiedWhatsAppNumbers = await verifyWhatsAppNumbers(allImportPhones);
 
   for (let i = 0; i < params.companies.length; i++) {
     const excelRow = params.companies[i]?.__rowNum ?? i + 2;
@@ -261,14 +262,9 @@ export async function runCompanyContactImport(params: {
       }
 
       const website = normalizeWebsite(row.website);
-      let notes = row.notes?.trim() ?? "";
-      if (phones.length > 1) {
-        notes = appendNote(notes, `Additional phones: ${phones.slice(1).join(", ")}`);
-      }
-      if (emails.length > 1) {
-        notes = appendNote(notes, `Additional emails: ${emails.slice(1).join(", ")}`);
-      }
-
+      const phoneNumbers = buildContactValues(phones[0] ?? null, phones);
+      const emailAddresses = buildEmailValues(emails[0] ?? null, emails);
+      const whatsappNumber = findFirstWhatsAppMatch(phoneNumbers, verifiedWhatsAppNumbers);
       const leadSource = row.lead_source?.trim() || row.sl?.trim() || null;
       const insertedRows = await prisma.$queryRaw<Array<{ id: string }>>`
         insert into public.companies (
@@ -279,7 +275,10 @@ export async function runCompanyContactImport(params: {
           pipeline_stage_id,
           status,
           phone,
+          phone_numbers,
+          whatsapp,
           email,
+          email_addresses,
           website,
           address,
           city,
@@ -300,12 +299,15 @@ export async function runCompanyContactImport(params: {
           ${defaultCategoryId}::uuid,
           ${pipelineStageId}::uuid,
           'active',
-          ${phones[0] ?? null},
-          ${emails[0] ?? null},
+          ${phoneNumbers[0] ?? null},
+          ${JSON.stringify(phoneNumbers)}::jsonb,
+          ${whatsappNumber},
+          ${emailAddresses[0] ?? null},
+          ${JSON.stringify(emailAddresses)}::jsonb,
           ${website},
           ${row.address?.trim() || null},
           ${row.city?.trim() || null},
-          ${notes || null},
+          ${row.notes?.trim() || null},
           ${leadSource},
           ${userId}::uuid,
           5,
@@ -360,8 +362,10 @@ export async function runCompanyContactImport(params: {
     designation: string | null;
     department: string | null;
     mobile: string | null;
+    mobile_numbers: string[];
     whatsapp: string | null;
     email: string | null;
+    email_addresses: string[];
     remarks: string | null;
     is_primary: boolean;
   };
@@ -392,13 +396,9 @@ export async function runCompanyContactImport(params: {
 
       const phones = phonesFromContactRow(row);
       const emails = emailsFromContactRow(row);
-      let remarks: string | null = null;
-      if (phones.length > 1) {
-        remarks = appendNote(null, `Alt phone: ${phones[1]}`);
-      }
-      if (emails.length > 1) {
-        remarks = appendNote(remarks, `Alt email: ${emails[1]}`);
-      }
+      const mobileNumbers = buildContactValues(phones[0] ?? null, phones);
+      const emailAddresses = buildEmailValues(emails[0] ?? null, emails);
+      const whatsappNumber = findFirstWhatsAppMatch(mobileNumbers, verifiedWhatsAppNumbers);
 
       contactQueue.push({
         excelRow,
@@ -407,10 +407,12 @@ export async function runCompanyContactImport(params: {
         name: contactName,
         designation: row.designation?.trim() || null,
         department: row.department?.trim() || null,
-        mobile: phones[0] ?? null,
-        whatsapp: phones[1] ?? null,
-        email: emails[0] ?? null,
-        remarks,
+        mobile: mobileNumbers[0] ?? null,
+        mobile_numbers: mobileNumbers,
+        whatsapp: whatsappNumber,
+        email: emailAddresses[0] ?? null,
+        email_addresses: emailAddresses,
+        remarks: null,
         is_primary: parsePrimaryContactFlag(row.is_primary_contact),
       });
     } catch (e) {
@@ -458,8 +460,10 @@ export async function runCompanyContactImport(params: {
           designation,
           department,
           mobile,
+          mobile_numbers,
           whatsapp,
           email,
+          email_addresses,
           remarks,
           is_primary,
           status,
@@ -473,8 +477,10 @@ export async function runCompanyContactImport(params: {
           ${contact.designation},
           ${contact.department},
           ${contact.mobile},
+          ${JSON.stringify(contact.mobile_numbers)}::jsonb,
           ${contact.whatsapp},
           ${contact.email},
+          ${JSON.stringify(contact.email_addresses)}::jsonb,
           ${contact.remarks},
           ${contact.is_primary},
           'active',

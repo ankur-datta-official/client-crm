@@ -13,6 +13,8 @@ export type TeamMember = {
   role_id: string | null;
   role_name: string | null;
   role_slug: string | null;
+  is_workspace_owner?: boolean;
+  is_fixed_super_admin?: boolean;
   manager_user_id?: string | null;
   manager_name?: string | null;
   manager_email?: string | null;

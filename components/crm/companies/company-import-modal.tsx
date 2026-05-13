@@ -127,7 +127,8 @@ export function CompanyImportModal() {
           </DialogTitle>
           <DialogDescription className="font-medium text-slate-500 dark:text-slate-400">
             Use the new single-sheet Excel template for the fastest import. One row can create one company plus up to two contacts, blank
-            optional cells are allowed, and the older two-sheet Excel or companies-only CSV formats still work.
+            optional cells are allowed, extra phone/email columns are imported into the new multi-value contact fields, and the older
+            two-sheet Excel or companies-only CSV formats still work. WhatsApp auto-fill runs only when a number-verification service is configured.
           </DialogDescription>
         </DialogHeader>
 
@@ -166,7 +167,8 @@ export function CompanyImportModal() {
                   </label>
                   <p className="mt-4 text-center text-[11px] font-bold uppercase leading-relaxed tracking-widest text-slate-400 dark:text-slate-500">
                     Single sheet template: keep row 1 headers unchanged, start data from row 2, and use one row per company with
-                    optional Contact Person 1 and Contact Person 2 details.
+                    optional Contact Person 1 and Contact Person 2 details. Extra phone and email columns are saved as additional values
+                    instead of being dropped.
                     <br />
                     Legacy support remains available for the older two-sheet Excel workbook and the companies-only CSV format.
                   </p>

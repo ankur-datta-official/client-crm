@@ -24,7 +24,10 @@
     "db:check-schema-parity": "node scripts/check-schema-parity.mjs",
     "db:repair-local-schema:dry": "node scripts/repair-local-schema-parity.mjs",
     "db:repair-local-schema": "node scripts/repair-local-schema-parity.mjs --apply",
-    "auth:backfill-better-accounts": "node scripts/backfill-better-auth-accounts.mjs"
+    "auth:backfill-better-accounts": "node scripts/backfill-better-auth-accounts.mjs",
+    "qa:seed:launch": "node scripts/seed-launch-qa-demo.mjs",
+    "qa:cleanup:launch": "node scripts/cleanup-launch-qa-demo.mjs",
+    "qa:run:launch": "node scripts/run-prelaunch-qa.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
@@ -47,6 +50,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
     "next": "^16.2.6",
     "next-auth": "^4.24.14",
