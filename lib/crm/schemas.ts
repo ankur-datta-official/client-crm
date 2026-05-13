@@ -62,6 +62,32 @@ export const optionalEmail = z.preprocess(
   z.string().email("Please enter a valid email address.").optional(),
 ).transform((value) => value ?? null);
 
+export const optionalStringArray = z.preprocess(
+  (value) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter((item) => item.length > 0);
+  },
+  z.array(z.string()),
+);
+
+export const optionalEmailArray = z.preprocess(
+  (value) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((item) => (typeof item === "string" ? item.trim().toLowerCase() : ""))
+      .filter((item) => item.length > 0);
+  },
+  z.array(z.string().email("Please enter a valid email address.")),
+);
+
 export function optionalUrl(message = "Please enter a valid website URL.") {
   return z.preprocess(
     preprocessOptionalText,
@@ -163,8 +189,10 @@ export const companySchema = z.object({
   ),
   status: statusSchema,
   phone: optionalString,
+  phone_numbers: optionalStringArray,
   whatsapp: optionalString,
   email: optionalEmail,
+  email_addresses: optionalEmailArray,
   website: optionalUrl(),
   address: optionalString,
   city: optionalString,
@@ -220,6 +248,22 @@ export const interactionSchema = z.object({
   need_help: z.boolean().default(false),
   internal_note: optionalString,
   status: statusSchema.default("active"),
+});
+
+export const quickCompleteInteractionSchema = z.object({
+  discussion_details: z.string().trim().min(5, "Discussion summary is required."),
+  next_action: optionalString,
+  next_followup_at: optionalDateTime,
+  need_help: z.boolean().default(false),
+  create_followup_now: z.boolean().default(false),
+}).superRefine((value, ctx) => {
+  if (value.create_followup_now && !value.next_followup_at) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["next_followup_at"],
+      message: "Set a next follow-up date before creating a follow-up task.",
+    });
+  }
 });
 
 export const followupTypeOptions = [
@@ -297,8 +341,10 @@ export const contactPersonSchema = z.object({
   designation: optionalString,
   department: optionalString,
   mobile: optionalString,
+  mobile_numbers: optionalStringArray,
   whatsapp: optionalString,
   email: optionalEmail,
+  email_addresses: optionalEmailArray,
   linkedin: optionalUrl("Please enter a valid website URL."),
   decision_role: optionalEnum(decisionRoleOptions),
   relationship_level: optionalEnum(relationshipLevelOptions),
@@ -317,6 +363,8 @@ export type ContactPersonInput = z.infer<typeof contactPersonSchema>;
 export type ContactPersonFormValues = z.input<typeof contactPersonSchema>;
 export type InteractionInput = z.infer<typeof interactionSchema>;
 export type InteractionFormValues = z.input<typeof interactionSchema>;
+export type QuickCompleteInteractionInput = z.infer<typeof quickCompleteInteractionSchema>;
+export type QuickCompleteInteractionFormValues = z.input<typeof quickCompleteInteractionSchema>;
 export type FollowupInput = z.infer<typeof followupSchema>;
 export type FollowupFormValues = z.input<typeof followupSchema>;
 

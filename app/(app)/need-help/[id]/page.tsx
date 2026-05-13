@@ -1,14 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Plus, FileText, Building2, User, MessageSquare, Calendar, CheckCircle2, XCircle, Archive, RotateCcw } from "lucide-react";
+import { Building2, Calendar, CheckCircle2, CircleHelp, FileText, MessageSquare, User } from "lucide-react";
 import { getHelpRequestById, getHelpRequestComments } from "@/lib/crm/help-request-queries";
 import { HelpRequestDetailHeader } from "@/components/crm/help-request-detail-header";
 import { HelpRequestComments } from "@/components/crm/help-request-comments";
-import { EmptyState } from "@/components/shared/empty-state";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatDateBD, formatDateTimeBD } from "@/lib/format/datetime";
+import { DetailRowList, RecordContextSidebar, RecordOverviewPanel, WorkspaceKpiCard, WorkspaceKpiGrid, WorkspaceSection } from "@/components/shared/workspace-primitives";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -30,19 +28,18 @@ export default async function HelpRequestDetailPage({ params }: { params: Promis
   }
 
   return (
-    <div className="container py-6">
+    <div className="space-y-6">
       <HelpRequestDetailHeader helpRequest={helpRequest} />
+      <WorkspaceKpiGrid>
+        <WorkspaceKpiCard title="Status" value={helpRequest.status.replaceAll("_", " ")} description="Current lifecycle state of this request." icon={CircleHelp} tone={helpRequest.status === "open" || helpRequest.status === "in_progress" ? "rose" : "teal"} />
+        <WorkspaceKpiCard title="Priority" value={helpRequest.priority} description="Urgency level set for this blocker." icon={CheckCircle2} tone={helpRequest.priority === "urgent" || helpRequest.priority === "high" ? "amber" : "slate"} />
+        <WorkspaceKpiCard title="Assigned To" value={helpRequest.assigned_profile?.full_name ?? helpRequest.assigned_profile?.email ?? "Unassigned"} description="Current owner responsible for follow-through." icon={User} tone="blue" />
+        <WorkspaceKpiCard title="Comments" value={String(comments.length)} description="Conversation updates already attached to this request." icon={MessageSquare} tone="teal" />
+      </WorkspaceKpiGrid>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                Description
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          <RecordOverviewPanel title="Description" description="Why this deal is blocked and what support is needed.">
               {helpRequest.description ? (
                 <div className="whitespace-pre-wrap text-sm leading-relaxed">
                   {helpRequest.description}
@@ -50,18 +47,10 @@ export default async function HelpRequestDetailPage({ params }: { params: Promis
               ) : (
                 <p className="text-sm text-muted-foreground italic">No description provided.</p>
               )}
-            </CardContent>
-          </Card>
+          </RecordOverviewPanel>
 
           {helpRequest.resolution_note && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  Resolution Note
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            <RecordOverviewPanel title="Resolution Note" description="Final resolution captured for this support request.">
                 <div className="whitespace-pre-wrap text-sm leading-relaxed">
                   {helpRequest.resolution_note}
                 </div>
@@ -70,29 +59,16 @@ export default async function HelpRequestDetailPage({ params }: { params: Promis
                     Resolved by {helpRequest.resolved_profile.full_name ?? helpRequest.resolved_profile.email} on {formatDateTimeBD(helpRequest.resolved_at ?? "")}
                   </p>
                 )}
-              </CardContent>
-            </Card>
+            </RecordOverviewPanel>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-primary" />
-                Comments ({comments.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          <WorkspaceSection title={`Comments (${comments.length})`} description="Conversation trail and updates around this escalation.">
               <HelpRequestComments helpRequestId={id} comments={comments} />
-            </CardContent>
-          </Card>
+          </WorkspaceSection>
         </div>
 
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Context</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <RecordContextSidebar title="Context">
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
                   <Building2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
@@ -187,49 +163,20 @@ export default async function HelpRequestDetailPage({ params }: { params: Promis
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+          </RecordContextSidebar>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Request Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Help Type</span>
-                <span className="font-medium capitalize">{helpRequest.help_type.replace("_", " ")}</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Priority</span>
-                <span className="font-medium capitalize">{helpRequest.priority}</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <span className="font-medium capitalize">{helpRequest.status.replace("_", " ")}</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Requested By</span>
-                <span className="font-medium">
-                  {helpRequest.requested_profile?.full_name ?? helpRequest.requested_profile?.email ?? "Unknown"}
-                </span>
-              </div>
-              <Separator />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Assigned To</span>
-                <span className="font-medium">
-                  {helpRequest.assigned_profile?.full_name ?? helpRequest.assigned_profile?.email ?? "Unassigned"}
-                </span>
-              </div>
-              <Separator />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Created</span>
-                <span className="font-medium">{formatDateBD(helpRequest.created_at)}</span>
-              </div>
-            </CardContent>
-          </Card>
+          <RecordContextSidebar title="Request Details">
+            <DetailRowList
+              rows={[
+                { label: "Help Type", value: helpRequest.help_type.replace("_", " ") },
+                { label: "Priority", value: helpRequest.priority },
+                { label: "Status", value: helpRequest.status.replace("_", " ") },
+                { label: "Requested By", value: helpRequest.requested_profile?.full_name ?? helpRequest.requested_profile?.email ?? "Unknown" },
+                { label: "Assigned To", value: helpRequest.assigned_profile?.full_name ?? helpRequest.assigned_profile?.email ?? "Unassigned" },
+                { label: "Created", value: formatDateBD(helpRequest.created_at) },
+              ]}
+            />
+          </RecordContextSidebar>
         </div>
       </div>
     </div>

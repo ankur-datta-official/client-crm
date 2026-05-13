@@ -1,16 +1,17 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Plus, FileText } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CalendarClock, CircleHelp, FileText, Flame, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractionDetailHeader } from "@/components/crm/interaction-detail-header";
 import { LeadTemperatureBadge } from "@/components/crm/lead-temperature-badge";
 import { RatingBadge } from "@/components/crm/rating-badge";
 import { DocumentCard } from "@/components/crm/document-card";
-import { EmptyState } from "@/components/shared/empty-state";
 import { formatDateBD, formatDateTimeBD } from "@/lib/format/datetime";
 import { getInteractionById } from "@/lib/crm/queries";
 import { getDocumentsByInteraction } from "@/lib/crm/document-queries";
+import { getHelpRequests } from "@/lib/crm/help-request-queries";
+import { CompactEmptyPanel, DetailRowList, RecordContextSidebar, RecordOverviewPanel, WorkspaceKpiCard, WorkspaceKpiGrid, WorkspaceSection } from "@/components/shared/workspace-primitives";
+import { HelpRequestCard } from "@/components/crm/help-request-card";
 
 export default async function MeetingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,75 +20,111 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
     getDocumentsByInteraction(id),
   ]);
   if (!interaction) notFound();
+  const helpRequests = await getHelpRequests({ interaction: interaction.id });
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <InteractionDetailHeader interaction={interaction} />
-      <Card>
-        <CardHeader><CardTitle>Interaction Details</CardTitle><CardDescription>Discussion details, sales signals, and next steps.</CardDescription></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <Info label="Company" value={interaction.companies?.name} />
-          <Info label="Contact person" value={interaction.contact_persons?.name} />
-          <Info label="Date/time" value={formatDateTimeBD(interaction.meeting_datetime)} />
-          <Info label="Location" value={interaction.location} />
-          <Info label="Online link" value={interaction.online_meeting_link} />
-          <div className="rounded-md border p-3"><p className="text-xs font-medium uppercase text-muted-foreground">Rating</p><div className="mt-2"><RatingBadge rating={interaction.success_rating} /></div></div>
-          <div className="rounded-md border p-3"><p className="text-xs font-medium uppercase text-muted-foreground">Temperature</p><div className="mt-2">{interaction.lead_temperature ? <LeadTemperatureBadge temperature={interaction.lead_temperature} /> : "-"}</div></div>
-          <Info label="Next action" value={interaction.next_action} />
-          <Info label="Next follow-up" value={interaction.next_followup_at ? formatDateTimeBD(interaction.next_followup_at) : null} />
-          <Info label="Client requirement" value={interaction.client_requirement} />
-          <Info label="Pain point" value={interaction.pain_point} />
-          <Info label="Proposed solution" value={interaction.proposed_solution} />
-          <Info label="Budget discussion" value={interaction.budget_discussion} />
-          <Info label="Competitor mentioned" value={interaction.competitor_mentioned} />
-          <Info label="Decision timeline" value={interaction.decision_timeline} />
-          <Info label="Need help" value={interaction.need_help ? "Yes" : "No"} />
-          <Info label="Created by" value={interaction.created_profile?.full_name ?? interaction.created_profile?.email} />
-          <Info label="Created date" value={formatDateBD(interaction.created_at)} />
-          <div className="md:col-span-2 xl:col-span-3"><Info label="Discussion details" value={interaction.discussion_details} /></div>
-          <div className="md:col-span-2 xl:col-span-3"><Info label="Internal note" value={interaction.internal_note} /></div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <CardTitle>Related Documents</CardTitle>
-            <CardDescription>Files shared or discussed during this meeting.</CardDescription>
-          </div>
-          <div className="flex gap-2">
-            <Button asChild>
-              <Link href={`/need-help/new?company=${interaction.company_id}&contact=${interaction.contact_person_id}&interaction=${interaction.id}`}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Help Request
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link href={`/documents/new?companyId=${interaction.company_id}&contactId=${interaction.contact_person_id}&interactionId=${interaction.id}`}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Document
-              </Link>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {documents.length === 0 ? (
-            <EmptyState
-              title="No documents for this meeting"
-              description="Upload files shared or discussed during this interaction."
-              icon={FileText}
-            />
-          ) : (
-            <div className="space-y-3">
-              {documents.map((doc) => (
-                <DocumentCard key={doc.id} document={doc} />
-              ))}
+      <WorkspaceKpiGrid>
+        <WorkspaceKpiCard title="Meeting Date" value={formatDateBD(interaction.meeting_datetime)} description={interaction.completed_at ? `Completed ${formatDateBD(interaction.completed_at)}.` : "When this discussion was logged."} icon={CalendarClock} tone={interaction.completed_at ? "teal" : "blue"} />
+        <WorkspaceKpiCard title="Next Action" value={interaction.next_action ?? "Not set"} description="The concrete next move from this meeting." icon={Flame} tone={interaction.next_action ? "teal" : "amber"} />
+        <WorkspaceKpiCard title="Next Follow-up" value={interaction.next_followup_at ? formatDateBD(interaction.next_followup_at) : "Not scheduled"} description="Planned follow-up time captured from the discussion." icon={CalendarClock} tone={interaction.next_followup_at ? "teal" : "rose"} />
+        <WorkspaceKpiCard title="Open Help" value={String(helpRequests.filter((request) => request.status === "open" || request.status === "in_progress").length)} description="Support requests already linked to this meeting." icon={CircleHelp} tone={interaction.need_help ? "rose" : "slate"} />
+      </WorkspaceKpiGrid>
+
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-4">
+          <RecordOverviewPanel title="Discussion Outcome" description="Sales signals, captured context, and what should happen next.">
+            <div className="grid gap-4 md:grid-cols-2">
+              <DetailRowList
+                rows={[
+                  { label: "Company", value: interaction.companies?.name },
+                  { label: "Contact Person", value: interaction.contact_persons?.name },
+                  { label: "Date / Time", value: formatDateTimeBD(interaction.meeting_datetime) },
+                  { label: "Location", value: interaction.location },
+                  { label: "Online Link", value: interaction.online_meeting_link },
+                  { label: "Next Action", value: interaction.next_action },
+                  { label: "Next Follow-up", value: interaction.next_followup_at ? formatDateTimeBD(interaction.next_followup_at) : null },
+                  { label: "Decision Timeline", value: interaction.decision_timeline },
+                ]}
+              />
+              <div className="space-y-4">
+                <div className="rounded-2xl border p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Rating</p>
+                  <div className="mt-3"><RatingBadge rating={interaction.success_rating} /></div>
+                </div>
+                <div className="rounded-2xl border p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Temperature</p>
+                  <div className="mt-3">{interaction.lead_temperature ? <LeadTemperatureBadge temperature={interaction.lead_temperature} /> : "-"}</div>
+                </div>
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </RecordOverviewPanel>
+
+          <RecordOverviewPanel title="Captured Discussion" description="Reference notes that should drive the next client move.">
+            <DetailRowList
+              rows={[
+                { label: "Client Requirement", value: interaction.client_requirement },
+                { label: "Pain Point", value: interaction.pain_point },
+                { label: "Proposed Solution", value: interaction.proposed_solution },
+                { label: "Budget Discussion", value: interaction.budget_discussion },
+                { label: "Competitor Mentioned", value: interaction.competitor_mentioned },
+                { label: "Discussion Details", value: interaction.discussion_details },
+                { label: "Internal Note", value: interaction.internal_note },
+              ]}
+            />
+          </RecordOverviewPanel>
+
+          <WorkspaceSection
+            title="Related Documents"
+            description="Files shared or discussed during this meeting."
+            actions={
+              <div className="flex gap-2">
+                <Button asChild variant="outline">
+                  <Link href={`/need-help/new?company=${interaction.company_id}&contact=${interaction.contact_person_id}&interaction=${interaction.id}`}>Create Help Request</Link>
+                </Button>
+                <Button asChild>
+                  <Link href={`/documents/new?companyId=${interaction.company_id}&contactId=${interaction.contact_person_id}&interactionId=${interaction.id}`}>Add Document</Link>
+                </Button>
+              </div>
+            }
+          >
+            {documents.length === 0 ? (
+              <CompactEmptyPanel icon={FileText} title="No documents for this meeting" description="Upload files shared or discussed during this interaction." />
+            ) : (
+              <div className="space-y-3">
+                {documents.map((doc) => <DocumentCard key={doc.id} document={doc} />)}
+              </div>
+            )}
+          </WorkspaceSection>
+        </div>
+
+        <div className="space-y-4">
+          <RecordContextSidebar title="Current Context">
+            <DetailRowList
+              rows={[
+                { label: "Need Help Flag", value: interaction.need_help ? "Yes" : "No" },
+                { label: "Completed", value: interaction.completed_at ? formatDateTimeBD(interaction.completed_at) : "Not completed yet" },
+                { label: "Created By", value: interaction.created_profile?.full_name ?? interaction.created_profile?.email },
+                { label: "Created Date", value: formatDateBD(interaction.created_at) },
+                { label: "Support Requests", value: String(helpRequests.length) },
+              ]}
+            />
+          </RecordContextSidebar>
+
+          <WorkspaceSection
+            title="Linked Support Requests"
+            description="Escalations already raised from this discussion."
+          >
+            {helpRequests.length === 0 ? (
+              <CompactEmptyPanel icon={CircleHelp} title="No help requests linked" description="Raise support here when pricing, management, or technical help is needed." />
+            ) : (
+              <div className="space-y-3">
+                {helpRequests.slice(0, 4).map((request) => <HelpRequestCard key={request.id} helpRequest={request} />)}
+              </div>
+            )}
+          </WorkspaceSection>
+        </div>
+      </div>
     </div>
   );
-}
-
-function Info({ label, value }: { label: string; value?: string | null }) {
-  return <div className="rounded-md border p-3"><p className="text-xs font-medium uppercase text-muted-foreground">{label}</p><p className="mt-1 text-sm">{value || "-"}</p></div>;
 }

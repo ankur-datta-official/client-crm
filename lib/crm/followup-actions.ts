@@ -283,6 +283,10 @@ export async function completeFollowup(followupId: string): Promise<CrmActionSta
     }
 
     revalidatePath("/followups");
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/todo-tasks");
+    revalidatePath("/dashboard/completed-tasks");
+    revalidatePath(`/followups/${followupId}`);
     revalidatePath(`/companies/${followup.company_id}`);
 
     return { ok: true };

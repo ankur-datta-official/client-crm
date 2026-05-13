@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, MoreHorizontal, Search, User } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, MoreHorizontal, Search, User } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { deactivateTeamMember, reactivateTeamMember, updateTeamMemberRole } from "@/lib/team/team-actions";
@@ -40,6 +46,14 @@ type TeamMemberTableProps = {
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
+function getAssignableRoles(member: TeamMember, roles: RoleRow[]) {
+  if (member.is_workspace_owner) {
+    return roles.filter((role) => role.slug === "organization-admin");
+  }
+
+  return roles;
+}
+
 export function TeamMemberTable({
   members,
   roles,
@@ -55,6 +69,8 @@ export function TeamMemberTable({
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
   const [deactivateId, setDeactivateId] = useState<string | null>(null);
+  const [roleUpdateError, setRoleUpdateError] = useState<string | null>(null);
+  const [roleUpdateMessage, setRoleUpdateMessage] = useState<string | null>(null);
 
   const filteredMembers = useMemo(() => {
     return members.filter((member) => {
@@ -82,16 +98,27 @@ export function TeamMemberTable({
   const rangeStart = filteredMembers.length === 0 ? 0 : pageStart + 1;
   const rangeEnd = Math.min(pageStart + visibleMembers.length, filteredMembers.length);
 
-  function refreshAfter(work: () => Promise<void>) {
+  function refreshAfter(work: () => Promise<void>, options?: { successMessage?: string }) {
     startTransition(async () => {
-      await work();
-      router.refresh();
+      try {
+        await work();
+        setRoleUpdateError(null);
+        if (options?.successMessage) {
+          setRoleUpdateMessage(options.successMessage);
+        }
+        router.refresh();
+      } catch (error) {
+        setRoleUpdateMessage(null);
+        setRoleUpdateError(error instanceof Error ? error.message : "Unable to complete this team update right now.");
+      }
     });
   }
 
-  function handleRoleChange(userId: string, roleId: string) {
+  function handleRoleChange(member: TeamMember, roleId: string) {
     refreshAfter(async () => {
-      await updateTeamMemberRole(userId, roleId);
+      await updateTeamMemberRole(member.id, roleId);
+    }, {
+      successMessage: `Role updated for ${getDisplayName(member.full_name, member.email)}.`,
     });
   }
 
@@ -122,6 +149,22 @@ export function TeamMemberTable({
 
   return (
     <div className="space-y-4">
+      {roleUpdateError ? (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Team update failed</AlertTitle>
+          <AlertDescription>{roleUpdateError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {roleUpdateMessage ? (
+        <Alert>
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertTitle>Team updated</AlertTitle>
+          <AlertDescription>{roleUpdateMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="crm-filter-surface grid gap-3 md:grid-cols-3">
         <div className="relative md:col-span-2">
           <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
@@ -237,6 +280,11 @@ export function TeamMemberTable({
                 <TableBody>
                   {visibleMembers.map((member) => {
                     const fallbackRoleId = member.role_id ?? roles.find((role) => role.slug === "viewer")?.id ?? roles[0]?.id;
+                    const isProtectedMember = Boolean(member.is_fixed_super_admin || member.is_workspace_owner);
+                    const canManageMemberRole = canUpdateRole && member.id !== currentUserId && !member.is_fixed_super_admin;
+                    const canManageMemberStatus = canDeactivate && member.id !== currentUserId && !member.is_fixed_super_admin;
+                    const assignableRoles = getAssignableRoles(member, roles);
+                    const selectedRoleName = roles.find((role) => role.id === member.role_id)?.name ?? member.role_name ?? "Unassigned";
 
                     return (
                       <TableRow key={member.id}>
@@ -254,7 +302,7 @@ export function TeamMemberTable({
                         <TableCell><UserStatusBadge active={member.is_active} /></TableCell>
                         <TableCell className="max-w-[180px] truncate">{member.last_login_at ? formatDateTimeBD(member.last_login_at) : "Never recorded"}</TableCell>
                         <TableCell className="text-right">
-                          {(canUpdateRole || canDeactivate) && member.id !== currentUserId ? (
+                          {(canManageMemberRole || canManageMemberStatus) ? (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" disabled={isPending}>
@@ -263,28 +311,36 @@ export function TeamMemberTable({
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-56">
-                                {canUpdateRole ? (
-                                  <DropdownMenuItem onSelect={(event) => event.preventDefault()}>
-                                    <select
-                                      className="h-8 w-full rounded-md border bg-background px-2 text-sm"
-                                      value={member.role_id ?? ""}
-                                      onChange={(event) => handleRoleChange(member.id, event.target.value)}
-                                      disabled={!member.is_active}
-                                    >
-                                      {roles.map((role) => (
-                                        <option key={role.id} value={role.id}>
-                                          {role.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </DropdownMenuItem>
+                                {canManageMemberRole ? (
+                                  <>
+                                    <DropdownMenuSub>
+                                      <DropdownMenuSubTrigger disabled={!member.is_active || isProtectedMember}>
+                                        Change role
+                                      </DropdownMenuSubTrigger>
+                                      <DropdownMenuSubContent className="w-56">
+                                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                                          Current: {selectedRoleName}
+                                        </DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {assignableRoles.map((role) => (
+                                          <DropdownMenuItem
+                                            key={role.id}
+                                            disabled={role.id === member.role_id}
+                                            onSelect={() => handleRoleChange(member, role.id)}
+                                          >
+                                            {role.name}
+                                          </DropdownMenuItem>
+                                        ))}
+                                      </DropdownMenuSubContent>
+                                    </DropdownMenuSub>
+                                  </>
                                 ) : null}
-                                {canDeactivate && member.is_active ? (
+                                {canManageMemberStatus && member.is_active ? (
                                   <DropdownMenuItem onSelect={() => setDeactivateId(member.id)}>
                                     Deactivate user
                                   </DropdownMenuItem>
                                 ) : null}
-                                {canDeactivate && !member.is_active && fallbackRoleId ? (
+                                {canManageMemberStatus && !member.is_active && fallbackRoleId ? (
                                   <DropdownMenuItem onSelect={() => handleReactivate(member.id, fallbackRoleId)}>
                                     Reactivate user
                                   </DropdownMenuItem>
@@ -292,7 +348,9 @@ export function TeamMemberTable({
                               </DropdownMenuContent>
                             </DropdownMenu>
                           ) : (
-                            <span className="text-sm text-muted-foreground">No actions</span>
+                            <span className="text-sm text-muted-foreground">
+                              {member.is_fixed_super_admin ? "Protected" : "No actions"}
+                            </span>
                           )}
                         </TableCell>
                       </TableRow>

@@ -126,6 +126,8 @@ export async function searchCompanies(query: string, limit = DEFAULT_SECTION_LIM
         name ilike ${pattern}
         or email ilike ${pattern}
         or phone ilike ${pattern}
+        or coalesce(email_addresses::text, '') ilike ${pattern}
+        or coalesce(phone_numbers::text, '') ilike ${pattern}
         or website ilike ${pattern}
       )
     order by updated_at desc
@@ -169,6 +171,8 @@ export async function searchContacts(query: string, limit = DEFAULT_SECTION_LIMI
         cp.name ilike ${pattern}
         or cp.email ilike ${pattern}
         or cp.mobile ilike ${pattern}
+        or coalesce(cp.email_addresses::text, '') ilike ${pattern}
+        or coalesce(cp.mobile_numbers::text, '') ilike ${pattern}
         or cp.designation ilike ${pattern}
       )
     order by cp.updated_at desc

@@ -2,30 +2,20 @@ import Link from "next/link";
 import {
   AlertCircle,
   ArrowRight,
-  CalendarClock,
-  CalendarDays,
   ChevronRight,
-  CircleDollarSign,
-  CircleHelp,
-  Clock3,
-  Flame,
-  FolderKanban,
-  Handshake,
   LifeBuoy,
   Plus,
   TimerOff,
-  TrendingUp,
-  Users,
 } from "lucide-react";
-import { DashboardDealsStageChart, DashboardLeadTargetChart } from "@/components/dashboard/dashboard-visuals";
+import { DashboardLeadTargetChart } from "@/components/dashboard/dashboard-visuals";
 import { DashboardDateRangePicker } from "@/components/dashboard/dashboard-date-range-picker";
 import { DashboardKPIs } from "@/components/dashboard/dashboard-kpis";
 import { DashboardTargetManager } from "@/components/dashboard/dashboard-target-manager";
 import { 
   ActivityRow, 
   AlertCard, 
-  AnimatedGridItem, 
   AnimatedHeader, 
+  CompletedTaskRow,
   CompactEmptyState, 
   DashboardCard,
   PipelineFunnel,
@@ -33,26 +23,15 @@ import {
   TaskRow,
 } from "@/components/dashboard/dashboard-animations";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentProfile } from "@/lib/auth/session";
 import { getFollowups } from "@/lib/crm/followup-queries";
 import { getHelpRequests, getOpenHelpRequestsCount } from "@/lib/crm/help-request-queries";
-import { getInteractions, getPipelineCompanies, getPipelineStagesForBoard, getPipelineSummary } from "@/lib/crm/queries";
+import { getDashboardCompletedTasks, getDashboardTodoTasks, getInteractions, getPipelineCompanies, getPipelineStagesForBoard, getPipelineSummary, type DashboardTodoTask } from "@/lib/crm/queries";
 import type { Followup, HelpRequest, Interaction, PipelineBoardCompany, PipelineStage } from "@/lib/crm/types";
 import { formatCurrency } from "@/lib/crm/utils";
 import { getCurrentUserPerformanceSnapshot } from "@/lib/team/performance-queries";
 import { formatDateTimeBD } from "@/lib/format/datetime";
 import { getDisplayName } from "@/lib/utils";
-
-type DashboardTaskItem = {
-  id: string;
-  title: string;
-  subtitle: string;
-  badge: string;
-  href: string;
-  tone: "rose" | "amber" | "blue";
-  icon: typeof TimerOff;
-};
 
 type DashboardActivityItem = {
   id: string;
@@ -60,6 +39,16 @@ type DashboardActivityItem = {
   subtitle: string;
   badge: string;
   href: string;
+  tone: "emerald" | "blue" | "amber";
+};
+
+type DashboardCompletedTaskItem = {
+  id: string;
+  title: string;
+  context: string;
+  completedAtLabel: string;
+  href: string;
+  badge: string;
   tone: "emerald" | "blue" | "amber";
 };
 
@@ -93,6 +82,8 @@ export default async function DashboardPage({
     safeOpenHelpRequestsCount,
     yesterdayFollowups,
     performanceSnapshot,
+    completedTaskRecords,
+    todoTaskRecords,
   ] = await Promise.all([
     getFollowups({ 
       status: "pending",
@@ -115,6 +106,20 @@ export default async function DashboardPage({
       dateEnd: new Date(new Date().setHours(23, 59, 59, 999) - 86400000).toISOString(),
     }),
     getCurrentUserPerformanceSnapshot(),
+    getDashboardCompletedTasks(
+      from ?? new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
+      to
+        ? new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString()
+        : new Date(new Date().setHours(23, 59, 59, 999)).toISOString(),
+      { limit: 4 },
+    ),
+    getDashboardTodoTasks(
+      from ?? new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
+      to
+        ? new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString()
+        : new Date(new Date().setHours(23, 59, 59, 999)).toISOString(),
+      { limit: 3 },
+    ),
   ]);
 
   // Filter pipeline companies by date range if provided
@@ -185,19 +190,13 @@ export default async function DashboardPage({
     label: "from yesterday"
   };
 
-  const upcomingMeetings = interactions
-    .filter((interaction) => new Date(interaction.meeting_datetime).getTime() >= dateBounds.now.getTime())
-    .sort((left, right) => {
-      return new Date(left.meeting_datetime).getTime() - new Date(right.meeting_datetime).getTime();
-    })
-    .slice(0, 2);
-
-  const tasks = buildDashboardTasks({
-    overdueFollowups,
-    todaysFollowups,
-    openHelpRequests,
-    upcomingMeetings,
-  }).slice(0, 3);
+  const tasks: DashboardTodoTask[] = todoTaskRecords;
+  const completedTasks: DashboardCompletedTaskItem[] = completedTaskRecords
+    .map((task) => ({
+      ...task,
+      completedAtLabel: buildCompletedTaskLabel(task.completedAt),
+    }))
+    .slice(0, 4);
 
   const totalDailyTarget = performanceSnapshot.metrics.reduce((sum, metric) => sum + metric.dailyTarget, 0);
   const totalDailyAchievement = performanceSnapshot.metrics.reduce((sum, metric) => sum + metric.dailyActual, 0);
@@ -213,14 +212,6 @@ export default async function DashboardPage({
     color: stage.color || DEFAULT_STAGE_COLORS[index % DEFAULT_STAGE_COLORS.length],
     width: Math.max(50, 100 - index * 12),
   }));
-
-  const dealsByStage = pipelineStages
-    .map((stage, index) => ({
-      name: stage.name,
-      value: pipelineCompanies.filter((company) => company.pipeline_stage_id === stage.id).length,
-      color: stage.color || DEFAULT_STAGE_COLORS[index % DEFAULT_STAGE_COLORS.length],
-    }))
-    .filter((item) => item.value > 0);
 
   const recentActivity = buildRecentActivity({
     companies: pipelineCompanies,
@@ -323,11 +314,17 @@ export default async function DashboardPage({
         helpTrend={helpTrend}
       />
 
+      <section className="grid gap-5 md:grid-cols-3">
+        {alertCards.map((alert, index) => (
+          <AlertCard key={alert.id} alert={alert} index={index} />
+        ))}
+      </section>
+
       <section className="grid gap-5 xl:grid-cols-3 items-start">
         <DashboardCard
-          title="Today's Tasks"
+          title={getTodoTasksTitle(from, to, dateBounds)}
           description="The next actions worth tackling first."
-          actionHref="/followups"
+          actionHref={buildTodoTasksHref(from, to)}
           actionLabel="View all"
           className="h-full"
           contentClassName="pt-0 pb-2"
@@ -342,6 +339,29 @@ export default async function DashboardPage({
             <div className="space-y-2.5">
               {tasks.map((task) => (
                 <TaskRow key={task.id} task={task} />
+              ))}
+            </div>
+          )}
+        </DashboardCard>
+
+        <DashboardCard
+          title={getCompletedTasksTitle(from, to, dateBounds)}
+          description="Completed meetings, follow-ups, and resolved help requests for this date range."
+          actionHref={buildCompletedTasksHref(from, to)}
+          actionLabel="View all"
+          className="h-full"
+          contentClassName="pt-0 pb-2"
+          delay={0.18}
+        >
+          {completedTasks.length === 0 ? (
+            <CompactEmptyState
+              title="No completed tasks yet."
+              description="Completed meetings, follow-ups, and resolved help requests for this date range will appear here."
+            />
+          ) : (
+            <div className="space-y-2.5">
+              {completedTasks.map((task) => (
+                <CompletedTaskRow key={task.id} task={task} />
               ))}
             </div>
           )}
@@ -382,7 +402,10 @@ export default async function DashboardPage({
             />
           </div>
         </DashboardCard>
+      </section>
 
+      <section className="grid gap-5 xl:grid-cols-3 items-start">
+        <DashboardLeadTargetChart leadTrend={performanceSnapshot.trend} />
         <DashboardCard
           title="Pipeline Overview"
           description="Track deal progression through stages."
@@ -400,11 +423,6 @@ export default async function DashboardPage({
         >
           <PipelineFunnel stages={funnelStages} />
         </DashboardCard>
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-3 items-start">
-        <DashboardLeadTargetChart leadTrend={performanceSnapshot.trend} />
-        <DashboardDealsStageChart stageDistribution={dealsByStage} />
 
         <DashboardCard
           title="Recent Activity"
@@ -432,12 +450,6 @@ export default async function DashboardPage({
       {profile ? (
         <DashboardTargetManager userId={profile.id} metrics={performanceSnapshot.metrics} />
       ) : null}
-
-      <section className="grid gap-5 md:grid-cols-3">
-        {alertCards.map((alert, index) => (
-          <AlertCard key={alert.id} alert={alert} index={index} />
-        ))}
-      </section>
     </div>
   );
 }
@@ -448,57 +460,6 @@ async function getSafeOpenHelpRequestsCount() {
   } catch (error) {
     return null;
   }
-}
-
-function buildDashboardTasks({
-  overdueFollowups,
-  todaysFollowups,
-  openHelpRequests,
-  upcomingMeetings,
-}: {
-  overdueFollowups: Followup[];
-  todaysFollowups: Followup[];
-  openHelpRequests: HelpRequest[];
-  upcomingMeetings: Interaction[];
-}): any[] {
-  return [
-    ...overdueFollowups.map((followup) => ({
-      id: `overdue-${followup.id}`,
-      title: followup.title,
-      subtitle: `${followup.companies?.name ?? "No company"} | ${formatDateTime(followup.scheduled_at)}`,
-      badge: "Overdue",
-      href: `/followups/${followup.id}`,
-      tone: "rose" as const,
-      iconName: "TimerOff",
-    })),
-    ...todaysFollowups.map((followup) => ({
-      id: `today-${followup.id}`,
-      title: followup.title,
-      subtitle: `${followup.companies?.name ?? "No company"} | ${formatDateTime(followup.scheduled_at)}`,
-      badge: "Today",
-      href: `/followups/${followup.id}`,
-      tone: "amber" as const,
-      iconName: "Clock3",
-    })),
-    ...openHelpRequests.map((request) => ({
-      id: `help-${request.id}`,
-      title: request.title,
-      subtitle: `${request.companies?.name ?? "No company"} | ${toSentenceCase(request.priority)}`,
-      badge: toSentenceCase(request.status),
-      href: `/need-help/${request.id}`,
-      tone: "blue" as const,
-      iconName: "CircleHelp",
-    })),
-    ...upcomingMeetings.map((meeting) => ({
-      id: `meeting-${meeting.id}`,
-      title: meeting.companies?.name ?? meeting.interaction_type,
-      subtitle: `${meeting.interaction_type} | ${formatDateTime(meeting.meeting_datetime)}`,
-      badge: "Meeting",
-      href: `/meetings/${meeting.id}`,
-      tone: "blue" as const,
-      iconName: "CalendarClock",
-    })),
-  ];
 }
 
 function buildRecentActivity({
@@ -611,9 +572,86 @@ function formatDateTime(value: string) {
   return formatDateTimeBD(value);
 }
 
-function toSentenceCase(value: string) {
-  return value
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function buildCompletedTaskLabel(value: string) {
+  return `Completed ${formatDateTime(value)}`;
+}
+
+function getCompletedTasksTitle(
+  from: string | undefined,
+  to: string | undefined,
+  dateBounds: { start: Date; end: Date },
+) {
+  if (!from && !to) {
+    return "Today's Completed Tasks";
+  }
+
+  if (!from || !to) {
+    return "Completed Tasks";
+  }
+
+  const rangeStart = new Date(from);
+  rangeStart.setHours(0, 0, 0, 0);
+  const rangeEnd = new Date(to);
+  rangeEnd.setHours(23, 59, 59, 999);
+
+  const isTodayRange =
+    rangeStart.getTime() === dateBounds.start.getTime() &&
+    rangeEnd.getTime() === dateBounds.end.getTime();
+
+  return isTodayRange ? "Today's Completed Tasks" : "Completed Tasks";
+}
+
+function getTodoTasksTitle(
+  from: string | undefined,
+  to: string | undefined,
+  dateBounds: { start: Date; end: Date },
+) {
+  if (!from && !to) {
+    return "Today's Tasks To Do";
+  }
+
+  if (!from || !to) {
+    return "Tasks To Do";
+  }
+
+  const rangeStart = new Date(from);
+  rangeStart.setHours(0, 0, 0, 0);
+  const rangeEnd = new Date(to);
+  rangeEnd.setHours(23, 59, 59, 999);
+
+  const isTodayRange =
+    rangeStart.getTime() === dateBounds.start.getTime() &&
+    rangeEnd.getTime() === dateBounds.end.getTime();
+
+  return isTodayRange ? "Today's Tasks To Do" : "Tasks To Do";
+}
+
+function buildCompletedTasksHref(from?: string, to?: string) {
+  const params = new URLSearchParams();
+
+  if (from) {
+    params.set("from", from);
+  }
+
+  if (to) {
+    params.set("to", to);
+  }
+
+  const query = params.toString();
+  return query ? `/dashboard/completed-tasks?${query}` : "/dashboard/completed-tasks";
+}
+
+function buildTodoTasksHref(from?: string, to?: string) {
+  const params = new URLSearchParams();
+
+  if (from) {
+    params.set("from", from);
+  }
+
+  if (to) {
+    params.set("to", to);
+  }
+
+  const query = params.toString();
+  return query ? `/dashboard/todo-tasks?${query}` : "/dashboard/todo-tasks";
 }

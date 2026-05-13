@@ -10,9 +10,11 @@ import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiValueInput } from "@/components/shared/multi-value-input";
 import { FormActionBar, FormContextHint, FormRequiredNote, FormSection } from "@/components/shared/form-helpers";
 import { SuccessRatingSlider } from "@/components/crm/success-rating-slider";
 import { companySchema, temperatureFromRating, type CompanyFormValues } from "@/lib/crm/schemas";
+import { buildContactValues, buildEmailValues } from "@/lib/crm/contact-channels";
 import type { Company, CompanyCategory, Industry, PipelineStage, TeamMemberOption } from "@/lib/crm/types";
 import { createCompanyAction, updateCompanyAction } from "@/lib/crm/actions";
 
@@ -43,8 +45,10 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
       pipeline_stage_id: company?.pipeline_stage_id ?? stages[0]?.id ?? "",
       status: company?.status ?? "active",
       phone: company?.phone ?? "",
+      phone_numbers: buildContactValues(company?.phone, company?.phone_numbers),
       whatsapp: company?.whatsapp ?? "",
       email: company?.email ?? "",
+      email_addresses: buildEmailValues(company?.email, company?.email_addresses),
       website: company?.website ?? "",
       address: company?.address ?? "",
       city: company?.city ?? "",
@@ -57,6 +61,10 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
     },
   });
   const successRatingValue = form.watch("success_rating");
+  const phoneNumbersError = getArrayFieldErrorMessage(form.formState.errors.phone_numbers);
+  const emailAddressesError = getArrayFieldErrorMessage(form.formState.errors.email_addresses);
+  const phoneNumbers = form.watch("phone_numbers");
+  const emailAddressValues = form.watch("email_addresses");
   const hasContactDetails = Boolean(
     company?.phone ||
       company?.whatsapp ||
@@ -97,8 +105,10 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
           pipeline_stage_id: stages[0]?.id ?? "",
           status: "active",
           phone: "",
+          phone_numbers: [],
           whatsapp: "",
           email: "",
+          email_addresses: [],
           website: "",
           address: "",
           city: "",
@@ -176,9 +186,32 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
         <div className="md:col-span-2 xl:col-span-4">
           <FormContextHint message="You can keep this lead lightweight for now. Add phone, email, and address details only when they are available." />
         </div>
-        <Field label="Phone"><Input {...form.register("phone")} /></Field>
+        <input type="hidden" {...form.register("phone")} />
+        <input type="hidden" {...form.register("email")} />
+        <Field label="Phone" error={phoneNumbersError}>
+          <MultiValueInput
+            values={Array.isArray(phoneNumbers) ? phoneNumbers : []}
+            onChange={(values) => {
+              form.setValue("phone_numbers", values, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+              form.setValue("phone", values[0] ?? "", { shouldDirty: true, shouldTouch: true });
+            }}
+            placeholder="Primary phone number"
+            addLabel="Add another phone"
+          />
+        </Field>
         <Field label="WhatsApp"><Input {...form.register("whatsapp")} /></Field>
-        <Field label="Email" error={form.formState.errors.email?.message ?? serverFieldErrors.email}><Input {...form.register("email")} /></Field>
+        <Field label="Email" error={emailAddressesError ?? form.formState.errors.email?.message ?? serverFieldErrors.email}>
+          <MultiValueInput
+            type="email"
+            values={Array.isArray(emailAddressValues) ? emailAddressValues : []}
+            onChange={(values) => {
+              form.setValue("email_addresses", values, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+              form.setValue("email", values[0] ?? "", { shouldDirty: true, shouldTouch: true });
+            }}
+            placeholder="company@email.com"
+            addLabel="Add another email"
+          />
+        </Field>
         <Field label="Website" error={form.formState.errors.website?.message ?? serverFieldErrors.website}><Input {...form.register("website")} placeholder="https://example.com" /></Field>
         <Field label="Address"><Input {...form.register("address")} /></Field>
         <Field label="City"><Input {...form.register("city")} /></Field>
@@ -309,11 +342,25 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
   );
 }
 
-function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
+function getArrayFieldErrorMessage(
+  error:
+    | { message?: string }
+    | Array<{ message?: string } | undefined>
+    | undefined,
+) {
+  if (Array.isArray(error)) {
+    return error.find(Boolean)?.message;
+  }
+
+  return error?.message;
+}
+
+function Field({ label, required, error, helper, children }: { label: string; required?: boolean; error?: string; helper?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
       <Label>{label}{required ? <span className="text-destructive"> *</span> : null}</Label>
       {children}
+      {helper ? <p className="text-xs text-muted-foreground">{helper}</p> : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );

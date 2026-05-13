@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 loadLocalEnv();
@@ -9,9 +8,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error("Missing DATABASE_URL.");
 }
 
-const prisma = new PrismaClient({
-  adapter: new PrismaPg(process.env.DATABASE_URL),
-});
+const prisma = new PrismaClient();
 
 const TABLES = [
   "organizations",
@@ -44,11 +41,21 @@ try {
   const rows = [];
 
   for (const tableName of TABLES) {
-    const result = await prisma.$queryRawUnsafe(`select count(*)::int as count from public.${tableName}`);
-    rows.push({
-      table: tableName,
-      count: result[0]?.count ?? 0,
-    });
+    try {
+      const result = await prisma.$queryRawUnsafe(`select count(*)::int as count from public.${tableName}`);
+      rows.push({
+        table: tableName,
+        count: result[0]?.count ?? 0,
+        status: "ok",
+      });
+    } catch (error) {
+      rows.push({
+        table: tableName,
+        count: null,
+        status: "missing",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   console.log(JSON.stringify(rows, null, 2));

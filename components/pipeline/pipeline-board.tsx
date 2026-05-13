@@ -19,6 +19,7 @@ import {
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
+import { WorkspaceSection } from "@/components/shared/workspace-primitives";
 import { LeadTemperatureBadge } from "@/components/crm/lead-temperature-badge";
 import { RatingBadge } from "@/components/crm/rating-badge";
 import { Button } from "@/components/ui/button";
@@ -132,6 +133,14 @@ export function PipelineBoard({
   const hasAnyCompanies = companies.length > 0;
   const hasFilteredCompanies = filteredCompanies.length > 0;
   const hasUnassignedCompanies = stageGroups.some((group) => group.stage.id === "unassigned");
+  const unassignedCount = stageGroups.find((group) => group.stage.id === "unassigned")?.companies.length ?? 0;
+  const now = getCurrentTimestamp();
+  const staleDealsCount = filteredCompanies.filter((company) => {
+    if (company.pipeline_stages?.is_won || company.pipeline_stages?.is_lost || !company.last_interaction_at) {
+      return false;
+    }
+    return now - new Date(company.last_interaction_at).getTime() > 7 * 24 * 60 * 60 * 1000;
+  }).length;
 
   function updateFilter<K extends keyof FilterState>(key: K, value: FilterState[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -318,6 +327,29 @@ export function PipelineBoard({
           tone="rose"
         />
       </section>
+
+      <WorkspaceSection
+        title="Board Attention"
+        description="Use these signals to decide where the team should focus before moving deals around."
+      >
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 dark:border-rose-500/20 dark:bg-rose-500/10">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700 dark:text-rose-200">Overdue follow-ups</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{summary.overdueFollowups}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Deals that need an immediate next action.</p>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-200">Stale deals</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{staleDealsCount}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Active deals with no interaction in the last 7 days.</p>
+          </div>
+          <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 dark:border-sky-500/20 dark:bg-sky-500/10">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700 dark:text-sky-200">Unassigned stage</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{unassignedCount}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Deals that still need a proper stage assignment.</p>
+          </div>
+        </div>
+      </WorkspaceSection>
 
       <Card>
         <CardHeader>
@@ -909,6 +941,10 @@ function formatDate(value: string | null) {
   }
 
   return formatShortDateBD(value);
+}
+
+function getCurrentTimestamp() {
+  return Date.now();
 }
 
 function calculatePipelineSummary(companies: PipelineBoardCompany[]): PipelineBoardSummary {

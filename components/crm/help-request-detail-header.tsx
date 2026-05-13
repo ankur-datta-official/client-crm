@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { HelpRequestStatusBadge, HelpRequestPriorityBadge, HelpRequestTypeBadge } from "@/components/crm/help-request-badges";
 import type { HelpRequest } from "@/lib/crm/types";
-import { assignHelpRequest, resolveHelpRequest, rejectHelpRequest, reopenHelpRequest, archiveHelpRequest } from "@/lib/crm/help-request-actions";
+import { assignHelpRequestToMe, resolveHelpRequest, rejectHelpRequest, reopenHelpRequest, archiveHelpRequest } from "@/lib/crm/help-request-actions";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
@@ -49,10 +49,7 @@ export function HelpRequestDetailHeader({ helpRequest }: { helpRequest: HelpRequ
             <Button 
               variant="outline" 
               disabled={isPending}
-              onClick={() => startTransition(async () => {
-                await assignHelpRequest(helpRequest.id, "", true);
-                router.refresh();
-              })}
+              onClick={() => handleAction(assignHelpRequestToMe)}
             >
               Assign to Me
             </Button>

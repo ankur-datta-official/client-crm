@@ -3,6 +3,11 @@ import "server-only";
 import nodemailer from "nodemailer";
 import { z } from "zod";
 
+const resendEnvSchema = z.object({
+  apiKey: z.string().trim().min(1),
+  from: z.string().trim().min(1),
+});
+
 const smtpEnvSchema = z.object({
   host: z.string().trim().min(1),
   port: z.coerce.number().int().positive(),
@@ -12,10 +17,24 @@ const smtpEnvSchema = z.object({
 });
 
 export type SmtpAvailability =
-  | { ok: true; env: z.infer<typeof smtpEnvSchema> }
+  | { ok: true; provider: "resend"; env: z.infer<typeof resendEnvSchema> }
+  | { ok: true; provider: "smtp"; env: z.infer<typeof smtpEnvSchema> }
   | { ok: false; reason: string };
 
 export function getSmtpAvailability(): SmtpAvailability {
+  const resend = resendEnvSchema.safeParse({
+    apiKey: process.env.RESEND_API_KEY ?? "",
+    from: process.env.RESEND_FROM_EMAIL ?? process.env.SMTP_FROM ?? "",
+  });
+
+  if (resend.success) {
+    return {
+      ok: true,
+      provider: "resend",
+      env: resend.data,
+    };
+  }
+
   const parsed = smtpEnvSchema.safeParse({
     host: process.env.SMTP_HOST ?? "",
     port: process.env.SMTP_PORT ?? "",
@@ -27,12 +46,14 @@ export function getSmtpAvailability(): SmtpAvailability {
   if (!parsed.success) {
     return {
       ok: false,
-      reason: "SMTP is not configured yet. Set SMTP_HOST, SMTP_PORT, and SMTP_FROM to enable invitation emails.",
+      reason:
+        "Email delivery is not configured yet. Set RESEND_API_KEY and RESEND_FROM_EMAIL, or configure SMTP_HOST, SMTP_PORT, and SMTP_FROM.",
     };
   }
 
   return {
     ok: true,
+    provider: "smtp",
     env: parsed.data,
   };
 }
@@ -47,6 +68,30 @@ export async function sendTransactionalEmail(input: {
 
   if (!smtp.ok) {
     throw new Error(smtp.reason);
+  }
+
+  if (smtp.provider === "resend") {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${smtp.env.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: smtp.env.from,
+        to: [input.to],
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.text().catch(() => "");
+      throw new Error(payload || `Resend email request failed with status ${response.status}.`);
+    }
+
+    return;
   }
 
   const transport = nodemailer.createTransport({

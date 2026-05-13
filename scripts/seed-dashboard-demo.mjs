@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 const DEMO_TAG = "[dashboard-demo-v1]";
@@ -12,9 +11,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error("Missing DATABASE_URL in .env.local");
 }
 
-const prisma = new PrismaClient({
-  adapter: new PrismaPg(process.env.DATABASE_URL),
-});
+const prisma = new PrismaClient();
 
 try {
   const profile = await getTargetProfile(TARGET_EMAIL);

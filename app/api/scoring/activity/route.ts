@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/session";
+import { requireApiAccess } from "@/lib/api/route-auth";
 import { logServerError } from "@/lib/errors";
 import { getCompanyScoringHistory, getUserWalletTransactions } from "@/lib/scoring/queries";
 
@@ -9,7 +9,11 @@ export async function GET(request: NextRequest) {
   const limit = Number(request.nextUrl.searchParams.get("limit") ?? "50");
 
   try {
-    await requireAuth();
+    const access = await requireApiAccess({ requireOrganization: true });
+    if (!access.ok) {
+      return access.response;
+    }
+
     if (companyId) {
       const activity = await getCompanyScoringHistory(companyId, limit);
       return NextResponse.json(activity);

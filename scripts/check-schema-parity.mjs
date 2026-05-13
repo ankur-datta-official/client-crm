@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 loadLocalEnv();
@@ -9,9 +8,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error("Missing DATABASE_URL.");
 }
 
-const prisma = new PrismaClient({
-  adapter: new PrismaPg(process.env.DATABASE_URL),
-});
+const prisma = new PrismaClient();
 
 const REQUIRED_COLUMNS = {
   profiles: [
