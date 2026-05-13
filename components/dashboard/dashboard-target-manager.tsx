@@ -65,13 +65,17 @@ export function DashboardTargetManager({ userId, metrics }: DashboardTargetManag
                 setError(null);
                 startTransition(async () => {
                   try {
-                    await upsertPerformanceTarget({
+                    const result = await upsertPerformanceTarget({
                       userId,
                       metricKey: metric.metric,
                       periodType: "daily",
                       targetValue: value,
                       effectiveDate: currentDay(),
                     });
+                    if (!result.ok) {
+                      setError(result.error);
+                      return;
+                    }
                     router.refresh();
                   } catch (submissionError) {
                     setError(submissionError instanceof Error ? submissionError.message : "Unable to save daily target.");
@@ -102,13 +106,17 @@ export function DashboardTargetManager({ userId, metrics }: DashboardTargetManag
                 setError(null);
                 startTransition(async () => {
                   try {
-                    await upsertPerformanceTarget({
+                    const result = await upsertPerformanceTarget({
                       userId,
                       metricKey: metric.metric,
                       periodType: "monthly",
                       targetValue: value,
                       effectiveDate: currentMonthStart(),
                     });
+                    if (!result.ok) {
+                      setError(result.error);
+                      return;
+                    }
                     router.refresh();
                   } catch (submissionError) {
                     setError(submissionError instanceof Error ? submissionError.message : "Unable to save monthly target.");

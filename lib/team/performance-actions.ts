@@ -16,6 +16,10 @@ const performanceTargetSchema = z.object({
   notes: z.string().trim().max(250).optional(),
 });
 
+type PerformanceTargetActionResult =
+  | { ok: true; id: string | null }
+  | { ok: false; error: string };
+
 async function ensureCanManagePerformanceTarget(targetUserId: string, organizationId: string, actorUserId: string) {
   if (targetUserId === actorUserId) {
     return;
@@ -42,32 +46,39 @@ async function ensureCanManagePerformanceTarget(targetUserId: string, organizati
   }
 }
 
-export async function upsertPerformanceTarget(input: unknown) {
-  const user = await requireAuth();
-  const organization = await requireOrganization();
+export async function upsertPerformanceTarget(input: unknown): Promise<PerformanceTargetActionResult> {
   const parsed = performanceTargetSchema.safeParse(input);
 
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? "Please check the target form and try again.");
+    return {
+      ok: false,
+      error: parsed.error.errors[0]?.message ?? "Please check the target form and try again.",
+    };
   }
-
-  const targetProfile = await prisma.user.findFirst({
-    where: {
-      id: parsed.data.userId,
-      organization_id: organization.id,
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (!targetProfile) {
-    throw new Error("Target user was not found in this workspace.");
-  }
-
-  await ensureCanManagePerformanceTarget(parsed.data.userId, organization.id, user.id);
 
   try {
+    const user = await requireAuth();
+    const organization = await requireOrganization();
+
+    const targetProfile = await prisma.user.findFirst({
+      where: {
+        id: parsed.data.userId,
+        organization_id: organization.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!targetProfile) {
+      return {
+        ok: false,
+        error: "Target user was not found in this workspace.",
+      };
+    }
+
+    await ensureCanManagePerformanceTarget(parsed.data.userId, organization.id, user.id);
+
     const rows = await prisma.$queryRaw<Array<{ id: string }>>`
       insert into public.user_performance_targets (
         organization_id,
@@ -102,16 +113,20 @@ export async function upsertPerformanceTarget(input: unknown) {
     revalidatePath("/team");
     revalidatePath("/reports");
 
-    return rows[0]?.id ?? null;
+    return {
+      ok: true,
+      id: rows[0]?.id ?? null,
+    };
   } catch (error) {
     logServerError("performance_target.upsert", error, {
-      organizationId: organization.id,
-      actorUserId: user.id,
       targetUserId: parsed.data.userId,
       metricKey: parsed.data.metricKey,
       periodType: parsed.data.periodType,
     });
-    throw new Error(getSafeErrorMessage(error, "Unable to save the target right now."));
+    return {
+      ok: false,
+      error: getSafeErrorMessage(error, "Unable to save the target right now."),
+    };
   }
 }
 
