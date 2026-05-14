@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, LifeBuoy, Menu, Settings, User, Wallet2, LogOut, KeyRound, LayoutDashboard } from "lucide-react";
+import { ChevronDown, Gift, LifeBuoy, Menu, Settings, User, LogOut, KeyRound, LayoutDashboard } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { NotificationCenter } from "@/components/notifications/notification-center";
@@ -88,16 +88,16 @@ export function AppTopbar({
         <NotificationCenter initialNotifications={notifications} initialUnreadCount={unreadNotificationCount} />
         <ThemeToggle />
         
-        {/* Premium Score Wallet */}
+        {/* Premium Rewards */}
         <Link
           href="/rewards"
           className="group flex items-center gap-2.5 rounded-2xl border border-amber-200/50 bg-gradient-to-br from-amber-50 to-orange-50/50 px-3.5 py-1.5 shadow-sm transition-all hover:-translate-y-px hover:border-amber-300 hover:shadow-md active:scale-[0.98] dark:border-amber-400/20 dark:from-amber-500/10 dark:to-orange-500/5"
         >
-          <div className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-orange-400 text-white shadow-inner ring-2 ring-white/50 group-hover:animate-pulse dark:ring-slate-950/70">
-            <Wallet2 className="size-4.5" />
+          <div className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 via-orange-400 to-rose-400 text-white shadow-inner ring-2 ring-white/50 group-hover:scale-[1.04] dark:ring-slate-950/70">
+            <Gift className="size-4.5" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[9px] font-bold uppercase tracking-[0.05em] text-amber-600/80 leading-none">Wallet</span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.05em] text-amber-600/80 leading-none">Rewards</span>
             <span className="text-[15px] font-black text-amber-700 leading-tight tracking-tight dark:text-amber-300">
               {walletSummary?.wallet_balance?.toLocaleString() ?? 0}
             </span>
