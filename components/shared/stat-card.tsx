@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComponentType } from "react";
 import { Building2, Handshake, LucideIcon, NotebookTabs, TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -10,7 +11,7 @@ type StatCardProps = {
   title: string;
   value: string;
   description?: string;
-  icon?: LucideIcon;
+  icon?: ComponentType<{ className?: string }>;
   iconName?: "building" | "notebook" | "handshake";
   tone?: "teal" | "amber" | "rose" | "blue" | "slate";
   href?: string;

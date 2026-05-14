@@ -1,13 +1,22 @@
 "use client";
 
-import { StatCard } from "@/components/shared/stat-card";
+import { Handshake, CalendarClock, LifeBuoy } from "lucide-react";
 import { AnimatedGridItem } from "./dashboard-animations";
-import { 
-  CircleDollarSign, 
-  Handshake, 
-  CalendarClock, 
-  LifeBuoy 
-} from "lucide-react";
+import { StatCard } from "@/components/shared/stat-card";
+import { cn } from "@/lib/utils";
+
+function TakaIcon({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center justify-center text-[21px] font-semibold leading-none",
+        className,
+      )}
+    >
+      {"\u09F3"}
+    </span>
+  );
+}
 
 type DashboardKPIsProps = {
   pipelineValue: string;
@@ -35,7 +44,7 @@ export function DashboardKPIs({
       title: "Pipeline Value",
       value: pipelineValue,
       description: "Total estimated value",
-      icon: CircleDollarSign,
+      icon: TakaIcon,
       tone: "teal" as const,
       href: "/pipeline",
       trend: pipelineValueTrend,
@@ -58,7 +67,7 @@ export function DashboardKPIs({
       href: "/followups",
       trend: {
         ...followupsTrend,
-        value: String(followupsTrend.value)
+        value: String(followupsTrend.value),
       },
     },
     {
@@ -70,7 +79,7 @@ export function DashboardKPIs({
       href: "/need-help",
       trend: {
         ...helpTrend,
-        value: String(helpTrend.value)
+        value: String(helpTrend.value),
       },
     },
   ];

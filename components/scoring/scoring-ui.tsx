@@ -16,7 +16,6 @@ import {
   Sparkles,
   Target,
   Trophy,
-  Wallet,
   Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -167,8 +166,8 @@ export function WalletSummaryPanel({
     <Card className="rounded-2xl border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/85">
       <CardHeader className={compact ? "pb-3" : undefined}>
         <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
-          <Wallet className="size-5 text-amber-600" />
-          Wallet Balance
+          <Gift className="size-5 text-amber-600" />
+          Rewards Score
         </CardTitle>
         <CardDescription>
           Track your earned points, current challenges, and reward momentum.
@@ -414,7 +413,7 @@ export function RewardsMarketplace({
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid gap-3 md:grid-cols-3">
-              <MiniInfo icon={Wallet} label="Available" value={`${balance} pts`} />
+              <MiniInfo icon={Gift} label="Available" value={`${balance} pts`} />
               <MiniInfo icon={Flame} label="Lifetime" value={`${lifetimeEarned} pts`} />
               <MiniInfo icon={Medal} label="Rank" value={rankState.current.name} />
             </div>
