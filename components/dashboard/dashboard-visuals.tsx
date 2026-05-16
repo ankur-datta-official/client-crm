@@ -197,7 +197,7 @@ export function DashboardDealsStageChart({ stageDistribution }: { stageDistribut
         emptyTitle="No deals yet"
         emptyDescription="Active deals will appear here."
       >
-        <div className="grid grid-cols-[1.2fr_1fr] items-center gap-2 h-[180px]">
+        <div className="grid h-auto grid-cols-1 gap-4 sm:h-[180px] sm:grid-cols-[1.2fr_1fr] sm:items-center">
           <div className="relative h-full w-full flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
@@ -249,7 +249,7 @@ export function DashboardDealsStageChart({ stageDistribution }: { stageDistribut
             <DonutCenterLabel total={totalDeals} />
           </div>
 
-          <div className="h-full overflow-y-auto pr-1 custom-scrollbar">
+          <div className="max-h-40 overflow-y-auto pr-1 custom-scrollbar sm:h-full sm:max-h-none">
             <DonutLegend data={stageDistribution} />
           </div>
         </div>

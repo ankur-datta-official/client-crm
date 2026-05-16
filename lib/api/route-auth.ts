@@ -37,7 +37,7 @@ export async function requireApiAccess(
       };
     }
 
-    if (options.requireOrganization && !profile.organization_id) {
+    if (options.requireOrganization && (!profile.organization_id || !profile.workspace_is_active)) {
       return {
         ok: false,
         response: NextResponse.json({ error: "Workspace not available." }, { status: 400 }),

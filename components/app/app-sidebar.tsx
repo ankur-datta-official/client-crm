@@ -77,11 +77,11 @@ export function AppSidebar({
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden border-r border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.98)_18%,rgba(241,245,249,0.98)_100%)] shadow-[0_18px_50px_rgba(15,23,42,0.08)] transition-[width,transform] duration-300 dark:border-slate-800/80 dark:bg-[linear-gradient(180deg,rgba(2,6,23,0.98)_0%,rgba(15,23,42,0.985)_18%,rgba(15,23,42,0.98)_100%)] dark:shadow-[0_18px_50px_rgba(2,6,23,0.45)] md:sticky md:top-0 md:z-auto md:h-screen md:translate-x-0",
-          collapsed ? "w-[18rem] md:w-[5.75rem]" : "w-[18rem]",
+          collapsed ? "w-[min(18rem,calc(100vw-1rem))] md:w-[5.75rem]" : "w-[min(18rem,calc(100vw-1rem))] md:w-[18rem]",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className={cn("relative border-b border-slate-200/80 pb-4 pt-5 dark:border-slate-800/80", collapsed ? "px-3" : "px-4")}>
+        <div className={cn("relative border-b border-slate-200/80 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] dark:border-slate-800/80", collapsed ? "px-3" : "px-4")}>
           <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(226,232,240,0.55),rgba(248,250,252,0))] dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.78),rgba(15,23,42,0))]" />
           <div className={cn("relative flex items-start gap-3", collapsed ? "flex-col items-center justify-center" : "justify-between")}>
             <BrandLogo compact={collapsed} />
@@ -184,7 +184,7 @@ export function AppSidebar({
             })}
           </div>
         </nav>
-        <div className={cn("shrink-0 border-t border-slate-200/80 bg-white/80 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-950/75", collapsed ? "px-2 py-3" : "px-3 py-3")}>
+        <div className={cn("shrink-0 border-t border-slate-200/80 bg-white/80 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-950/75", collapsed ? "px-2 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" : "px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]")}>
           {collapsed ? (
             <div className="flex justify-center">
               <div className="relative">

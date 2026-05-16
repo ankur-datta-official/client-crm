@@ -82,13 +82,13 @@ export function DashboardDateRangePicker() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="rounded-full border-slate-200 bg-white px-4 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900">
+        <Button variant="outline" className="w-full justify-between rounded-full border-slate-200 bg-white px-4 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900 sm:w-auto">
           <CalendarIcon className="mr-2 size-4 text-slate-500 dark:text-slate-400" />
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{displayRange}</span>
+          <span className="truncate text-left text-sm font-medium text-slate-700 dark:text-slate-200">{displayRange}</span>
           <ChevronDown className="ml-2 size-4 text-slate-400 dark:text-slate-500" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[280px] rounded-2xl border-slate-200 p-4 shadow-lg dark:border-slate-800 dark:bg-slate-950">
+      <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))] rounded-2xl border-slate-200 p-4 shadow-lg dark:border-slate-800 dark:bg-slate-950">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2">
             <Button variant="ghost" size="sm" className="justify-start text-xs rounded-lg" onClick={() => handleQuickRange("today")}>Today</Button>

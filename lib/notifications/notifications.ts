@@ -223,6 +223,10 @@ async function getNotificationViewer(): Promise<NotificationViewer | null> {
     return null;
   }
 
+  if (!profile.is_super_admin && (!profile.organization_id || !profile.workspace_is_active)) {
+    return null;
+  }
+
   return {
     userId: user.id,
     organizationId: profile.organization_id,

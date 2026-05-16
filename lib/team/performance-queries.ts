@@ -2,8 +2,9 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, requireOrganization } from "@/lib/auth/session";
+import { hasPermission, requireAuth, requireOrganization } from "@/lib/auth/session";
 import { formatMonthDayBD } from "@/lib/format/datetime";
+import { hasWorkspaceMembershipsTable } from "@/lib/workspace/memberships";
 import {
   PERFORMANCE_TARGET_METRICS,
   type CurrentUserPerformanceSnapshot,
@@ -275,17 +276,70 @@ export async function getCurrentUserPerformanceSnapshot(): Promise<CurrentUserPe
 export async function getManagedActivityReport(limit = 10): Promise<ManagedActivityReportItem[]> {
   const user = await requireAuth();
   const organization = await requireOrganization();
+  const canViewActivity = await hasPermission("settings.manage") || await hasPermission("team.view_activity");
 
-  const managedUsers = await prisma.user.findMany({
-    where: {
-      organization_id: organization.id,
-      manager_user_id: user.id,
-      is_active: true,
-    },
-    select: {
-      id: true,
-    },
-  });
+  if (!canViewActivity) {
+    return [];
+  }
+
+  if (!(await hasWorkspaceMembershipsTable())) {
+    const managedUsers = await prisma.user.findMany({
+      where: {
+        organization_id: organization.id,
+        manager_user_id: user.id,
+        is_active: true,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const managedUserIds = managedUsers.map((profile) => profile.id);
+    if (managedUserIds.length === 0) {
+      return [];
+    }
+
+    const rows = await prisma.$queryRaw<ManagedActivityRow[]>`
+      select
+        al.id,
+        al.created_at,
+        al.action,
+        al.entity_type,
+        al.entity_id::text as entity_id,
+        al.metadata,
+        al.actor_user_id::text as actor_user_id,
+        actor.full_name as actor_name,
+        actor.email as actor_email
+      from public.activity_logs al
+      left join public.profiles actor
+        on actor.id = al.actor_user_id
+      where al.organization_id = ${organization.id}::uuid
+        and al.actor_user_id in (${Prisma.join(managedUserIds.map((id) => Prisma.sql`${id}::uuid`))})
+        and al.entity_type in ('company', 'interaction', 'followup')
+      order by al.created_at desc
+      limit ${limit}
+    `;
+
+    return rows.map((row) => ({
+      id: row.id,
+      created_at: row.created_at.toISOString(),
+      action: row.action,
+      entity_type: row.entity_type,
+      entity_id: row.entity_id ?? null,
+      metadata: row.metadata ?? {},
+      actor_user_id: row.actor_user_id ?? null,
+      actor_name: row.actor_name ?? row.actor_email ?? "Unknown",
+      actor_email: row.actor_email ?? "unknown@example.com",
+    }));
+  }
+
+  const managedUsers = await prisma.$queryRaw<Array<{ id: string }>>`
+    select wm.user_id::text as id
+    from public.workspace_memberships wm
+    where wm.organization_id = ${organization.id}::uuid
+      and wm.manager_user_id = ${user.id}::uuid
+      and wm.status = 'active'
+  `;
 
   const managedUserIds = managedUsers.map((profile) => profile.id);
   if (managedUserIds.length === 0) {

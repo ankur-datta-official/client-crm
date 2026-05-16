@@ -10,6 +10,7 @@ type GlobalSearchResultsProps = {
   isLoading: boolean;
   open: boolean;
   onResultClick?: () => void;
+  className?: string;
 };
 
 const sections = [
@@ -27,6 +28,7 @@ export function GlobalSearchResults({
   isLoading,
   open,
   onResultClick,
+  className,
 }: GlobalSearchResultsProps) {
   if (!open) {
     return null;
@@ -37,7 +39,7 @@ export function GlobalSearchResults({
     : 0;
 
   return (
-    <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-background shadow-soft dark:border-slate-800 dark:bg-slate-950">
+    <div className={cn("absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-background shadow-soft dark:border-slate-800 dark:bg-slate-950", className)}>
       {isLoading ? (
         <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />

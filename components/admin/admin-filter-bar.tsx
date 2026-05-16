@@ -24,7 +24,7 @@ export function AdminFilterBar({
 }: AdminFilterBarProps) {
   return (
     <form method="get" action={basePath} className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-soft dark:border-slate-800/80 dark:bg-slate-950/95">
-      <div className="grid gap-3 xl:grid-cols-[1.35fr_repeat(4,minmax(0,1fr))_auto]">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.35fr_repeat(4,minmax(0,1fr))_auto]">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-slate-400" />
           <input
@@ -81,12 +81,12 @@ export function AdminFilterBar({
         </select>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button type="submit">Apply filters</Button>
-        <Button type="submit" variant="outline" name="page" value="1">
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center [&>*]:w-full sm:[&>*]:w-auto">
+        <Button type="submit" className="w-full sm:w-auto">Apply filters</Button>
+        <Button type="submit" variant="outline" name="page" value="1" className="w-full sm:w-auto">
           Refresh
         </Button>
-        <Button asChild variant="ghost">
+        <Button asChild variant="ghost" className="w-full sm:w-auto">
           <Link href={basePath}>Clear</Link>
         </Button>
       </div>

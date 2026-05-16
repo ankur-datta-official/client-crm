@@ -11,6 +11,10 @@ import {
 } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { resolveProfileAvatarUrl } from "@/lib/profile/profile-utils";
+import {
+  getActiveWorkspaceMembership,
+  type WorkspaceMembershipRow,
+} from "@/lib/workspace/memberships";
 import { resolveActiveWorkspaceIdForUser } from "@/lib/workspace/service";
 import { resolveSuperAdminAccess } from "@/lib/auth/super-admin";
 
@@ -33,6 +37,7 @@ export type Profile = {
   manager_user_id?: string | null;
   is_active: boolean;
   is_super_admin: boolean;
+  workspace_is_active: boolean;
 };
 
 export type Organization = {
@@ -67,7 +72,7 @@ async function getCurrentAuthSession() {
 }
 
 async function getPrismaProfileByUserId(userId: string): Promise<Profile | null> {
-  await resolveActiveWorkspaceIdForUser(userId);
+  const activeWorkspaceId = await resolveActiveWorkspaceIdForUser(userId);
 
   const data = await prisma.user.findUnique({
     where: {
@@ -92,6 +97,10 @@ async function getPrismaProfileByUserId(userId: string): Promise<Profile | null>
     return null;
   }
 
+  const activeMembership = activeWorkspaceId
+    ? await getActiveWorkspaceMembership(userId, activeWorkspaceId)
+    : null;
+
   return {
     id: data.id,
     organization_id: data.organization_id,
@@ -104,12 +113,13 @@ async function getPrismaProfileByUserId(userId: string): Promise<Profile | null>
     job_title: data.job_title,
     department: data.department,
     phone: data.phone,
-    manager_user_id: data.manager_user_id,
+    manager_user_id: activeMembership?.manager_user_id ?? null,
     is_active: data.is_active,
     is_super_admin: resolveSuperAdminAccess({
       email: data.email,
       isSuperAdmin: data.is_super_admin,
     }),
+    workspace_is_active: Boolean(activeMembership),
   };
 }
 
@@ -139,7 +149,7 @@ async function getPrismaUserPermissionsByUserId(userId: string): Promise<string[
     return ["*"];
   }
 
-  if (!profile.organization_id) {
+  if (!profile.organization_id || !profile.workspace_is_active) {
     return [];
   }
 
@@ -248,10 +258,21 @@ export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   return user ? getPrismaProfileByUserId(user.id) : null;
 });
 
+export const getCurrentWorkspaceMembership = cache(async (): Promise<WorkspaceMembershipRow | null> => {
+  const user = await getCurrentUser();
+  const profile = await getCurrentProfile();
+
+  if (!user || !profile?.organization_id || !profile.workspace_is_active) {
+    return null;
+  }
+
+  return getActiveWorkspaceMembership(user.id, profile.organization_id);
+});
+
 export const getCurrentOrganization = cache(async (): Promise<Organization | null> => {
   const profile = await getCurrentProfile();
 
-  if (!profile?.organization_id || !profile.is_active) {
+  if (!profile?.organization_id || !profile.is_active || !profile.workspace_is_active) {
     return null;
   }
 
@@ -271,8 +292,11 @@ export const getCurrentAppContext = cache(async () => {
 export async function requireOrganization(): Promise<Organization> {
   const profile = await requireActiveProfile();
 
-  const organization = await getCurrentOrganization();
+  if (!profile?.organization_id || !profile.workspace_is_active) {
+    redirect("/onboarding/workspace");
+  }
 
+  const organization = await getCurrentOrganization();
   if (!organization) {
     redirect("/onboarding/workspace");
   }
@@ -288,6 +312,17 @@ export async function requireSuperAdmin() {
   }
 
   return profile;
+}
+
+export async function requireActiveWorkspaceMembership(): Promise<WorkspaceMembershipRow> {
+  await requireActiveProfile();
+  const membership = await getCurrentWorkspaceMembership();
+
+  if (!membership) {
+    redirect("/onboarding/workspace");
+  }
+
+  return membership;
 }
 
 export const getUserPermissions = cache(async (): Promise<string[]> => {

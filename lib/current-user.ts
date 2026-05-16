@@ -55,7 +55,7 @@ export async function getCurrentUserRoles(): Promise<AppRoleSlug[]> {
     getSessionCurrentProfile(),
   ]);
 
-  if (!user || !profile?.organization_id || !profile.is_active) {
+  if (!user || !profile?.organization_id || !profile.is_active || !profile.workspace_is_active) {
     return [];
   }
 

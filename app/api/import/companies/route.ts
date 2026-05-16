@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     const profile = await getCurrentProfile();
 
-    if (!profile?.organization_id || !profile.is_active) {
+    if (!profile?.organization_id || !profile.is_active || !profile.workspace_is_active) {
       return NextResponse.json({ error: "Workspace not available." }, { status: 400 });
     }
 
@@ -106,7 +106,7 @@ export async function GET() {
 
     const profile = await getCurrentProfile();
 
-    if (!profile?.organization_id || !profile.is_active) {
+    if (!profile?.organization_id || !profile.is_active || !profile.workspace_is_active) {
       return NextResponse.json({ error: "Workspace not available." }, { status: 400 });
     }
 

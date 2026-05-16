@@ -89,15 +89,15 @@ export function DashboardCard({
     >
       <Card className={cn("border-slate-200/80 bg-white/95 dark:border-slate-800/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.96)_100%)]", className)}>
         <CardHeader className="pb-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <CardTitle className="text-[1.02rem]">{title}</CardTitle>
               <CardDescription className="mt-2">{description}</CardDescription>
             </div>
             {headerRight ? (
               headerRight
             ) : actionHref && actionLabel ? (
-              <Button asChild variant="ghost" size="sm" className="rounded-full">
+              <Button asChild variant="ghost" size="sm" className="w-full rounded-full sm:w-auto">
                 <Link href={actionHref}>
                   {actionLabel}
                   <ArrowRight className="ml-1 size-3" />
@@ -225,7 +225,7 @@ export function TaskRow({ task }: { task: any }) {
           navigateToTask();
         }
       }}
-      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)]"
+      className="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)] sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className={`flex size-9 shrink-0 items-center justify-center rounded-full ${toneClasses[task.tone as keyof typeof toneClasses]}`}>
@@ -236,7 +236,7 @@ export function TaskRow({ task }: { task: any }) {
           <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-300">{task.subtitle}</p>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
         {task.actionKind === "complete_meeting" && task.canQuickComplete ? (
           <MeetingQuickDoneDialog
             interaction={{
@@ -249,7 +249,7 @@ export function TaskRow({ task }: { task: any }) {
               completed_at: null,
             }}
             trigger={
-              <Button size="sm" variant="outline" onClick={(event) => event.stopPropagation()}>
+              <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={(event) => event.stopPropagation()}>
                 Quick Done
               </Button>
             }
@@ -259,6 +259,7 @@ export function TaskRow({ task }: { task: any }) {
           <Button
             size="sm"
             variant="outline"
+            className="w-full sm:w-auto"
             disabled={isPending}
             onClick={(event) => runQuickAction(event, () => completeFollowup(task.sourceRecordId))}
           >
@@ -269,6 +270,7 @@ export function TaskRow({ task }: { task: any }) {
           <Button
             size="sm"
             variant="outline"
+            className="w-full sm:w-auto"
             disabled={isPending}
             onClick={(event) => runQuickAction(event, () => resolveHelpRequest(task.sourceRecordId))}
           >
@@ -279,13 +281,16 @@ export function TaskRow({ task }: { task: any }) {
           <Button
             size="sm"
             variant="outline"
+            className="w-full sm:w-auto"
             disabled={isPending}
             onClick={(event) => runQuickAction(event, () => assignHelpRequestToMe(task.sourceRecordId))}
           >
             Assign to Me
           </Button>
         ) : null}
-        <StatusPill tone={task.tone}>{task.badge}</StatusPill>
+        <div className="sm:ml-auto">
+          <StatusPill tone={task.tone}>{task.badge}</StatusPill>
+        </div>
       </div>
     </div>
   );
@@ -295,17 +300,17 @@ export function CompletedTaskRow({ task }: { task: any }) {
   return (
     <Link
       href={task.href}
-      className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)]"
+      className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)] sm:flex-row sm:items-start sm:justify-between"
     >
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{task.title}</p>
           <StatusPill tone={task.tone}>{task.badge}</StatusPill>
         </div>
         <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-300">{task.context}</p>
         <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{task.completedAtLabel}</p>
       </div>
-      <ChevronRight className="mt-1 size-4 shrink-0 text-slate-400 dark:text-slate-500" />
+      <ChevronRight className="hidden mt-1 size-4 shrink-0 text-slate-400 dark:text-slate-500 sm:block" />
     </Link>
   );
 }
@@ -325,7 +330,7 @@ export function ProgressMetric({
 
   return (
     <div className="space-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)]">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</p>
         <p className="text-sm text-slate-500 dark:text-slate-300">
           {value}/{target}

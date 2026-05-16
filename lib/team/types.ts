@@ -202,7 +202,10 @@ export const PERMISSION_GROUPS = {
     label: "Team",
     permissions: [
       "team.view",
+      "team.view_activity",
       "team.invite",
+      "team.manage_hierarchy",
+      "team.manage_targets",
       "team.update_role",
       "team.deactivate",
     ],
