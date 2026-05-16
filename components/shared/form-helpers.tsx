@@ -83,10 +83,10 @@ export function FormActionBar({
       className={cn(
         "rounded-2xl border border-slate-200 bg-white p-3 shadow-soft",
         "dark:border-slate-800/90 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(8,13,26,0.98))] dark:shadow-[0_24px_50px_-32px_rgba(2,6,23,0.98)]",
-        className,
+      className,
       )}
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">{children}</div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">{children}</div>
     </div>
   );
 }
@@ -110,36 +110,40 @@ export function FormSection({
   collapsible?: boolean;
   defaultCollapsed?: boolean;
 }) {
-  const [isCollapsed, setIsCollapsed] = useState(collapsible ? defaultCollapsed : false);
+  const [isCollapsed, setIsCollapsed] = useState(
+    collapsible ? (optional ? true : defaultCollapsed) : false,
+  );
 
   return (
     <Card className={className}>
-      <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
+      <CardHeader className="gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1">
           <CardTitle>{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
-        </div>
-        <div className="flex items-center gap-2 self-start">
-          {optional ? (
-            <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
-              Optional
-            </span>
-          ) : null}
-          {collapsible ? (
-            <button
-              type="button"
-              onClick={() => setIsCollapsed((current) => !current)}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100"
-              aria-expanded={!isCollapsed}
-            >
-              {isCollapsed ? "Expand" : "Collapse"}
-              <ChevronDown className={cn("h-4 w-4 transition-transform", isCollapsed ? "" : "rotate-180")} />
-            </button>
-          ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:justify-end">
+            {optional ? (
+              <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
+                Optional
+              </span>
+            ) : null}
+            {collapsible ? (
+              <button
+                type="button"
+                onClick={() => setIsCollapsed((current) => !current)}
+                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                aria-expanded={!isCollapsed}
+              >
+                {isCollapsed ? "Expand" : "Collapse"}
+                <ChevronDown className={cn("h-4 w-4 transition-transform", isCollapsed ? "" : "rotate-180")} />
+              </button>
+            ) : null}
+          </div>
         </div>
       </CardHeader>
       {!isCollapsed ? (
-        <CardContent className={cn("grid gap-4 md:grid-cols-2 xl:grid-cols-4", contentClassName)}>
+        <CardContent className={cn("grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4", contentClassName)}>
           {children}
         </CardContent>
       ) : null}

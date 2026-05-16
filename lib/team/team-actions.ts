@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  getCurrentProfile,
   getCurrentUser,
   hasPermission,
   requireAuth,
@@ -15,6 +14,12 @@ import { createWorkspaceNotification } from "@/lib/notifications/notifications";
 import { prisma } from "@/lib/prisma";
 import { applyScoringEvent, buildScoreIdempotencyKey } from "@/lib/scoring/service";
 import { isFixedSuperAdminEmail } from "@/lib/auth/super-admin";
+import {
+  getActiveWorkspaceMembership,
+  hasWorkspaceMembershipsTable,
+  updateWorkspaceMembershipManager,
+  updateWorkspaceMembershipStatus,
+} from "@/lib/workspace/memberships";
 import { sendTeamInviteEmail } from "./invite-email";
 import { getPermissions, getRoleById, getRoles } from "./team-queries";
 
@@ -30,6 +35,16 @@ type InviteTeamMemberInput = {
 type RoleInput = {
   name: string;
   description?: string;
+};
+
+type WorkspaceMemberRecord = {
+  id: string;
+  email: string;
+  organization_id: string;
+  membership_status: "active" | "inactive";
+  manager_user_id: string | null;
+  is_workspace_owner: boolean;
+  is_active: boolean;
 };
 
 const inviteTeamMemberSchema = z.object({
@@ -103,6 +118,76 @@ async function ensureRoleManagementAccess() {
   }
 }
 
+async function ensureTeamHierarchyAccess() {
+  const allowed = await hasPermission("settings.manage") || await hasPermission("team.manage_hierarchy");
+
+  if (!allowed) {
+    throw new Error("You do not have permission to manage workspace reporting lines.");
+  }
+}
+
+async function getWorkspaceMemberRecord(userId: string, organizationId: string): Promise<WorkspaceMemberRecord | null> {
+  if (!(await hasWorkspaceMembershipsTable())) {
+    const profile = await prisma.user.findFirst({
+      where: {
+        id: userId,
+        organization_id: organizationId,
+      },
+      select: {
+        id: true,
+        email: true,
+        organization_id: true,
+        manager_user_id: true,
+        is_active: true,
+      },
+    });
+
+    if (!profile) {
+      return null;
+    }
+
+    return {
+      id: profile.id,
+      email: profile.email,
+      organization_id: profile.organization_id ?? organizationId,
+      membership_status: profile.is_active ? "active" : "inactive",
+      manager_user_id: profile.manager_user_id,
+      is_workspace_owner: false,
+      is_active: profile.is_active,
+    };
+  }
+
+  const rows = await prisma.$queryRaw<WorkspaceMemberRecord[]>`
+    select
+      p.id::text as id,
+      p.email,
+      wm.organization_id::text as organization_id,
+      wm.status as membership_status,
+      wm.manager_user_id::text as manager_user_id,
+      (o.owner_user_id = p.id) as is_workspace_owner,
+      p.is_active
+    from public.workspace_memberships wm
+    join public.profiles p
+      on p.id = wm.user_id
+    join public.organizations o
+      on o.id = wm.organization_id
+    where wm.organization_id = ${organizationId}::uuid
+      and wm.user_id = ${userId}::uuid
+    limit 1
+  `;
+
+  const row = rows[0] ?? null;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    membership_status: row.membership_status === "inactive" ? "inactive" : "active",
+  };
+}
+
 export async function inviteTeamMember(input: InviteTeamMemberInput) {
   await requirePermission("team.invite");
   const organization = await requireOrganization();
@@ -134,7 +219,6 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
       },
       select: {
         id: true,
-        organization_id: true,
       },
     }),
   ]);
@@ -143,12 +227,12 @@ export async function inviteTeamMember(input: InviteTeamMemberInput) {
     throw new Error("A pending invitation already exists for this email.");
   }
 
-  if (existingProfile?.organization_id === organization.id) {
-    throw new Error("This user is already a member of your organization.");
-  }
+  if (existingProfile?.id) {
+    const existingMembership = await getActiveWorkspaceMembership(existingProfile.id, organization.id);
 
-  if (existingProfile?.organization_id && existingProfile.organization_id !== organization.id) {
-    throw new Error("This user already belongs to another organization.");
+    if (existingMembership) {
+      throw new Error("This user is already an active member of your workspace.");
+    }
   }
 
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -338,7 +422,6 @@ export async function resendTeamInvitation(invitationId: string) {
 
 export async function acceptTeamInvitation(token: string) {
   const user = await requireAuth();
-  const profile = await getCurrentProfile();
   const invitationRecord = await prisma.teamInvitation.findUnique({
     where: {
       token,
@@ -366,9 +449,7 @@ export async function acceptTeamInvitation(token: string) {
     throw new Error("Please sign in with the same email address that received this invitation.");
   }
 
-  if (profile?.organization_id && profile.is_active) {
-    throw new Error("This account already belongs to an active organization.");
-  }
+  const membershipTableAvailable = await hasWorkspaceMembershipsTable();
 
   const result = await prisma.$transaction(async (tx) => {
     const currentUserProfile = await tx.user.findUnique({
@@ -377,11 +458,11 @@ export async function acceptTeamInvitation(token: string) {
       },
       select: {
         id: true,
-        organization_id: true,
         name: true,
         job_title: true,
         department: true,
         phone: true,
+        is_active: true,
       },
     });
 
@@ -389,11 +470,8 @@ export async function acceptTeamInvitation(token: string) {
       throw new Error("Your profile could not be found.");
     }
 
-    if (
-      currentUserProfile.organization_id
-      && currentUserProfile.organization_id !== invitationRecord.organization_id
-    ) {
-      throw new Error("This account already belongs to another organization.");
+    if (!currentUserProfile.is_active) {
+      throw new Error("This account is inactive. Please contact your administrator.");
     }
 
     await tx.user.update({
@@ -402,13 +480,45 @@ export async function acceptTeamInvitation(token: string) {
       },
       data: {
         organization_id: invitationRecord.organization_id,
-        is_active: true,
         name: currentUserProfile.name ?? invitationRecord.full_name ?? undefined,
         job_title: currentUserProfile.job_title ?? invitationRecord.job_title ?? undefined,
         department: currentUserProfile.department ?? invitationRecord.department ?? undefined,
         phone: currentUserProfile.phone ?? invitationRecord.phone ?? undefined,
       },
     });
+
+    if (membershipTableAvailable) {
+      await tx.$executeRaw`
+        insert into public.workspace_memberships (
+          organization_id,
+          user_id,
+          status,
+          joined_at,
+          deactivated_at,
+          manager_user_id,
+          invited_by,
+          created_at,
+          updated_at
+        )
+        values (
+          ${invitationRecord.organization_id}::uuid,
+          ${user.id}::uuid,
+          'active',
+          now(),
+          null,
+          null,
+          ${invitationRecord.invited_by ?? null}::uuid,
+          now(),
+          now()
+        )
+        on conflict (organization_id, user_id)
+        do update set
+          status = 'active',
+          deactivated_at = null,
+          invited_by = coalesce(public.workspace_memberships.invited_by, excluded.invited_by),
+          updated_at = now()
+      `;
+    }
 
     await tx.userRole.deleteMany({
       where: {
@@ -470,6 +580,7 @@ export async function acceptTeamInvitation(token: string) {
 
   revalidatePath("/team");
   revalidatePath("/dashboard");
+  revalidatePath("/settings/workspaces");
   return result as { organization_id: string; invitation_id: string; role_id: string };
 }
 
@@ -483,16 +594,13 @@ export async function updateTeamMemberRole(userId: string, roleId: string) {
     throw new Error("You cannot change your own role.");
   }
 
-  const targetProfile = await prisma.user.findFirst({
+  const targetProfile = await prisma.user.findUnique({
     where: {
       id: userId,
-      organization_id: organization.id,
     },
     select: {
       id: true,
       email: true,
-      organization_id: true,
-      is_active: true,
       userRoles: {
         where: {
           organization_id: organization.id,
@@ -513,8 +621,9 @@ export async function updateTeamMemberRole(userId: string, roleId: string) {
       },
     },
   });
+  const targetMembership = await getWorkspaceMemberRecord(userId, organization.id);
 
-  if (!targetProfile) {
+  if (!targetProfile || !targetMembership) {
     throw new Error("Team member not found.");
   }
 
@@ -529,25 +638,25 @@ export async function updateTeamMemberRole(userId: string, roleId: string) {
     return { success: true, unchanged: true };
   }
 
-  if (targetProfile.id === organization.owner_user_id && role.slug !== "organization-admin") {
+  if (targetMembership.is_workspace_owner && role.slug !== "organization-admin") {
     throw new Error("The workspace owner must remain an Organization Admin.");
   }
 
   if (currentRoleSlug === "organization-admin" && role.slug !== "organization-admin") {
-    const otherActiveAdminCount = await prisma.userRole.count({
-      where: {
-        organization_id: organization.id,
-        user_id: {
-          not: userId,
-        },
-        role: {
-          slug: "organization-admin",
-        },
-        user: {
-          is_active: true,
-        },
-      },
-    });
+    const adminRows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      select count(*)::bigint as count
+      from public.user_roles ur
+      join public.roles r
+        on r.id = ur.role_id
+      join public.workspace_memberships wm
+        on wm.organization_id = ur.organization_id
+       and wm.user_id = ur.user_id
+      where ur.organization_id = ${organization.id}::uuid
+        and ur.user_id <> ${userId}::uuid
+        and r.slug = 'organization-admin'
+        and wm.status = 'active'
+    `;
+    const otherActiveAdminCount = Number(adminRows[0]?.count ?? 0);
 
     if (otherActiveAdminCount === 0) {
       throw new Error("At least one active Organization Admin must remain in this workspace.");
@@ -585,7 +694,7 @@ export async function updateTeamMemberRole(userId: string, roleId: string) {
 }
 
 export async function updateTeamMemberManager(userId: string, managerUserId: string | null) {
-  await ensureRoleManagementAccess();
+  await ensureTeamHierarchyAccess();
   const organization = await requireOrganization();
   const user = await requireAuth();
 
@@ -593,47 +702,24 @@ export async function updateTeamMemberManager(userId: string, managerUserId: str
     throw new Error("You cannot report to yourself.");
   }
 
-  const targetProfile = await prisma.user.findFirst({
-    where: {
-      id: userId,
-      organization_id: organization.id,
-    },
-    select: {
-      id: true,
-      email: true,
-      organization_id: true,
-    },
-  });
+  const targetProfile = await getWorkspaceMemberRecord(userId, organization.id);
 
   if (!targetProfile) {
     throw new Error("Team member not found.");
   }
 
   if (managerUserId) {
-    const managerProfile = await prisma.user.findFirst({
-      where: {
-        id: managerUserId,
-        organization_id: organization.id,
-        is_active: true,
-      },
-      select: {
-        id: true,
-        email: true,
-      },
-    });
+    const managerProfile = await getWorkspaceMemberRecord(managerUserId, organization.id);
 
-    if (!managerProfile) {
+    if (!managerProfile || managerProfile.membership_status !== "active") {
       throw new Error("Selected senior team member was not found.");
     }
   }
 
-  await prisma.user.update({
-    where: {
-      id: userId,
-    },
-    data: {
-      manager_user_id: managerUserId,
-    },
+  await updateWorkspaceMembershipManager({
+    organizationId: organization.id,
+    userId,
+    managerUserId,
   });
 
   await logActivity(organization.id, "team.member.manager_changed", "profile", userId, {
@@ -657,34 +743,20 @@ export async function deactivateTeamMember(userId: string) {
     throw new Error("You cannot deactivate your own account.");
   }
 
-  const targetProfile = await prisma.user.findFirst({
-    where: {
-      id: userId,
-      organization_id: organization.id,
-    },
-    select: {
-      id: true,
-      email: true,
-      organization_id: true,
-      is_active: true,
-    },
-  });
+  const targetProfile = await getWorkspaceMemberRecord(userId, organization.id);
 
   if (!targetProfile) {
     throw new Error("Team member not found.");
   }
 
-  if (!targetProfile.is_active) {
+  if (targetProfile.membership_status !== "active") {
     throw new Error("This team member is already inactive.");
   }
 
-  await prisma.user.update({
-    where: {
-      id: userId,
-    },
-    data: {
-      is_active: false,
-    },
+  await updateWorkspaceMembershipStatus({
+    organizationId: organization.id,
+    userId,
+    status: "inactive",
   });
 
   await logActivity(organization.id, "team.member.deactivated", "profile", userId, {
@@ -692,6 +764,7 @@ export async function deactivateTeamMember(userId: string) {
   });
 
   revalidatePath("/team");
+  revalidatePath("/settings/workspaces");
   return { success: true };
 }
 
@@ -700,24 +773,13 @@ export async function reactivateTeamMember(userId: string, roleId?: string) {
   const organization = await requireOrganization();
   const user = await requireAuth();
 
-  const targetProfile = await prisma.user.findFirst({
-    where: {
-      id: userId,
-      organization_id: organization.id,
-    },
-    select: {
-      id: true,
-      email: true,
-      organization_id: true,
-      is_active: true,
-    },
-  });
+  const targetProfile = await getWorkspaceMemberRecord(userId, organization.id);
 
   if (!targetProfile) {
     throw new Error("Team member not found.");
   }
 
-  if (targetProfile.is_active) {
+  if (targetProfile.membership_status === "active") {
     throw new Error("This team member is already active.");
   }
 
@@ -729,13 +791,10 @@ export async function reactivateTeamMember(userId: string, roleId?: string) {
 
   const role = await getRoleOrThrow(selectedRoleId, organization.id);
 
-  await prisma.user.update({
-    where: {
-      id: userId,
-    },
-    data: {
-      is_active: true,
-    },
+  await updateWorkspaceMembershipStatus({
+    organizationId: organization.id,
+    userId,
+    status: "active",
   });
 
   const currentRoles = await prisma.userRole.findMany({
@@ -766,6 +825,7 @@ export async function reactivateTeamMember(userId: string, roleId?: string) {
   });
 
   revalidatePath("/team");
+  revalidatePath("/settings/workspaces");
   return { success: true };
 }
 

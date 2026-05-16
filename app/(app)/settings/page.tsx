@@ -19,7 +19,7 @@ import { GuidanceStrip } from "@/components/shared/guidance-strip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { requireAnyPermission } from "@/lib/auth/session";
+import { hasPermission, requireAnyPermission } from "@/lib/auth/session";
 import { getCurrentProfileSettings } from "@/lib/profile/profile-actions";
 import { getCompanyCategories, getIndustries, getPipelineStages } from "@/lib/crm/queries";
 import { getAccessibleWorkspaceCount } from "@/lib/workspace/queries";
@@ -35,6 +35,7 @@ export default async function SettingsPage() {
     getAccessibleWorkspaceCount(),
     getPendingSignupRequestCountForSuperAdmin(),
   ]);
+  const canManageSettings = await hasPermission("settings.manage");
 
   const setupChecklist = [
     {
@@ -216,53 +217,57 @@ export default async function SettingsPage() {
           ) : null}
         </SettingsSection>
 
-        <SettingsSection
-          title="2. Organize Your CRM Data"
-          description="Use these settings to keep companies and leads neatly grouped."
-        >
-          <CrmSettingsCard
-            title="Industries"
-            description="Create industry labels like Software, Real Estate, or Retail to organize companies."
-            href="/settings/industries"
-            icon={BriefcaseBusiness}
-            ctaLabel="Open Industries"
-            badge="Recommended"
-            meta={`${industries.length} labels ready`}
-          />
-          <CrmSettingsCard
-            title="Company Categories"
-            description="Create categories like High Value, Warm Lead, or Priority to sort companies better."
-            href="/settings/company-categories"
-            icon={Building2}
-            ctaLabel="Open Categories"
-            badge="Recommended"
-            meta={`${categories.length} categories ready`}
-          />
-        </SettingsSection>
+        {canManageSettings ? (
+          <>
+            <SettingsSection
+              title="2. Organize Your CRM Data"
+              description="Use these settings to keep companies and leads neatly grouped."
+            >
+              <CrmSettingsCard
+                title="Industries"
+                description="Create industry labels like Software, Real Estate, or Retail to organize companies."
+                href="/settings/industries"
+                icon={BriefcaseBusiness}
+                ctaLabel="Open Industries"
+                badge="Recommended"
+                meta={`${industries.length} labels ready`}
+              />
+              <CrmSettingsCard
+                title="Company Categories"
+                description="Create categories like High Value, Warm Lead, or Priority to sort companies better."
+                href="/settings/company-categories"
+                icon={Building2}
+                ctaLabel="Open Categories"
+                badge="Recommended"
+                meta={`${categories.length} categories ready`}
+              />
+            </SettingsSection>
 
-        <SettingsSection
-          title="3. Set Your Sales Workflow"
-          description="Finish here so your team can track deals in one consistent way."
-        >
-          <CrmSettingsCard
-            title="Pipeline"
-            description="Add and edit stages like New Lead, Proposal Sent, and Won so deal progress is easy to follow."
-            href="/settings/pipeline"
-            icon={KanbanSquare}
-            ctaLabel="Open Pipeline"
-            badge="Important"
-            meta={`${pipelineStages.length} stages active`}
-          />
-          <CrmSettingsCard
-            title="Scoring & Rewards"
-            description="Adjust points, rewards, and team motivation settings if you want a gamified workflow."
-            href="/settings/scoring"
-            icon={Trophy}
-            ctaLabel="Open Scoring"
-            badge="Optional"
-            meta="Points and rewards"
-          />
-        </SettingsSection>
+            <SettingsSection
+              title="3. Set Your Sales Workflow"
+              description="Finish here so your team can track deals in one consistent way."
+            >
+              <CrmSettingsCard
+                title="Pipeline"
+                description="Add and edit stages like New Lead, Proposal Sent, and Won so deal progress is easy to follow."
+                href="/settings/pipeline"
+                icon={KanbanSquare}
+                ctaLabel="Open Pipeline"
+                badge="Important"
+                meta={`${pipelineStages.length} stages active`}
+              />
+              <CrmSettingsCard
+                title="Scoring & Rewards"
+                description="Adjust points, rewards, and team motivation settings if you want a gamified workflow."
+                href="/settings/scoring"
+                icon={Trophy}
+                ctaLabel="Open Scoring"
+                badge="Optional"
+                meta="Points and rewards"
+              />
+            </SettingsSection>
+          </>
+        ) : null}
       </div>
     </div>
   );

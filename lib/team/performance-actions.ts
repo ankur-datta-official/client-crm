@@ -6,6 +6,7 @@ import { hasPermission, requireAuth, requireOrganization } from "@/lib/auth/sess
 import { getSafeErrorMessage, logServerError } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { PERFORMANCE_TARGET_METRICS, PERFORMANCE_TARGET_PERIODS, type PerformanceTargetMetric } from "@/lib/team/types";
+import { hasWorkspaceMembershipsTable } from "@/lib/workspace/memberships";
 
 const performanceTargetSchema = z.object({
   userId: z.string().uuid("A valid team member is required."),
@@ -29,17 +30,42 @@ async function ensureCanManagePerformanceTarget(targetUserId: string, organizati
     return;
   }
 
-  const targetProfile = await prisma.user.findFirst({
-    where: {
-      id: targetUserId,
-      organization_id: organizationId,
-      is_active: true,
-      manager_user_id: actorUserId,
-    },
-    select: {
-      id: true,
-    },
-  });
+  if (await hasPermission("team.manage_targets")) {
+    return;
+  }
+
+  if (!(await hasWorkspaceMembershipsTable())) {
+    const targetProfile = await prisma.user.findFirst({
+      where: {
+        id: targetUserId,
+        organization_id: organizationId,
+        is_active: true,
+        manager_user_id: actorUserId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!targetProfile) {
+      throw new Error("You do not have permission to manage this user target.");
+    }
+
+    return;
+  }
+
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    select p.id::text as id
+    from public.workspace_memberships wm
+    join public.profiles p
+      on p.id = wm.user_id
+    where wm.organization_id = ${organizationId}::uuid
+      and wm.user_id = ${targetUserId}::uuid
+      and wm.status = 'active'
+      and wm.manager_user_id = ${actorUserId}::uuid
+    limit 1
+  `;
+  const targetProfile = rows[0] ?? null;
 
   if (!targetProfile) {
     throw new Error("You do not have permission to manage this user target.");
@@ -60,21 +86,41 @@ export async function upsertPerformanceTarget(input: unknown): Promise<Performan
     const user = await requireAuth();
     const organization = await requireOrganization();
 
-    const targetProfile = await prisma.user.findFirst({
-      where: {
-        id: parsed.data.userId,
-        organization_id: organization.id,
-      },
-      select: {
-        id: true,
-      },
-    });
+    if (!(await hasWorkspaceMembershipsTable())) {
+      const targetProfile = await prisma.user.findFirst({
+        where: {
+          id: parsed.data.userId,
+          organization_id: organization.id,
+        },
+        select: {
+          id: true,
+        },
+      });
 
-    if (!targetProfile) {
-      return {
-        ok: false,
-        error: "Target user was not found in this workspace.",
-      };
+      if (!targetProfile) {
+        return {
+          ok: false,
+          error: "Target user was not found in this workspace.",
+        };
+      }
+    } else {
+      const targetRows = await prisma.$queryRaw<Array<{ id: string }>>`
+        select p.id::text as id
+        from public.workspace_memberships wm
+        join public.profiles p
+          on p.id = wm.user_id
+        where wm.organization_id = ${organization.id}::uuid
+          and wm.user_id = ${parsed.data.userId}::uuid
+        limit 1
+      `;
+      const targetProfile = targetRows[0] ?? null;
+
+      if (!targetProfile) {
+        return {
+          ok: false,
+          error: "Target user was not found in this workspace.",
+        };
+      }
     }
 
     await ensureCanManagePerformanceTarget(parsed.data.userId, organization.id, user.id);

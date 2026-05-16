@@ -27,7 +27,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { deactivateTeamMember, reactivateTeamMember, updateTeamMemberRole } from "@/lib/team/team-actions";
+import { deactivateTeamMember, reactivateTeamMember, updateTeamMemberManager, updateTeamMemberRole } from "@/lib/team/team-actions";
 import { formatDateTimeBD } from "@/lib/format/datetime";
 import type { RoleRow, TeamMember } from "@/lib/team/types";
 import { getDisplayName } from "@/lib/utils";
@@ -41,6 +41,7 @@ type TeamMemberTableProps = {
   currentUserId: string | null;
   canUpdateRole: boolean;
   canDeactivate: boolean;
+  canManageHierarchy: boolean;
 };
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
@@ -60,6 +61,7 @@ export function TeamMemberTable({
   currentUserId,
   canUpdateRole,
   canDeactivate,
+  canManageHierarchy,
 }: TeamMemberTableProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -97,6 +99,16 @@ export function TeamMemberTable({
   const visibleMembers = filteredMembers.slice(pageStart, pageStart + pageSize);
   const rangeStart = filteredMembers.length === 0 ? 0 : pageStart + 1;
   const rangeEnd = Math.min(pageStart + visibleMembers.length, filteredMembers.length);
+  const activeManagerOptions = useMemo(
+    () =>
+      members
+        .filter((member) => member.is_active)
+        .map((member) => ({
+          id: member.id,
+          label: getDisplayName(member.full_name, member.email),
+        })),
+    [members],
+  );
 
   function refreshAfter(work: () => Promise<void>, options?: { successMessage?: string }) {
     startTransition(async () => {
@@ -119,6 +131,14 @@ export function TeamMemberTable({
       await updateTeamMemberRole(member.id, roleId);
     }, {
       successMessage: `Role updated for ${getDisplayName(member.full_name, member.email)}.`,
+    });
+  }
+
+  function handleManagerChange(member: TeamMember, managerUserId: string | null) {
+    refreshAfter(async () => {
+      await updateTeamMemberManager(member.id, managerUserId);
+    }, {
+      successMessage: `Reporting line updated for ${getDisplayName(member.full_name, member.email)}.`,
     });
   }
 
@@ -209,12 +229,6 @@ export function TeamMemberTable({
         </div>
       </div>
 
-      {canUpdateRole ? (
-        <div className="rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
-          Custom roles you create in the <span className="font-medium text-foreground">Roles & Permissions</span> tab will appear here automatically, so you can assign them to active team members safely.
-        </div>
-      ) : null}
-
       {filteredMembers.length === 0 ? (
         <EmptyState
           title="No matching team members"
@@ -254,7 +268,10 @@ export function TeamMemberTable({
                 roles={roles}
                 canUpdateRole={canUpdateRole && member.id !== currentUserId}
                 canDeactivate={canDeactivate && member.id !== currentUserId}
+                canManageHierarchy={canManageHierarchy}
+                managerOptions={activeManagerOptions}
                 onRoleChange={handleRoleChange}
+                onManagerChange={handleManagerChange}
                 onDeactivate={() => setDeactivateId(member.id)}
                 onReactivate={handleReactivate}
               />
@@ -283,8 +300,10 @@ export function TeamMemberTable({
                     const isProtectedMember = Boolean(member.is_fixed_super_admin || member.is_workspace_owner);
                     const canManageMemberRole = canUpdateRole && member.id !== currentUserId && !member.is_fixed_super_admin;
                     const canManageMemberStatus = canDeactivate && member.id !== currentUserId && !member.is_fixed_super_admin;
+                    const canManageMemberHierarchy = canManageHierarchy && member.is_active;
                     const assignableRoles = getAssignableRoles(member, roles);
                     const selectedRoleName = roles.find((role) => role.id === member.role_id)?.name ?? member.role_name ?? "Unassigned";
+                    const managerOptions = activeManagerOptions.filter((candidate) => candidate.id !== member.id);
 
                     return (
                       <TableRow key={member.id}>
@@ -298,7 +317,31 @@ export function TeamMemberTable({
                         <TableCell><RoleBadge name={member.role_name ?? "Unassigned"} /></TableCell>
                         <TableCell className="max-w-[160px] truncate">{member.job_title ?? "-"}</TableCell>
                         <TableCell className="max-w-[160px] truncate">{member.department ?? "-"}</TableCell>
-                        <TableCell className="max-w-[180px] truncate">{member.manager_name ?? member.manager_email ?? "-"}</TableCell>
+                        <TableCell className="max-w-[220px]">
+                          {canManageMemberHierarchy ? (
+                            <select
+                              className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark]"
+                              value={member.manager_user_id ?? ""}
+                              disabled={isPending}
+                              aria-label={`Reports to for ${getDisplayName(member.full_name, member.email)}`}
+                              onChange={(event) => {
+                                const value = event.target.value || null;
+                                handleManagerChange(member, value);
+                              }}
+                            >
+                              <option value="">No senior assigned</option>
+                              {managerOptions.map((candidate) => (
+                                <option key={candidate.id} value={candidate.id}>
+                                  {candidate.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className="truncate text-sm text-foreground">
+                              {member.manager_name ?? member.manager_email ?? "No senior assigned"}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell><UserStatusBadge active={member.is_active} /></TableCell>
                         <TableCell className="max-w-[180px] truncate">{member.last_login_at ? formatDateTimeBD(member.last_login_at) : "Never recorded"}</TableCell>
                         <TableCell className="text-right">

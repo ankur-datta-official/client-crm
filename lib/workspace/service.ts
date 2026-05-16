@@ -3,6 +3,9 @@ import { ensureDefaultCompanyCategories } from "@/lib/crm/default-company-catego
 import { slugify } from "@/lib/crm/utils";
 import { resolveSuperAdminAccess } from "@/lib/auth/super-admin";
 import { PERMISSION_GROUPS } from "@/lib/team/types";
+import {
+  listActiveWorkspaceMembershipsForUser,
+} from "@/lib/workspace/memberships";
 import type { WorkspaceSummary } from "./types";
 
 const DEFAULT_ROLE_DEFINITIONS = [
@@ -14,7 +17,7 @@ const DEFAULT_ROLE_DEFINITIONS = [
   {
     name: "Sales Manager",
     slug: "sales-manager",
-    description: "Manage sales team activity, pipeline, and reports.",
+    description: "Manage sales team activity, targets, pipeline, and reports.",
   },
   {
     name: "Sales Executive",
@@ -43,7 +46,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "documents.view", "documents.upload", "documents.update", "documents.download", "documents.archive",
     "help_requests.view", "help_requests.create", "help_requests.assign", "help_requests.resolve", "help_requests.reject", "help_requests.archive",
     "reports.view", "reports.export",
-    "team.view", "team.invite", "team.update_role", "team.deactivate",
+    "team.view", "team.view_activity", "team.invite", "team.manage_hierarchy", "team.manage_targets", "team.update_role", "team.deactivate",
     "settings.view", "settings.manage",
     "scoring.view", "scoring.manage", "rewards.manage", "leaderboard.view",
   ],
@@ -56,7 +59,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "documents.view", "documents.upload", "documents.update", "documents.download", "documents.archive",
     "help_requests.view", "help_requests.create", "help_requests.assign", "help_requests.resolve",
     "reports.view", "reports.export",
-    "team.view",
+    "team.view", "team.view_activity", "team.manage_hierarchy", "team.manage_targets",
     "scoring.view", "leaderboard.view",
   ],
   "sales-executive": [
@@ -119,33 +122,6 @@ function formatPermissionName(key: string) {
     .join(" ");
 }
 
-function dedupeWorkspaces(workspaces: WorkspaceSummary[]) {
-  const byId = new Map<string, WorkspaceSummary>();
-
-  for (const workspace of workspaces) {
-    const existing = byId.get(workspace.id);
-
-    if (!existing || (!existing.is_owner && workspace.is_owner)) {
-      byId.set(workspace.id, workspace);
-      continue;
-    }
-
-    if (
-      existing
-      && existing.role_slug !== "organization-admin"
-      && workspace.role_slug === "organization-admin"
-    ) {
-      byId.set(workspace.id, workspace);
-    }
-  }
-
-  return Array.from(byId.values()).sort((left, right) => {
-    if (left.is_active !== right.is_active) return left.is_active ? -1 : 1;
-    if (left.is_owner !== right.is_owner) return left.is_owner ? -1 : 1;
-    return left.name.localeCompare(right.name);
-  });
-}
-
 export async function canCreateWorkspaceForUser(
   userId: string,
   workspacesOverride?: WorkspaceSummary[],
@@ -186,35 +162,6 @@ export async function listAccessibleWorkspacesForUser(userId: string): Promise<W
     },
     select: {
       organization_id: true,
-      ownedOrganizations: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          company_size: true,
-          owner_user_id: true,
-        },
-      },
-      userRoles: {
-        select: {
-          organization_id: true,
-          role: {
-            select: {
-              name: true,
-              slug: true,
-            },
-          },
-          organization: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              company_size: true,
-              owner_user_id: true,
-            },
-          },
-        },
-      },
     },
   });
 
@@ -222,29 +169,94 @@ export async function listAccessibleWorkspacesForUser(userId: string): Promise<W
     return [];
   }
 
-  const owned = user.ownedOrganizations.map((organization) => ({
-    ...organization,
-    role_name: "Organization Admin",
-    role_slug: "organization-admin",
-    is_owner: true,
-    is_active: organization.id === user.organization_id,
-  }));
+  const memberships = await listActiveWorkspaceMembershipsForUser(userId);
 
-  const memberships = user.userRoles
-    .filter((record) => record.organization)
-    .map((record) => ({
-      id: record.organization.id,
-      name: record.organization.name,
-      slug: record.organization.slug,
-      company_size: record.organization.company_size,
-      owner_user_id: record.organization.owner_user_id,
-      role_name: record.role?.name ?? null,
-      role_slug: record.role?.slug ?? null,
-      is_owner: record.organization.owner_user_id === userId,
-      is_active: record.organization.id === user.organization_id,
-    }));
+  if (memberships.length === 0) {
+    return [];
+  }
 
-  const workspaces = dedupeWorkspaces([...owned, ...memberships]);
+  const organizationIds = memberships.map((membership) => membership.organization_id);
+  const [organizations, userRoles] = await Promise.all([
+    prisma.organization.findMany({
+      where: {
+        id: {
+          in: organizationIds,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        company_size: true,
+        owner_user_id: true,
+      },
+    }),
+    prisma.userRole.findMany({
+      where: {
+        user_id: userId,
+        organization_id: {
+          in: organizationIds,
+        },
+      },
+      orderBy: {
+        assigned_at: "desc",
+      },
+      select: {
+        organization_id: true,
+        role: {
+          select: {
+            name: true,
+            slug: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const organizationMap = new Map(organizations.map((organization) => [organization.id, organization]));
+  const roleMap = new Map<string, { role_name: string | null; role_slug: string | null }>();
+
+  for (const userRole of userRoles) {
+    if (!roleMap.has(userRole.organization_id)) {
+      roleMap.set(userRole.organization_id, {
+        role_name: userRole.role?.name ?? null,
+        role_slug: userRole.role?.slug ?? null,
+      });
+    }
+  }
+
+  const workspaces = memberships
+    .map((membership) => {
+      const organization = organizationMap.get(membership.organization_id);
+
+      if (!organization) {
+        return null;
+      }
+
+      const role = roleMap.get(membership.organization_id) ?? {
+        role_name: null,
+        role_slug: null,
+      };
+      const isOwner = organization.owner_user_id === userId;
+
+      return {
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug,
+        company_size: organization.company_size,
+        owner_user_id: organization.owner_user_id,
+        role_name: isOwner ? (role.role_name ?? "Organization Admin") : role.role_name,
+        role_slug: isOwner ? (role.role_slug ?? "organization-admin") : role.role_slug,
+        is_owner: isOwner,
+        is_active: organization.id === user.organization_id,
+      } satisfies WorkspaceSummary;
+    })
+    .filter((workspace): workspace is WorkspaceSummary => Boolean(workspace))
+    .sort((left, right) => {
+      if (left.is_active !== right.is_active) return left.is_active ? -1 : 1;
+      if (left.is_owner !== right.is_owner) return left.is_owner ? -1 : 1;
+      return left.name.localeCompare(right.name);
+    });
 
   if (workspaces.length === 0) {
     return workspaces;
@@ -441,6 +453,37 @@ export async function createWorkspaceForUser(userId: string, input: { name: stri
     }
 
     const adminRole = roles.find((role) => role.slug === "organization-admin");
+
+    await tx.$executeRaw`
+      insert into public.workspace_memberships (
+        organization_id,
+        user_id,
+        status,
+        joined_at,
+        deactivated_at,
+        manager_user_id,
+        invited_by,
+        created_at,
+        updated_at
+      )
+      values (
+        ${organization.id}::uuid,
+        ${userId}::uuid,
+        'active',
+        now(),
+        null,
+        null,
+        ${userId}::uuid,
+        now(),
+        now()
+      )
+      on conflict (organization_id, user_id)
+      do update set
+        status = 'active',
+        deactivated_at = null,
+        invited_by = coalesce(public.workspace_memberships.invited_by, excluded.invited_by),
+        updated_at = now()
+    `;
 
     if (adminRole) {
       await tx.userRole.upsert({

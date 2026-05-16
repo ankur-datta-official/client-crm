@@ -40,7 +40,7 @@ export function MultiValueInput({
   return (
     <div className="space-y-2">
       {rows.map((value, index) => (
-        <div key={`${index}-${value}`} className="flex items-center gap-2">
+        <div key={index} className="flex items-center gap-2">
           <Input
             type={type}
             value={value}

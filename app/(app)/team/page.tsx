@@ -7,7 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InvitationTable } from "@/components/team/invitation-table";
 import { InviteUserForm } from "@/components/team/invite-user-form";
 import { RoleTable } from "@/components/team/role-table";
-import { TeamHierarchyManager } from "@/components/team/team-hierarchy-manager";
 import { TeamMemberTable } from "@/components/team/team-member-table";
 import { TeamTargetManager } from "@/components/team/team-target-manager";
 import { hasPermission, requirePermission } from "@/lib/auth/session";
@@ -24,7 +23,7 @@ import {
 export default async function TeamPage() {
   await requirePermission("team.view");
 
-  const [members, invitations, roles, permissions, currentUserId, canInvite, canUpdateRole, canDeactivate, canManageRoles, performanceTargets, managedActivity] =
+  const [members, invitations, roles, permissions, currentUserId, canInvite, canUpdateRole, canDeactivate, canManageRoles, canManageHierarchy, canManageTargets, canViewActivity, performanceTargets, managedActivity] =
     await Promise.all([
       getTeamMembers(),
       getTeamInvitations(),
@@ -35,6 +34,9 @@ export default async function TeamPage() {
       hasPermission("team.update_role"),
       hasPermission("team.deactivate"),
       hasPermission("settings.manage"),
+      hasPermission("settings.manage").then((allowed) => allowed || hasPermission("team.manage_hierarchy")),
+      hasPermission("settings.manage").then((allowed) => allowed || hasPermission("team.manage_targets")),
+      hasPermission("settings.manage").then((allowed) => allowed || hasPermission("team.view_activity")),
       getPerformanceTargetsForOrganization(),
       getManagedActivityReport(),
     ]);
@@ -70,10 +72,9 @@ export default async function TeamPage() {
         </TabsList>
 
         <TabsContent value="members" className="space-y-4">
-          <TeamHierarchyManager members={members} canManage={canManageRoles} />
-          <TeamTargetManager members={members} targets={performanceTargets} canManage={canManageRoles} />
+          <TeamTargetManager members={members} targets={performanceTargets} canManage={canManageTargets} />
 
-          {managedActivity.length > 0 ? (
+          {canViewActivity && managedActivity.length > 0 ? (
             <Card>
               <CardHeader>
                 <CardTitle>Junior activity report</CardTitle>
@@ -101,6 +102,7 @@ export default async function TeamPage() {
             currentUserId={currentUserId}
             canUpdateRole={canUpdateRole}
             canDeactivate={canDeactivate}
+            canManageHierarchy={canManageHierarchy}
           />
         </TabsContent>
 

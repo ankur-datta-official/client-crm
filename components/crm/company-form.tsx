@@ -223,7 +223,7 @@ export function CompanyForm({ company, industries, categories, stages, teamMembe
           description="Qualification, value, temperature, and expected close timing."
           optional
           collapsible
-          defaultCollapsed={!hasSalesDetails}
+          defaultCollapsed
           contentClassName="grid-cols-1 md:grid-cols-1 xl:grid-cols-1"
         >
           <div className="grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] xl:items-stretch">

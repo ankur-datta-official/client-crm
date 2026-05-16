@@ -278,18 +278,18 @@ export default async function DashboardPage({
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">Here&apos;s what&apos;s happening with your sales today.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <DashboardDateRangePicker />
-          <Button asChild className="rounded-full px-4">
+          <Button asChild className="w-full rounded-full px-4 sm:w-auto">
             <Link href="/companies/new">
               <Plus />
               Add Lead
             </Link>
           </Button>
-          <Button asChild variant="outline" className="rounded-full px-4">
+          <Button asChild variant="outline" className="w-full rounded-full px-4 sm:w-auto">
             <Link href="/meetings/new">Log Meeting</Link>
           </Button>
-          <Button asChild variant="outline" className="rounded-full px-4">
+          <Button asChild variant="outline" className="w-full rounded-full px-4 sm:w-auto">
             <Link href="/followups/new">Create Follow-up</Link>
           </Button>
         </div>

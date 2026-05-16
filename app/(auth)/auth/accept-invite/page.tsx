@@ -93,7 +93,6 @@ export default async function AcceptInvitePage({ searchParams }: AcceptInvitePag
 
   const loginHref = buildInviteAuthHref("/auth/login", invitation, inviteToken);
   const registerHref = buildInviteAuthHref("/auth/register", invitation, inviteToken);
-  const belongsToDifferentOrg = Boolean(profile?.organization_id && profile.organization_id !== invitation.organization_id);
   const wrongInviteEmail = Boolean(
     user?.email
     && user.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase(),
@@ -145,15 +144,7 @@ export default async function AcceptInvitePage({ searchParams }: AcceptInvitePag
           </div>
         ) : null}
 
-        {belongsToDifferentOrg ? (
-          <div className="space-y-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-            <div className="flex items-start gap-2">
-              <ShieldAlert className="mt-0.5 h-4 w-4" />
-              <p>This signed-in account already belongs to another organization. Use the invited email address to continue.</p>
-            </div>
-            <SwitchAccountButton redirectTo={loginHref} className="w-full sm:w-auto" />
-          </div>
-        ) : wrongInviteEmail ? (
+        {wrongInviteEmail ? (
           <div className="space-y-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
             <div className="flex items-start gap-2">
               <ShieldAlert className="mt-0.5 h-4 w-4" />
@@ -210,7 +201,7 @@ export default async function AcceptInvitePage({ searchParams }: AcceptInvitePag
                 Ready to join the workspace
               </div>
               <p className="mt-2">
-                You are signed in as {invitation.email}. Accepting this invite will connect your profile to {invitation.organization_name} and assign your invited role.
+                You are signed in as {invitation.email}. Accepting this invite will add {invitation.organization_name} to your account, switch you into that workspace, and assign your invited role there.
               </p>
             </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

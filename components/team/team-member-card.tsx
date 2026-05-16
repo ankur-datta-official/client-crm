@@ -24,7 +24,10 @@ type TeamMemberCardProps = {
   roles: RoleRow[];
   canUpdateRole: boolean;
   canDeactivate: boolean;
+  canManageHierarchy: boolean;
+  managerOptions: Array<{ id: string; label: string }>;
   onRoleChange: (member: TeamMember, roleId: string) => void;
+  onManagerChange: (member: TeamMember, managerUserId: string | null) => void;
   onDeactivate: (userId: string) => void;
   onReactivate: (userId: string, roleId?: string) => void;
 };
@@ -34,7 +37,10 @@ export function TeamMemberCard({
   roles,
   canUpdateRole,
   canDeactivate,
+  canManageHierarchy,
+  managerOptions,
   onRoleChange,
+  onManagerChange,
   onDeactivate,
   onReactivate,
 }: TeamMemberCardProps) {
@@ -44,6 +50,8 @@ export function TeamMemberCard({
     ? roles.filter((role) => role.slug === "organization-admin")
     : roles;
   const selectedRoleName = roles.find((role) => role.id === member.role_id)?.name ?? member.role_name ?? "Unassigned";
+  const canManageMemberHierarchy = canManageHierarchy && member.is_active;
+  const assignableManagers = managerOptions.filter((candidate) => candidate.id !== member.id);
 
   return (
     <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900/85">
@@ -69,7 +77,26 @@ export function TeamMemberCard({
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Reports To</span>
-          <span>{member.manager_name ?? member.manager_email ?? "-"}</span>
+          {canManageMemberHierarchy ? (
+            <select
+              className="h-10 min-w-[11rem] rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring dark:border-slate-800 dark:bg-slate-950/85 dark:[color-scheme:dark]"
+              value={member.manager_user_id ?? ""}
+              aria-label={`Reports to for ${getDisplayName(member.full_name, member.email)}`}
+              onChange={(event) => {
+                const value = event.target.value || null;
+                onManagerChange(member, value);
+              }}
+            >
+              <option value="">No senior assigned</option>
+              {assignableManagers.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span>{member.manager_name ?? member.manager_email ?? "No senior assigned"}</span>
+          )}
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Last Login</span>

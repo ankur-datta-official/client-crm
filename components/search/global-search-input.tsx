@@ -4,10 +4,21 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { GlobalSearchResults } from "./global-search-results";
 import type { GlobalSearchResults as GlobalSearchResultsShape } from "@/lib/search/global-search";
 
-export function GlobalSearchInput() {
+type GlobalSearchInputProps = {
+  className?: string;
+  inputClassName?: string;
+  resultsClassName?: string;
+};
+
+export function GlobalSearchInput({
+  className,
+  inputClassName,
+  resultsClassName,
+}: GlobalSearchInputProps) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
@@ -72,7 +83,7 @@ export function GlobalSearchInput() {
   }
 
   return (
-    <div ref={containerRef} className="relative hidden w-full max-w-2xl md:block">
+    <div ref={containerRef} className={cn("relative hidden w-full max-w-2xl md:block", className)}>
       <div className="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 shadow-sm transition-all duration-200 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/15 dark:border-slate-800 dark:bg-slate-950/90">
         <Search className="size-4 text-muted-foreground" />
         <Input
@@ -98,7 +109,7 @@ export function GlobalSearchInput() {
             }
           }}
           aria-label="Search CRM records"
-          className="h-10 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+          className={cn("h-10 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0", inputClassName)}
           placeholder="Search companies, contacts, meetings, follow-ups..."
         />
       </div>
@@ -108,6 +119,7 @@ export function GlobalSearchInput() {
         isLoading={isLoading}
         open={open}
         onResultClick={() => setOpen(false)}
+        className={resultsClassName}
       />
     </div>
   );

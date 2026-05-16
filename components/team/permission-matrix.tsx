@@ -65,7 +65,7 @@ export function PermissionMatrix({ role, permissions, canManage, onSaved }: Perm
           </div>
           <div className="rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm dark:border-primary/15 dark:bg-primary/10">
             <div className="font-medium text-foreground">Review sensitive actions</div>
-            <p className="mt-2 text-muted-foreground">Team, settings, and scoring controls should stay with trusted admins.</p>
+            <p className="mt-2 text-muted-foreground">Sensitive team, settings, and scoring controls should stay with trusted managers or admins.</p>
           </div>
           <div className="rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm dark:border-primary/15 dark:bg-primary/10">
             <div className="font-medium text-foreground">Assign when ready</div>

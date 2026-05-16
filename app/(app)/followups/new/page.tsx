@@ -17,20 +17,18 @@ export default async function NewFollowupPage({
   const params = await searchParams;
 
   return (
-    <div className="container py-6">
+    <div>
       <PageHeader
         title="Create Follow-up"
         description="Capture the next client action now, then add reminders or related CRM context only if needed."
       />
-      <div className="mt-6 max-w-5xl">
-        <Suspense fallback={<LoadingSkeleton />}>
-          <FollowupFormLoader
-            defaultCompanyId={params.company}
-            defaultContactId={params.contact}
-            defaultInteractionId={params.interaction}
-          />
-        </Suspense>
-      </div>
+      <Suspense fallback={<LoadingSkeleton />}>
+        <FollowupFormLoader
+          defaultCompanyId={params.company}
+          defaultContactId={params.contact}
+          defaultInteractionId={params.interaction}
+        />
+      </Suspense>
     </div>
   );
 }

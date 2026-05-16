@@ -128,7 +128,7 @@ export function FollowupForm({
         <FormContextHint message="This follow-up was opened from an existing CRM record, so related context has been preselected where possible." />
       ) : null}
 
-      <FormSection title="Basic Information" description="Core follow-up context and timing.">
+      <FormSection title="Basic Information" description="Core follow-up context and timing." contentClassName="md:grid-cols-2 xl:grid-cols-2">
         <SelectField
           label="Company"
           required

@@ -69,7 +69,7 @@ export function AppShell({
             workspaces={workspaces}
             canCreateWorkspace={canCreateWorkspace}
           />
-          <main className="mx-auto w-full max-w-[1500px] min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 sm:py-6 md:px-6 lg:px-8">{children}</main>
+          <main className="mx-auto w-full max-w-[1500px] min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-4 sm:py-5 md:px-6 md:py-6 lg:px-8">{children}</main>
         </div>
       </div>
     </ProductTourProvider>
