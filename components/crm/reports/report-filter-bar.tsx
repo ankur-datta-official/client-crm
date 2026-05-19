@@ -31,8 +31,10 @@ export function ReportFilterBar({ users, industries, stages, categories }: Repor
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const currentFrom = searchParams.get("from");
+  const currentTo = searchParams.get("to");
 
-  const [dateRange, setDateRange] = useState(searchParams.get("dateRange") || "this_month");
+  const [dateRange, setDateRange] = useState(currentFrom && currentTo ? "custom" : searchParams.get("dateRange") || "this_month");
   const [assignedUserId, setAssignedUserId] = useState(searchParams.get("assignedUserId") || "all");
   const [industryId, setIndustryId] = useState(searchParams.get("industryId") || "all");
   const [pipelineStageId, setPipelineStageId] = useState(searchParams.get("pipelineStageId") || "all");
@@ -49,6 +51,14 @@ export function ReportFilterBar({ users, industries, stages, categories }: Repor
     
     if (dateRange && dateRange !== "all") params.set("dateRange", dateRange);
     else params.delete("dateRange");
+
+    if (dateRange !== "custom") {
+      params.delete("from");
+      params.delete("to");
+    } else if (currentFrom && currentTo) {
+      params.set("from", currentFrom);
+      params.set("to", currentTo);
+    }
 
     if (assignedUserId && assignedUserId !== "all") params.set("assignedUserId", assignedUserId);
     else params.delete("assignedUserId");
@@ -105,7 +115,7 @@ export function ReportFilterBar({ users, industries, stages, categories }: Repor
                 <SelectItem value="this_month">This Month</SelectItem>
                 <SelectItem value="last_30_days">Last 30 Days</SelectItem>
                 <SelectItem value="this_quarter">This Quarter</SelectItem>
-                <SelectItem value="custom" disabled>Custom range</SelectItem>
+                <SelectItem value="custom">Custom range</SelectItem>
               </SelectContent>
             </Select>
           </FilterField>

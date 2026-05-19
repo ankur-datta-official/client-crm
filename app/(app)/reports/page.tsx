@@ -35,7 +35,11 @@ interface ReportsPageProps {
   searchParams: Promise<{
     tab?: string;
     dateRange?: string;
+    from?: string;
+    to?: string;
     assignedUserId?: string;
+    managerId?: string;
+    teamId?: string;
     industryId?: string;
     pipelineStageId?: string;
     leadTemperature?: string;
@@ -50,8 +54,12 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   const lockedTabs: string[] = [];
 
   const filters: ReportFilters = {
-    dateRange: (params.dateRange as any) || "this_month",
+    dateRange: params.from && params.to ? "custom" : (params.dateRange as any) || "this_month",
+    from: params.from,
+    to: params.to,
     assignedUserId: params.assignedUserId === "all" ? undefined : params.assignedUserId,
+    managerId: params.managerId === "all" ? undefined : params.managerId,
+    teamId: params.teamId === "all" ? undefined : params.teamId,
     industryId: params.industryId === "all" ? undefined : params.industryId,
     pipelineStageId: params.pipelineStageId === "all" ? undefined : params.pipelineStageId,
     leadTemperature: params.leadTemperature === "all" ? undefined : params.leadTemperature,
