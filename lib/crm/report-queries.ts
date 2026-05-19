@@ -1,23 +1,47 @@
 "use server";
 
 import { Prisma } from "@prisma/client";
-import { requireOrganization } from "@/lib/auth/session";
+import { hasPermission, requireAuth, requireOrganization } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+import { getTeamMembers } from "@/lib/team/team-queries";
+import type { TeamMember } from "@/lib/team/types";
 
 export type DateRangeFilter = "today" | "this_week" | "this_month" | "last_30_days" | "this_quarter" | "custom";
 
 export type ReportFilters = {
   dateRange?: DateRangeFilter;
+  from?: string;
+  to?: string;
   startDate?: string;
   endDate?: string;
   assignedUserId?: string;
+  managerId?: string;
+  teamId?: string;
   industryId?: string;
   pipelineStageId?: string;
   leadTemperature?: string;
   companyCategoryId?: string;
 };
 
+type ScopedReportMember = {
+  id: string;
+  department: string | null;
+  managerUserId: string | null;
+};
+
 function buildDateRange(filters: ReportFilters): { start: Date; end: Date } {
+  if (filters.from && filters.to) {
+    const from = new Date(filters.from);
+    const to = new Date(filters.to);
+
+    if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())) {
+      return {
+        start: startOfDay(from),
+        end: endOfDay(to),
+      };
+    }
+  }
+
   const now = new Date();
   const end = new Date(now);
   end.setHours(23, 59, 59, 999);
@@ -60,12 +84,123 @@ function buildDateRange(filters: ReportFilters): { start: Date; end: Date } {
   return { start, end };
 }
 
+function startOfDay(date: Date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function endOfDay(date: Date) {
+  const copy = new Date(date);
+  copy.setHours(23, 59, 59, 999);
+  return copy;
+}
+
 function toNumber(value: bigint | number | string | null | undefined) {
   if (typeof value === "bigint") return Number(value);
   return Number(value ?? 0);
 }
 
-function buildCompanyWhere(organizationId: string, filters: ReportFilters) {
+function buildScopedReportMembers(members: TeamMember[]) {
+  return members
+    .filter((member) => member.is_active)
+    .map<ScopedReportMember>((member) => ({
+      id: member.id,
+      department: member.department ?? null,
+      managerUserId: member.manager_user_id ?? null,
+    }));
+}
+
+function collectDescendantIds(currentUserId: string, members: ScopedReportMember[]) {
+  const directByManager = new Map<string, ScopedReportMember[]>();
+
+  for (const member of members) {
+    if (!member.managerUserId) {
+      continue;
+    }
+
+    const bucket = directByManager.get(member.managerUserId) ?? [];
+    bucket.push(member);
+    directByManager.set(member.managerUserId, bucket);
+  }
+
+  const seen = new Set<string>();
+  const queue = [...(directByManager.get(currentUserId) ?? [])];
+
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (!next || seen.has(next.id)) {
+      continue;
+    }
+
+    seen.add(next.id);
+
+    for (const child of directByManager.get(next.id) ?? []) {
+      if (!seen.has(child.id)) {
+        queue.push(child);
+      }
+    }
+  }
+
+  return Array.from(seen);
+}
+
+function buildUuidJoin(ids: string[]) {
+  return Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`));
+}
+
+async function resolveScopedReportUserIds(filters: ReportFilters) {
+  if (!filters.managerId && !filters.teamId) {
+    return null;
+  }
+
+  const user = await requireAuth();
+  const [canManageAll, canManageHierarchy, canViewActivity, canManageTargets, members] = await Promise.all([
+    hasPermission("settings.manage"),
+    hasPermission("team.manage_hierarchy"),
+    hasPermission("team.view_activity"),
+    hasPermission("team.manage_targets"),
+    getTeamMembers(),
+  ]);
+
+  const scopedMembers = buildScopedReportMembers(members);
+  const canSeeManagedTeam = canManageAll || canManageHierarchy || canViewActivity || canManageTargets;
+
+  if (!canSeeManagedTeam) {
+    return [];
+  }
+
+  let visibleMembers = scopedMembers;
+  if (!canManageAll) {
+    const descendantIds = collectDescendantIds(user.id, scopedMembers);
+    visibleMembers = scopedMembers.filter((member) => descendantIds.includes(member.id));
+  }
+
+  if (filters.managerId) {
+    const managerId = filters.managerId;
+    const managerExists = visibleMembers.some((member) => member.id === managerId);
+    if (!managerExists) {
+      return [];
+    }
+
+    const managerScopedIds = new Set<string>([managerId, ...collectDescendantIds(managerId, visibleMembers)]);
+    visibleMembers = visibleMembers.filter((member) => managerScopedIds.has(member.id));
+  }
+
+  if (filters.teamId) {
+    visibleMembers = visibleMembers.filter((member) => member.department?.trim() === filters.teamId);
+  }
+
+  if (filters.assignedUserId) {
+    return visibleMembers.some((member) => member.id === filters.assignedUserId)
+      ? [filters.assignedUserId]
+      : [];
+  }
+
+  return visibleMembers.map((member) => member.id);
+}
+
+function buildCompanyWhere(organizationId: string, filters: ReportFilters, scopedUserIds: string[] | null = null) {
   const clauses: Prisma.Sql[] = [
     Prisma.sql`c.organization_id = ${organizationId}::uuid`,
     Prisma.sql`c.status <> 'archived'`,
@@ -76,8 +211,68 @@ function buildCompanyWhere(organizationId: string, filters: ReportFilters) {
   if (filters.assignedUserId) clauses.push(Prisma.sql`c.assigned_user_id = ${filters.assignedUserId}::uuid`);
   if (filters.leadTemperature) clauses.push(Prisma.sql`c.lead_temperature = ${filters.leadTemperature}`);
   if (filters.companyCategoryId) clauses.push(Prisma.sql`c.category_id = ${filters.companyCategoryId}::uuid`);
+  if (scopedUserIds) {
+    if (scopedUserIds.length === 0) {
+      clauses.push(Prisma.sql`1 = 0`);
+    } else {
+      const scopedUserIdsSql = buildUuidJoin(scopedUserIds);
+      clauses.push(Prisma.sql`(c.assigned_user_id in (${scopedUserIdsSql}) or c.created_by in (${scopedUserIdsSql}))`);
+    }
+  }
 
   return Prisma.join(clauses, " and ");
+}
+
+function buildInteractionScopeClause(scopedUserIds: string[] | null) {
+  if (!scopedUserIds) {
+    return Prisma.empty;
+  }
+
+  if (scopedUserIds.length === 0) {
+    return Prisma.sql` and 1 = 0`;
+  }
+
+  const scopedUserIdsSql = buildUuidJoin(scopedUserIds);
+  return Prisma.sql` and (i.created_by in (${scopedUserIdsSql}) or i.assigned_user_id in (${scopedUserIdsSql}))`;
+}
+
+function buildFollowupScopeClause(scopedUserIds: string[] | null) {
+  if (!scopedUserIds) {
+    return Prisma.empty;
+  }
+
+  if (scopedUserIds.length === 0) {
+    return Prisma.sql` and 1 = 0`;
+  }
+
+  const scopedUserIdsSql = buildUuidJoin(scopedUserIds);
+  return Prisma.sql` and (f.assigned_user_id in (${scopedUserIdsSql}) or f.created_by in (${scopedUserIdsSql}) or f.completed_by in (${scopedUserIdsSql}))`;
+}
+
+function buildDocumentScopeClause(scopedUserIds: string[] | null) {
+  if (!scopedUserIds) {
+    return Prisma.empty;
+  }
+
+  if (scopedUserIds.length === 0) {
+    return Prisma.sql` and 1 = 0`;
+  }
+
+  const scopedUserIdsSql = buildUuidJoin(scopedUserIds);
+  return Prisma.sql` and d.uploaded_by in (${scopedUserIdsSql})`;
+}
+
+function buildHelpRequestScopeClause(scopedUserIds: string[] | null) {
+  if (!scopedUserIds) {
+    return Prisma.empty;
+  }
+
+  if (scopedUserIds.length === 0) {
+    return Prisma.sql` and 1 = 0`;
+  }
+
+  const scopedUserIdsSql = buildUuidJoin(scopedUserIds);
+  return Prisma.sql` and (hr.requested_by in (${scopedUserIdsSql}) or hr.assigned_to in (${scopedUserIdsSql}) or hr.resolved_by in (${scopedUserIdsSql}))`;
 }
 
 export type SalesOverviewReport = {
@@ -102,7 +297,12 @@ export type SalesOverviewReport = {
 export async function getSalesOverviewReport(filters: ReportFilters = {}): Promise<SalesOverviewReport> {
   const organization = await requireOrganization();
   const { start, end } = buildDateRange(filters);
-  const companyWhere = buildCompanyWhere(organization.id, filters);
+  const scopedUserIds = await resolveScopedReportUserIds(filters);
+  const companyWhere = buildCompanyWhere(organization.id, filters, scopedUserIds);
+  const interactionScopeClause = buildInteractionScopeClause(scopedUserIds);
+  const followupScopeClause = buildFollowupScopeClause(scopedUserIds);
+  const documentScopeClause = buildDocumentScopeClause(scopedUserIds);
+  const helpRequestScopeClause = buildHelpRequestScopeClause(scopedUserIds);
 
   const [
     counts,
@@ -133,11 +333,11 @@ export async function getSalesOverviewReport(filters: ReportFilters = {}): Promi
         (select coalesce(sum(c.estimated_value), 0) from public.companies c where ${companyWhere}) as pipeline_value,
         (select count(*) from public.companies c left join public.pipeline_stages ps on ps.id = c.pipeline_stage_id where ${companyWhere} and ps.is_won = true) as won_deals,
         (select count(*) from public.companies c left join public.pipeline_stages ps on ps.id = c.pipeline_stage_id where ${companyWhere} and ps.is_lost = true) as lost_deals,
-        (select count(*) from public.interactions i where i.organization_id = ${organization.id}::uuid and i.status <> 'archived' and i.meeting_datetime >= ${start.toISOString()}::timestamptz and i.meeting_datetime <= ${end.toISOString()}::timestamptz) as meetings_completed,
-        (select count(*) from public.followups f where f.organization_id = ${organization.id}::uuid and f.status = 'pending' and f.scheduled_at >= ${start.toISOString()}::timestamptz and f.scheduled_at <= ${end.toISOString()}::timestamptz) as followups_due,
-        (select count(*) from public.followups f where f.organization_id = ${organization.id}::uuid and f.status = 'pending' and f.scheduled_at < now()) as overdue_followups,
-        (select count(*) from public.documents d where d.organization_id = ${organization.id}::uuid and d.status <> 'archived' and d.created_at >= ${start.toISOString()}::timestamptz and d.created_at <= ${end.toISOString()}::timestamptz) as documents_submitted,
-        (select count(*) from public.help_requests hr where hr.organization_id = ${organization.id}::uuid and hr.status in ('open','in_progress')) as open_help_requests
+        (select count(*) from public.interactions i where i.organization_id = ${organization.id}::uuid and i.status <> 'archived' and i.meeting_datetime >= ${start.toISOString()}::timestamptz and i.meeting_datetime <= ${end.toISOString()}::timestamptz ${interactionScopeClause}) as meetings_completed,
+        (select count(*) from public.followups f where f.organization_id = ${organization.id}::uuid and f.status = 'pending' and f.scheduled_at >= ${start.toISOString()}::timestamptz and f.scheduled_at <= ${end.toISOString()}::timestamptz ${followupScopeClause}) as followups_due,
+        (select count(*) from public.followups f where f.organization_id = ${organization.id}::uuid and f.status = 'pending' and f.scheduled_at < now() ${followupScopeClause}) as overdue_followups,
+        (select count(*) from public.documents d where d.organization_id = ${organization.id}::uuid and d.status <> 'archived' and d.created_at >= ${start.toISOString()}::timestamptz and d.created_at <= ${end.toISOString()}::timestamptz ${documentScopeClause}) as documents_submitted,
+        (select count(*) from public.help_requests hr where hr.organization_id = ${organization.id}::uuid and hr.status in ('open','in_progress') ${helpRequestScopeClause}) as open_help_requests
     `),
     prisma.$queryRaw<Array<{ lead_temperature: string | null }>>(Prisma.sql`
       select c.lead_temperature
@@ -163,6 +363,7 @@ export async function getSalesOverviewReport(filters: ReportFilters = {}): Promi
         and i.status <> 'archived'
         and i.meeting_datetime >= ${start.toISOString()}::timestamptz
         and i.meeting_datetime <= ${end.toISOString()}::timestamptz
+        ${interactionScopeClause}
       order by i.meeting_datetime asc
     `),
   ]);
@@ -237,7 +438,10 @@ export type LeadReportData = {
 export async function getLeadReport(filters: ReportFilters = {}): Promise<LeadReportData> {
   const organization = await requireOrganization();
   const { start, end } = buildDateRange(filters);
-  const companyWhere = buildCompanyWhere(organization.id, filters);
+  const scopedUserIds = await resolveScopedReportUserIds(filters);
+  const companyWhere = buildCompanyWhere(organization.id, filters, scopedUserIds);
+  const followupScopeClause = buildFollowupScopeClause(scopedUserIds);
+  const interactionScopeClause = buildInteractionScopeClause(scopedUserIds);
 
   const leads = await prisma.$queryRaw<any[]>(Prisma.sql`
     select
@@ -295,6 +499,7 @@ export async function getLeadReport(filters: ReportFilters = {}): Promise<LeadRe
       where organization_id = ${organization.id}::uuid
         and status <> 'archived'
         and created_at >= ${thirtyDaysAgo.toISOString()}::timestamptz
+        ${followupScopeClause}
     `),
     prisma.$queryRaw<Array<{ company_id: string }>>(Prisma.sql`
       select distinct company_id::text as company_id
@@ -302,6 +507,7 @@ export async function getLeadReport(filters: ReportFilters = {}): Promise<LeadRe
       where organization_id = ${organization.id}::uuid
         and status <> 'archived'
         and created_at >= ${thirtyDaysAgo.toISOString()}::timestamptz
+        ${interactionScopeClause}
     `),
   ]);
 
@@ -331,7 +537,9 @@ export type PipelineReportData = {
 
 export async function getPipelineReport(filters: ReportFilters = {}): Promise<PipelineReportData> {
   const organization = await requireOrganization();
-  const companyWhere = buildCompanyWhere(organization.id, filters);
+  const scopedUserIds = await resolveScopedReportUserIds(filters);
+  const companyWhere = buildCompanyWhere(organization.id, filters, scopedUserIds);
+  const interactionScopeClause = buildInteractionScopeClause(scopedUserIds);
 
   const companies = await prisma.$queryRaw<any[]>(Prisma.sql`
     select
@@ -378,6 +586,7 @@ export async function getPipelineReport(filters: ReportFilters = {}): Promise<Pi
     where organization_id = ${organization.id}::uuid
       and status <> 'archived'
       and meeting_datetime >= ${thirtyDaysAgo.toISOString()}::timestamptz
+      ${interactionScopeClause}
   `);
 
   const recentCompanyIds = new Set(recentInteractions.map((i) => i.company_id));
@@ -412,6 +621,9 @@ export type MeetingReportData = {
 export async function getMeetingReport(filters: ReportFilters = {}): Promise<MeetingReportData> {
   const organization = await requireOrganization();
   const { start, end } = buildDateRange(filters);
+  const scopedUserIds = await resolveScopedReportUserIds(filters);
+  const interactionScopeClause = buildInteractionScopeClause(scopedUserIds);
+  const followupScopeClause = buildFollowupScopeClause(scopedUserIds);
 
   const meetings = await prisma.$queryRaw<any[]>(Prisma.sql`
     select
@@ -433,6 +645,7 @@ export async function getMeetingReport(filters: ReportFilters = {}): Promise<Mee
       and i.status <> 'archived'
       and i.meeting_datetime >= ${start.toISOString()}::timestamptz
       and i.meeting_datetime <= ${end.toISOString()}::timestamptz
+      ${interactionScopeClause}
     order by i.meeting_datetime desc
   `);
 
@@ -452,6 +665,7 @@ export async function getMeetingReport(filters: ReportFilters = {}): Promise<Mee
     from public.followups
     where organization_id = ${organization.id}::uuid
       and status <> 'archived'
+      ${followupScopeClause}
   `);
   const followupInteractionIds = new Set(meetingsWithFollowups.map((f) => f.interaction_id).filter(Boolean));
 
@@ -481,6 +695,8 @@ export type FollowupReportData = {
 export async function getFollowupReport(filters: ReportFilters = {}): Promise<FollowupReportData> {
   const organization = await requireOrganization();
   const { start, end } = buildDateRange(filters);
+  const scopedUserIds = await resolveScopedReportUserIds(filters);
+  const followupScopeClause = buildFollowupScopeClause(scopedUserIds);
 
   const now = new Date();
   const todayStart = new Date();
@@ -506,6 +722,7 @@ export async function getFollowupReport(filters: ReportFilters = {}): Promise<Fo
     left join public.profiles cp on cp.id = f.created_by
     where f.organization_id = ${organization.id}::uuid
       and f.status <> 'archived'
+      ${followupScopeClause}
     order by f.scheduled_at asc
   `);
 
@@ -573,6 +790,8 @@ export type DocumentReportData = {
 export async function getDocumentReport(filters: ReportFilters = {}): Promise<DocumentReportData> {
   const organization = await requireOrganization();
   const { start, end } = buildDateRange(filters);
+  const scopedUserIds = await resolveScopedReportUserIds(filters);
+  const documentScopeClause = buildDocumentScopeClause(scopedUserIds);
 
   const documents = await prisma.$queryRaw<any[]>(Prisma.sql`
     select
@@ -593,6 +812,7 @@ export async function getDocumentReport(filters: ReportFilters = {}): Promise<Do
       and d.status <> 'archived'
       and d.created_at >= ${start.toISOString()}::timestamptz
       and d.created_at <= ${end.toISOString()}::timestamptz
+      ${documentScopeClause}
     order by d.created_at desc
   `);
 
@@ -629,6 +849,8 @@ export type HelpRequestReportData = {
 export async function getHelpRequestReport(filters: ReportFilters = {}): Promise<HelpRequestReportData> {
   const organization = await requireOrganization();
   const { start, end } = buildDateRange(filters);
+  const scopedUserIds = await resolveScopedReportUserIds(filters);
+  const helpRequestScopeClause = buildHelpRequestScopeClause(scopedUserIds);
 
   const allRequests = await prisma.$queryRaw<any[]>(Prisma.sql`
     select
@@ -649,6 +871,7 @@ export async function getHelpRequestReport(filters: ReportFilters = {}): Promise
       and hr.status <> 'archived'
       and hr.created_at >= ${start.toISOString()}::timestamptz
       and hr.created_at <= ${end.toISOString()}::timestamptz
+      ${helpRequestScopeClause}
     order by hr.created_at desc
   `);
 
@@ -700,7 +923,12 @@ export type TeamPerformanceReportData = {
 
 export async function getTeamPerformanceReport(filters: ReportFilters = {}): Promise<TeamPerformanceReportData> {
   const organization = await requireOrganization();
-  const companyWhere = buildCompanyWhere(organization.id, filters);
+  const scopedUserIds = await resolveScopedReportUserIds(filters);
+  const companyWhere = buildCompanyWhere(organization.id, filters, scopedUserIds);
+  const interactionScopeClause = buildInteractionScopeClause(scopedUserIds);
+  const followupScopeClause = buildFollowupScopeClause(scopedUserIds);
+  const documentScopeClause = buildDocumentScopeClause(scopedUserIds);
+  const helpRequestScopeClause = buildHelpRequestScopeClause(scopedUserIds);
 
   const [profiles, companies, meetings, followups, documents, helpRequests] = await Promise.all([
     prisma.$queryRaw<Array<{ id: string; full_name: string | null; email: string }>>(Prisma.sql`
@@ -718,24 +946,28 @@ export async function getTeamPerformanceReport(filters: ReportFilters = {}): Pro
       from public.interactions
       where organization_id = ${organization.id}::uuid
         and status <> 'archived'
+        ${interactionScopeClause}
     `),
     prisma.$queryRaw<Array<{ assigned_user_id: string | null; status: string; created_by: string | null; scheduled_at: Date }>>(Prisma.sql`
       select assigned_user_id::text as assigned_user_id, status, created_by::text as created_by, scheduled_at
       from public.followups
       where organization_id = ${organization.id}::uuid
         and status <> 'archived'
+        ${followupScopeClause}
     `),
     prisma.$queryRaw<Array<{ uploaded_by: string | null }>>(Prisma.sql`
       select uploaded_by::text as uploaded_by
       from public.documents
       where organization_id = ${organization.id}::uuid
         and status <> 'archived'
+        ${documentScopeClause}
     `),
     prisma.$queryRaw<Array<{ requested_by: string | null; assigned_to: string | null; status: string }>>(Prisma.sql`
       select requested_by::text as requested_by, assigned_to::text as assigned_to, status
       from public.help_requests
       where organization_id = ${organization.id}::uuid
         and status <> 'archived'
+        ${helpRequestScopeClause}
     `),
   ]);
 

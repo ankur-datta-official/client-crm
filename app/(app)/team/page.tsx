@@ -3,9 +3,10 @@ import { PageHeader } from "@/components/shared/page-header";
 import { GuidanceStrip } from "@/components/shared/guidance-strip";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InvitationTable } from "@/components/team/invitation-table";
 import { InviteUserForm } from "@/components/team/invite-user-form";
+import { TeamPageTabs } from "@/components/team/team-page-tabs";
 import { RoleTable } from "@/components/team/role-table";
 import { TeamMemberTable } from "@/components/team/team-member-table";
 import { TeamTargetManager } from "@/components/team/team-target-manager";
@@ -20,8 +21,16 @@ import {
   getTeamMembers,
 } from "@/lib/team/team-queries";
 
-export default async function TeamPage() {
+type TeamPageProps = {
+  searchParams: Promise<{
+    tab?: string;
+  }>;
+};
+
+export default async function TeamPage({ searchParams }: TeamPageProps) {
   await requirePermission("team.view");
+  const params = await searchParams;
+  const currentTab = params.tab === "invitations" || params.tab === "roles" ? params.tab : "members";
 
   const [members, invitations, roles, permissions, currentUserId, canInvite, canUpdateRole, canDeactivate, canManageRoles, canManageHierarchy, canManageTargets, canViewActivity, performanceTargets, managedActivity] =
     await Promise.all([
@@ -54,7 +63,7 @@ export default async function TeamPage() {
         Team invitations now send an authentication email automatically. You can still copy the invite link manually as a backup.
       </GuidanceStrip>
 
-      <Tabs defaultValue="members" className="space-y-4">
+      <TeamPageTabs currentTab={currentTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-3 md:w-auto">
           <TabsTrigger value="members">
             <Users className="mr-2 h-4 w-4" />
@@ -123,7 +132,7 @@ export default async function TeamPage() {
           ) : null}
           <RoleTable roles={roles} permissions={permissions} canManage={canManageRoles} />
         </TabsContent>
-      </Tabs>
+      </TeamPageTabs>
     </div>
   );
 }

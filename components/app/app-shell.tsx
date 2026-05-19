@@ -21,6 +21,10 @@ export type AppShellProps = {
   initialProductTourState: ProductTourState;
   workspaces: WorkspaceSummary[];
   canCreateWorkspace: boolean;
+  activeWorkspaceRoleSlug?: string | null;
+  activeWorkspaceIsOwner?: boolean;
+  canViewTeamPage?: boolean;
+  canViewTeamPerformance?: boolean;
 };
 
 export function AppShell({ 
@@ -33,6 +37,10 @@ export function AppShell({
   initialProductTourState,
   workspaces,
   canCreateWorkspace,
+  activeWorkspaceRoleSlug,
+  activeWorkspaceIsOwner,
+  canViewTeamPage,
+  canViewTeamPerformance,
 }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -58,6 +66,10 @@ export function AppShell({
           onCollapsedChange={setSidebarCollapsed}
           organizationName={organizationName}
           profile={profile}
+          activeWorkspaceRoleSlug={activeWorkspaceRoleSlug}
+          activeWorkspaceIsOwner={activeWorkspaceIsOwner}
+          canViewTeamPage={canViewTeamPage}
+          canViewTeamPerformance={canViewTeamPerformance}
         />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <AppTopbar

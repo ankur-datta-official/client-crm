@@ -45,11 +45,11 @@ export function ActivityRow({ item }: { item: any }) {
   return (
     <Link
       href={item.href}
-      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)]"
+      className="flex items-center justify-between gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-2.5 transition-colors hover:border-primary/25 hover:bg-slate-50/70 dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(17,24,39,0.95)_100%)] dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.06)] dark:hover:border-primary/30 dark:hover:bg-[linear-gradient(180deg,rgba(15,23,42,1)_0%,rgba(30,41,59,0.96)_100%)]"
     >
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{item.title}</p>
-        <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-300">{item.subtitle}</p>
+        <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-300">{item.subtitle}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <StatusPill tone={item.tone}>{item.badge}</StatusPill>

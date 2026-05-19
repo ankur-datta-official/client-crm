@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ChevronLeft, ChevronRight, LayoutDashboard, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { ChevronDown, ChevronLeft, ChevronRight, LayoutDashboard, X } from "lucide-react";
 import { BrandLogo } from "@/components/brand/brand-logo";
-import { sidebarItems, type SidebarItem } from "@/config/navigation";
+import { navSections, sidebarItems, type SidebarChildItem, type SidebarItem, type SidebarSection } from "@/config/navigation";
 import { UserAvatar } from "@/components/shared/user-avatar";
 import { Button } from "@/components/ui/button";
 import type { Profile } from "@/lib/auth/session";
@@ -17,37 +18,68 @@ type AppSidebarProps = {
   onCollapsedChange?: (collapsed: boolean) => void;
   organizationName?: string;
   profile?: Profile | null;
+  activeWorkspaceRoleSlug?: string | null;
+  activeWorkspaceIsOwner?: boolean;
+  canViewTeamPage?: boolean;
+  canViewTeamPerformance?: boolean;
 };
 
-const navSections = ["Overview", "Workspace", "Performance", "Admin"] as const;
-
-const tourAnchorByHref: Record<string, string> = {
-  "/dashboard": "tour-nav-dashboard",
-  "/companies": "tour-nav-companies",
-  "/contacts": "tour-nav-contacts",
-  "/meetings": "tour-nav-meetings",
-  "/followups": "tour-nav-followups",
-  "/pipeline": "tour-nav-pipeline",
-  "/documents": "tour-nav-documents",
-  "/reports": "tour-nav-reports",
-};
+type RenderableSidebarItem = SidebarItem | (Omit<SidebarItem, "icon"> & { icon: typeof LayoutDashboard });
 
 const navIconStyles: Record<string, string> = {
-  "/admin": "bg-[linear-gradient(135deg,#fef3c7,#fde68a)] text-amber-700 ring-1 ring-amber-200/80",
-  "/dashboard": "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-sky-700 ring-1 ring-sky-200/80",
-  "/companies": "bg-[linear-gradient(135deg,#ecfeff,#cffafe)] text-cyan-700 ring-1 ring-cyan-200/80",
-  "/contacts": "bg-[linear-gradient(135deg,#f0fdfa,#ccfbf1)] text-teal-700 ring-1 ring-teal-200/80",
-  "/meetings": "bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] text-slate-700 ring-1 ring-slate-200/80",
-  "/followups": "bg-[linear-gradient(135deg,#ecfdf5,#d1fae5)] text-emerald-700 ring-1 ring-emerald-200/80",
-  "/pipeline": "bg-[linear-gradient(135deg,#eff6ff,#e0f2fe)] text-sky-700 ring-1 ring-sky-200/80",
-  "/documents": "bg-[linear-gradient(135deg,#eef2ff,#e0e7ff)] text-indigo-700 ring-1 ring-indigo-200/80",
-  "/need-help": "bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] text-slate-600 ring-1 ring-slate-200/80",
-  "/leaderboard": "bg-[linear-gradient(135deg,#f0fdf4,#dcfce7)] text-emerald-700 ring-1 ring-emerald-200/80",
-  "/rewards": "bg-[linear-gradient(135deg,#ecfeff,#cffafe)] text-cyan-700 ring-1 ring-cyan-200/80",
-  "/reports": "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-blue-700 ring-1 ring-blue-200/80",
-  "/team": "bg-[linear-gradient(135deg,#f0fdfa,#ccfbf1)] text-teal-700 ring-1 ring-teal-200/80",
-  "/settings": "bg-[linear-gradient(135deg,#f1f5f9,#e2e8f0)] text-slate-700 ring-1 ring-slate-200/80",
+  admin: "bg-[linear-gradient(135deg,#fef3c7,#fde68a)] text-amber-700 ring-1 ring-amber-200/80",
+  dashboard: "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-sky-700 ring-1 ring-sky-200/80",
+  companies: "bg-[linear-gradient(135deg,#ecfeff,#cffafe)] text-cyan-700 ring-1 ring-cyan-200/80",
+  contacts: "bg-[linear-gradient(135deg,#f0fdfa,#ccfbf1)] text-teal-700 ring-1 ring-teal-200/80",
+  meetings: "bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] text-slate-700 ring-1 ring-slate-200/80",
+  followups: "bg-[linear-gradient(135deg,#ecfdf5,#d1fae5)] text-emerald-700 ring-1 ring-emerald-200/80",
+  pipeline: "bg-[linear-gradient(135deg,#eff6ff,#e0f2fe)] text-sky-700 ring-1 ring-sky-200/80",
+  documents: "bg-[linear-gradient(135deg,#eef2ff,#e0e7ff)] text-indigo-700 ring-1 ring-indigo-200/80",
+  "need-help": "bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] text-slate-600 ring-1 ring-slate-200/80",
+  leaderboard: "bg-[linear-gradient(135deg,#f0fdf4,#dcfce7)] text-emerald-700 ring-1 ring-emerald-200/80",
+  rewards: "bg-[linear-gradient(135deg,#ecfeff,#cffafe)] text-cyan-700 ring-1 ring-cyan-200/80",
+  reports: "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-blue-700 ring-1 ring-blue-200/80",
+  "team-management": "bg-[linear-gradient(135deg,#f0fdfa,#ccfbf1)] text-teal-700 ring-1 ring-teal-200/80",
+  "team-performance": "bg-[linear-gradient(135deg,#eef2ff,#dbeafe)] text-indigo-700 ring-1 ring-indigo-200/80",
+  settings: "bg-[linear-gradient(135deg,#f1f5f9,#e2e8f0)] text-slate-700 ring-1 ring-slate-200/80",
 };
+
+function matchesHref(pathname: string, searchParams: URLSearchParams, href?: string) {
+  if (!href) {
+    return false;
+  }
+
+  const target = new URL(href, "https://crm.local");
+  if (pathname !== target.pathname && !pathname.startsWith(`${target.pathname}/`)) {
+    return false;
+  }
+
+  for (const [key, value] of target.searchParams.entries()) {
+    if (target.pathname === "/team" && key === "tab" && value === "members" && !searchParams.get("tab")) {
+      continue;
+    }
+
+    if (searchParams.get(key) !== value) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function getVisibleTeamChildren(item: SidebarItem, input: { canViewTeamPage: boolean; canViewTeamPerformance: boolean }) {
+  if (!item.children) {
+    return [];
+  }
+
+  return item.children.filter((child) => {
+    if (child.id === "team-performance") {
+      return input.canViewTeamPerformance;
+    }
+
+    return input.canViewTeamPage;
+  });
+}
 
 export function AppSidebar({
   open = false,
@@ -56,14 +88,45 @@ export function AppSidebar({
   onCollapsedChange,
   organizationName,
   profile,
+  activeWorkspaceRoleSlug,
+  activeWorkspaceIsOwner = false,
+  canViewTeamPage = false,
+  canViewTeamPerformance = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
-  const itemsWithAdmin: Array<SidebarItem | { title: string; href: string; icon: typeof LayoutDashboard; section: typeof navSections[number] }> = profile?.is_super_admin
+  const searchParams = useSearchParams();
+  const [teamManagementOpen, setTeamManagementOpen] = useState(true);
+
+  const itemsWithAdmin: RenderableSidebarItem[] = profile?.is_super_admin
     ? [
         ...sidebarItems,
-        { title: "Admin Console", href: "/admin", icon: LayoutDashboard, section: "Admin" as const },
+        { id: "admin", title: "Admin Console", href: "/admin", icon: LayoutDashboard, section: "Admin" as SidebarSection },
       ]
     : [...sidebarItems];
+
+  const filteredItems = useMemo(() => {
+    return itemsWithAdmin
+      .map((item) => {
+        if (!item.children) {
+          return item;
+        }
+
+        const children = getVisibleTeamChildren(item, { canViewTeamPage, canViewTeamPerformance });
+        return children.length > 0 ? { ...item, children } : null;
+      })
+      .filter((item): item is RenderableSidebarItem => Boolean(item));
+  }, [canViewTeamPage, canViewTeamPerformance, itemsWithAdmin]);
+
+  const isTeamManagementActive = filteredItems.some((item) =>
+    item.id === "team-management"
+    && (item.children?.some((child) => matchesHref(pathname, searchParams, child.href)) ?? false),
+  );
+
+  useEffect(() => {
+    if (isTeamManagementActive) {
+      setTeamManagementOpen(true);
+    }
+  }, [isTeamManagementActive]);
 
   return (
     <>
@@ -116,7 +179,7 @@ export function AppSidebar({
         <nav className={cn("min-h-0 flex-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
           <div className="space-y-6 pb-4">
             {navSections.map((section) => {
-              const items = itemsWithAdmin.filter((item) => item.section === section);
+              const items = filteredItems.filter((item) => item.section === section);
               if (items.length === 0) {
                 return null;
               }
@@ -137,16 +200,102 @@ export function AppSidebar({
                   )}
                   <div className="space-y-1">
                     {items.map((item) => {
-                      const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                      const Icon = item.icon;
-                      const iconStyle = navIconStyles[item.href] ?? navIconStyles["/settings"];
+                      if (item.children) {
+                        const parentActive = item.children.some((child) => matchesHref(pathname, searchParams, child.href));
+                        const iconStyle = navIconStyles[item.id] ?? navIconStyles.settings;
+                        const defaultHref = item.children[0]?.href ?? "/team";
+
+                        if (collapsed) {
+                          return (
+                            <Link
+                              key={item.id}
+                              href={defaultHref}
+                              title={item.title}
+                              data-tour={item.tourKey}
+                              onClick={() => onOpenChange?.(false)}
+                              className={cn(
+                                "group relative flex min-h-[2.9rem] items-center justify-center overflow-hidden rounded-2xl px-2 py-2.5 text-sm font-medium text-slate-600 transition-all duration-200 dark:text-slate-300",
+                                "hover:bg-white/90 hover:text-slate-900 hover:shadow-[0_8px_20px_rgba(15,23,42,0.05)] dark:hover:bg-slate-900/90 dark:hover:text-slate-100 dark:hover:shadow-[0_8px_20px_rgba(2,6,23,0.4)]",
+                                parentActive && "bg-white text-slate-900 shadow-[0_12px_28px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/90 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-800",
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "absolute inset-y-2 left-1 w-1 rounded-full bg-transparent transition-all duration-200",
+                                  parentActive && "bg-[linear-gradient(180deg,#10b981,#14b8a6)] shadow-[0_0_14px_rgba(16,185,129,0.45)]",
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "flex size-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
+                                  iconStyle,
+                                  parentActive && "scale-105 shadow-[0_10px_22px_rgba(15,23,42,0.08)] saturate-150",
+                                )}
+                              >
+                                <item.icon className="size-4" />
+                              </span>
+                            </Link>
+                          );
+                        }
+
+                        return (
+                          <div key={item.id} className="space-y-1">
+                            <button
+                              type="button"
+                              data-tour={item.tourKey}
+                              onClick={() => setTeamManagementOpen((current) => !current)}
+                              className={cn(
+                                "group relative flex min-h-[2.9rem] w-full items-center gap-3 overflow-hidden rounded-2xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-all duration-200 dark:text-slate-300",
+                                "hover:bg-white/90 hover:text-slate-900 hover:shadow-[0_8px_20px_rgba(15,23,42,0.05)] dark:hover:bg-slate-900/90 dark:hover:text-slate-100 dark:hover:shadow-[0_8px_20px_rgba(2,6,23,0.4)]",
+                                parentActive && "bg-white text-slate-900 shadow-[0_12px_28px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/90 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-800",
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "absolute inset-y-2 left-1 w-1 rounded-full bg-transparent transition-all duration-200",
+                                  parentActive && "bg-[linear-gradient(180deg,#10b981,#14b8a6)] shadow-[0_0_14px_rgba(16,185,129,0.45)]",
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "flex size-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
+                                  iconStyle,
+                                  parentActive && "scale-105 shadow-[0_10px_22px_rgba(15,23,42,0.08)] saturate-150",
+                                )}
+                              >
+                                <item.icon className="size-4" />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <span className="block truncate">{item.title}</span>
+                              </div>
+                              <ChevronDown className={cn("size-4 text-slate-400 transition-transform dark:text-slate-500", teamManagementOpen && "rotate-180")} />
+                            </button>
+
+                            {teamManagementOpen ? (
+                              <div className="ml-6 space-y-1 border-l border-slate-200/80 pl-4 dark:border-slate-800/80">
+                                {item.children.map((child) => (
+                                  <SidebarChildLink
+                                    key={child.id}
+                                    child={child}
+                                    active={matchesHref(pathname, searchParams, child.href)}
+                                    onOpenChange={onOpenChange}
+                                  />
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }
+
+                      const active = matchesHref(pathname, searchParams, item.href);
+                      const iconStyle = navIconStyles[item.id] ?? navIconStyles.settings;
 
                       return (
                         <Link
-                          key={item.href}
-                          href={item.href}
+                          key={item.id}
+                          href={item.href ?? "/dashboard"}
                           title={item.title}
-                          data-tour={tourAnchorByHref[item.href]}
+                          data-tour={item.tourKey}
                           onClick={() => onOpenChange?.(false)}
                           className={cn(
                             "group relative flex min-h-[2.9rem] items-center overflow-hidden rounded-2xl py-2.5 text-sm font-medium text-slate-600 transition-all duration-200 dark:text-slate-300",
@@ -168,7 +317,7 @@ export function AppSidebar({
                               active && "scale-105 shadow-[0_10px_22px_rgba(15,23,42,0.08)] saturate-150",
                             )}
                           >
-                            <Icon className="size-4" />
+                            <item.icon className="size-4" />
                           </span>
                           {!collapsed ? (
                             <div className="min-w-0 flex-1">
@@ -224,5 +373,32 @@ export function AppSidebar({
         </div>
       </aside>
     </>
+  );
+}
+
+function SidebarChildLink({
+  child,
+  active,
+  onOpenChange,
+}: {
+  child: SidebarChildItem;
+  active: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  return (
+    <Link
+      href={child.href}
+      data-tour={child.tourKey}
+      onClick={() => onOpenChange?.(false)}
+      className={cn(
+        "flex min-h-[2.5rem] items-center gap-2 rounded-xl px-3 py-2 text-sm transition-all duration-200",
+        active
+          ? "bg-emerald-50/90 text-emerald-700 ring-1 ring-emerald-200/80 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20"
+          : "text-slate-500 hover:bg-white/85 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900/85 dark:hover:text-slate-100",
+      )}
+    >
+      <span className={cn("size-2 rounded-full", active ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600")} />
+      <span className="truncate">{child.title}</span>
+    </Link>
   );
 }

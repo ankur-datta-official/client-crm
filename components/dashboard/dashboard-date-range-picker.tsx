@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Calendar as CalendarIcon, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import { formatMonthDayBD } from "@/lib/format/datetime";
 
 export function DashboardDateRangePicker() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   
   const from = searchParams.get("from");
@@ -32,7 +33,8 @@ export function DashboardDateRangePicker() {
     if (tempTo) params.set("to", tempTo);
     else params.delete("to");
     
-    router.push(`/dashboard?${params.toString()}`);
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname);
   };
 
   const handleQuickRange = (range: string) => {
@@ -62,7 +64,8 @@ export function DashboardDateRangePicker() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("from", fromStr);
     params.set("to", toStr);
-    router.push(`/dashboard?${params.toString()}`);
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname);
   };
 
   const formatDate = (dateStr: string | null) => {

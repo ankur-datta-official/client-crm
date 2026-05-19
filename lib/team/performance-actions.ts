@@ -161,6 +161,7 @@ export async function upsertPerformanceTarget(input: unknown): Promise<Performan
 
     revalidatePath("/dashboard");
     revalidatePath("/team");
+    revalidatePath("/team-dashboard");
     revalidatePath("/reports");
 
     return {
@@ -207,6 +208,7 @@ export async function deletePerformanceTarget(targetId: string) {
 
   revalidatePath("/dashboard");
   revalidatePath("/team");
+  revalidatePath("/team-dashboard");
   revalidatePath("/reports");
   return { success: true };
 }
